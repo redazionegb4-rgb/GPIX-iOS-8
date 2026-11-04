@@ -35,6 +35,7 @@ struct RootView: View {
     @EnvironmentObject var store:GpixStore
     @State private var create=false
     @State private var compact=false
+    @State private var hideBottomNavigation=false
     @State private var navigationReset=0
     @State private var incoming: IdentifiedRow?
     var body: some View {
@@ -61,9 +62,10 @@ struct RootView: View {
                                 default:ProfileView(userID:store.myID)
                             }
                         }
-                        .padding(.bottom,78)
+                        .safeAreaInset(edge:.bottom,spacing:0) { if !hideBottomNavigation { Color.clear.frame(height:72) } }
                     }
                     .id("\(store.tab)-\(navigationReset)")
+                    if !hideBottomNavigation {
                     HStack(spacing:0){
                         nav(0,"house","house.fill")
                         nav(1,"play.rectangle","play.rectangle.fill")
@@ -75,8 +77,11 @@ struct RootView: View {
                             AvatarView(person:store.me,size:compact ? 25:31).padding(12).frame(maxWidth:.infinity).background(store.tab==4 ? Color.primary.opacity(0.06):.clear,in:Capsule())
                         }
                     }
-                    .padding(6).background(.ultraThinMaterial,in:Capsule()).overlay(Capsule().stroke(.primary.opacity(0.08))).padding(.horizontal,compact ? 48:22).padding(.bottom,8).shadow(color:.black.opacity(0.07),radius:18,y:4)
+                    .padding(5).background(.ultraThinMaterial,in:Capsule()).overlay(Capsule().stroke(Color.primary.opacity(0.07))).padding(.horizontal,compact ? 48:20).padding(.bottom,8).shadow(color:.black.opacity(0.08),radius:20,y:5)
+                    }
                 }
+                
+                .onPreferenceChange(HideBottomNavigation.self) { hideBottomNavigation = $0 }
                 .onPreferenceChange(FeedPosition.self){
                     offset in withAnimation(.easeInOut(duration:0.25)){
                         compact=offset < -90
@@ -155,16 +160,18 @@ struct AvatarView:View {
 }
 @MainActor
 struct MediaView:View {
+    @EnvironmentObject var store: GpixStore
     let reference:String
     var fill=false
+    private var resolvedReference: String { store.uploadedURLs[reference] ?? reference }
     var body:some View{
         GeometryReader{
             g in
             Group{
-                if let image=localImage(reference){
+                if let image=localImage(resolvedReference){
                     Image(uiImage:image).resizable().aspectRatio(contentMode:fill ? .fill:.fit)
                 }
-                else if let url=URL(string:reference),url.scheme=="https" {
+                else if let url=resolvedRemoteMediaURL(resolvedReference) {
                     AsyncImage(url:url){
                         phase in if let image=phase.image {
                             image.resizable().aspectRatio(contentMode:fill ? .fill:.fit)
@@ -201,12 +208,12 @@ func localImage(_ reference:String)->UIImage?{
 struct PrimaryButton:View {
     let title:String
     var disabled=false
-    let action:()->Void
+    let action: @MainActor () -> Void
     var body:some View{
-        Button(action:action){
+        Button { action() } label: {
             Text(title).font(.system(size:15,weight:.semibold)).frame(maxWidth:.infinity).padding(.vertical,13).background(gpixPurple,in:RoundedRectangle(cornerRadius:13)).foregroundStyle(.white)
         }
-        .disabled(disabled).opacity(disabled ? 0.5:1)
+        .buttonStyle(GpixPressStyle()).disabled(disabled).opacity(disabled ? 0.5:1)
     }
 }
 @MainActor
@@ -250,6 +257,7 @@ struct AuthView:View {
     @State private var busy=false
     @State private var forgot=false
     @State private var appear=false
+    @State private var showPassword=false
     var body:some View{
         NavigationStack{
             ScrollView{
@@ -266,7 +274,7 @@ struct AuthView:View {
                         else{
                             field("Email o nome utente",$username)
                         }
-                        SecureField("Password",text:$password).textContentType(register ? .newPassword:.password).padding(16).background(Color.secondary.opacity(0.08),in:RoundedRectangle(cornerRadius:14))
+                        passwordField
                     }
                     PrimaryButton(title:busy ? "Attendi…":register ? "Crea account":"Accedi",disabled:busy){
                         submit()
@@ -302,6 +310,21 @@ struct AuthView:View {
             }
         }
     }
+    private var passwordField: some View {
+        HStack(spacing:12) {
+            Group {
+                if showPassword { TextField("Password",text:$password) }
+                else { SecureField("Password",text:$password) }
+            }
+            .textContentType(register ? .newPassword : .password)
+            .textInputAutocapitalization(.never).autocorrectionDisabled()
+            Button { showPassword.toggle() } label: {
+                Image(systemName:showPassword ? "eye.slash" : "eye").foregroundStyle(Color.secondary)
+            }
+            .accessibilityLabel(showPassword ? "Nascondi password" : "Mostra password")
+        }
+        .padding(16).background(Color(uiColor:.secondarySystemBackground),in:RoundedRectangle(cornerRadius:14))
+    }
     func field(_ title:String,_ text:Binding<String>)->some View{
         TextField(title,text:text).textInputAutocapitalization(.never).autocorrectionDisabled().padding(16).background(Color.secondary.opacity(0.08),in:RoundedRectangle(cornerRadius:14))
     }
@@ -318,5 +341,30 @@ struct AuthView:View {
                 store.error=error.localizedDescription
             }
         }
+    }
+}
+
+struct HideBottomNavigation: PreferenceKey {
+    static var defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
+}
+struct GpixPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .opacity(configuration.isPressed ? 0.75 : 1)
+            .animation(.easeOut(duration:0.16),value:configuration.isPressed)
+    }
+}
+struct GpixSearchField: View {
+    @Binding var text: String
+    var placeholder = "Cerca"
+    var body: some View {
+        HStack(spacing:10) {
+            Image(systemName:"magnifyingglass").font(.system(size:18)).foregroundStyle(Color.secondary)
+            TextField(placeholder,text:$text).font(.system(size:15)).textInputAutocapitalization(.never).autocorrectionDisabled()
+            if !text.isEmpty { Button { text="" } label: { Image(systemName:"xmark.circle.fill").foregroundStyle(Color.secondary) } }
+        }
+        .padding(.horizontal,16).padding(.vertical,13)
+        .background(Color(uiColor:.secondarySystemBackground),in:Capsule())
     }
 }

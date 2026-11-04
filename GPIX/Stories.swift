@@ -312,7 +312,7 @@ struct NoteStrip:View{
         VStack(spacing:7){
             ZStack(alignment:.top){
                 AvatarView(person:person,size:69).padding(.top,44)
-                Text(note?.s("text") ?? "Nuovo giorno,\nnuova nota…").font(.system(size:11)).lineLimit(3).multilineTextAlignment(.center).padding(.horizontal,10).padding(.vertical,9).frame(width:95).background(Color(uiColor:.secondarySystemGroupedBackground),in:RoundedRectangle(cornerRadius:22)).shadow(color:.black.opacity(0.08),radius:7,y:3)
+                Text(note?.s("text") ?? "Nuovo giorno,\nnuova nota…").font(.system(size:12)).lineLimit(3).multilineTextAlignment(.center).padding(.horizontal,10).padding(.vertical,10).frame(width:98).background(Color(uiColor:.secondarySystemGroupedBackground),in:RoundedRectangle(cornerRadius:22)).overlay(alignment:.bottomLeading) { Circle().fill(Color(uiColor:.secondarySystemGroupedBackground)).frame(width:12,height:12).offset(x:15,y:4) }.shadow(color:.black.opacity(0.07),radius:8,y:3)
             }
             Text(person.id==store.myID ? "La tua nota":person.s("name")).font(.caption).lineLimit(1).frame(width:95)
         }

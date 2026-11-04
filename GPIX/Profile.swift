@@ -51,8 +51,8 @@ struct ProfileView:View{
     }
     var body:some View{
         ScrollView{
-            VStack(alignment:.leading,spacing:18){
-                HStack(spacing:24){
+            VStack(alignment:.leading,spacing:16){
+                HStack(spacing:20){
                     Button{
                         if !store.visibleStories(userID).isEmpty{
                             story=true
@@ -61,7 +61,7 @@ struct ProfileView:View{
                             create=true
                         }
                     } label: {
-                        AvatarView(person:person,size:83,ring:store.unseenStories(userID)).overlay(alignment:.bottomTrailing){
+                        AvatarView(person:person,size:86,ring:store.unseenStories(userID)).overlay(alignment:.bottomTrailing){
                             if mine{
                                 Image(systemName:"plus.circle.fill").font(.title3).symbolRenderingMode(.palette).foregroundStyle(.white,.primary)
                             }
@@ -96,7 +96,7 @@ struct ProfileView:View{
                             Button{
                                 links=true
                             } label: {
-                                Label("Aggiungi",systemImage:"plus").font(.system(size:13,weight:.medium)).padding(.horizontal,12).padding(.vertical,9).overlay(Capsule().stroke(.secondary.opacity(0.25)))
+                                Label("Aggiungi",systemImage:"plus").font(.system(size:13,weight:.semibold)).fixedSize().padding(.horizontal,13).padding(.vertical,9).background(Color(uiColor:.systemBackground),in:Capsule()).overlay(Capsule().stroke(Color.primary.opacity(0.14)))
                             }
                         }
                     }
@@ -180,7 +180,7 @@ struct ProfileView:View{
                             p in NavigationLink{
                                 PostDetailView(postID:p.id)
                             } label: {
-                                MediaView(reference:p.s("media"),fill:true).aspectRatio(0.8,contentMode:.fit).overlay(alignment:.topTrailing){
+                                ProfilePostMedia(post:p).aspectRatio(0.8,contentMode:.fit).overlay(alignment:.topTrailing){
                                     if person.ids("pinnedPosts").contains(p.id){
                                         Image(systemName:"pin.fill").foregroundStyle(.white).padding(8).shadow(radius:3)
                                     }
@@ -310,7 +310,7 @@ struct ProfileView:View{
 }
 struct ProfileButton:ButtonStyle{
     func makeBody(configuration:Configuration)->some View{
-        configuration.label.font(.system(size:13,weight:.semibold)).frame(maxWidth:.infinity).padding(.vertical,11).padding(.horizontal,8).background(Color.secondary.opacity(0.10),in:RoundedRectangle(cornerRadius:11)).foregroundStyle(.primary).opacity(configuration.isPressed ? 0.6:1)
+        configuration.label.font(.system(size:13,weight:.semibold)).lineLimit(1).minimumScaleFactor(0.8).frame(maxWidth:.infinity,minHeight:38).padding(.horizontal,8).background(Color(uiColor:.secondarySystemBackground),in:RoundedRectangle(cornerRadius:11)).foregroundStyle(Color.primary).scaleEffect(configuration.isPressed ? 0.98:1).opacity(configuration.isPressed ? 0.7:1)
     }
 }
 @MainActor

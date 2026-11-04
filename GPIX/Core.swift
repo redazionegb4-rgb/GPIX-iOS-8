@@ -25,7 +25,7 @@ extension Dictionary where Key == String, Value == Any {
         self[key] as? [String] ?? []
     }
 }
-let gpixPurple = Color(red: 0.30, green: 0.32, blue: 1)
+let gpixPurple = Color(red: 113.0/255, green: 69.0/255, blue: 232.0/255)
 let gpixGradient = LinearGradient(colors: [.yellow, .orange, .pink, .purple], startPoint: .bottomLeading, endPoint: .topTrailing)
 func ago(_ value: Double) -> String {
     let seconds = max(0, Date().timeIntervalSince1970 - value)
@@ -80,6 +80,7 @@ enum Vault {
     @Published var tab = 0
     @Published var appearance = UserDefaults.standard.string(forKey:"gpix.native.appearance") ?? "system"
     @Published var foreground = true
+    @Published var uploadedURLs: [String: String] = [:]
     let server = "https://gpix.cc"
     var token = Vault.token()
     private var polling = false
@@ -113,7 +114,8 @@ enum Vault {
         appearance == "dark" ? .dark : appearance == "light" ? .light : nil
     }
     func person(_ id: String) -> Row {
-        users.first{
+        if id == myID { return me }
+        return users.first{
             $0.id==id
         }
         ?? ["id":id,"name":"GPIX","username":"gpix"]
@@ -323,7 +325,11 @@ enum Vault {
             try data.write(to:url)
             return ["id":url.absoluteString,"url":url.absoluteString]
         }
-        return try await api("/media",["mime":mime,"data":data.base64EncodedString()])
+        let result = try await api("/media",["mime":mime,"data":data.base64EncodedString()])
+        if !result.s("id").isEmpty && !result.s("url").isEmpty {
+            uploadedURLs[result.s("id")] = result.s("url")
+        }
+        return result
     }
     func startThread(_ id: String) async throws -> String {
         try await act("thread",["user":id])

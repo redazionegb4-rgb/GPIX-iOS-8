@@ -13,12 +13,8 @@ struct InboxView:View{
     }
     var body:some View{
         ScrollView{
-            VStack(alignment:.leading,spacing:22){
-                HStack{
-                    Image(systemName:"magnifyingglass")
-                    TextField("Cerca",text:$query)
-                }
-                .padding(14).background(Color.secondary.opacity(0.08),in:Capsule())
+            VStack(alignment:.leading,spacing:20){
+                GpixSearchField(text:$query,placeholder:"Cerca una conversazione")
                 NoteStrip()
                 HStack{
                     Text("Messaggi").font(.headline)
@@ -33,18 +29,19 @@ struct InboxView:View{
                         ChatView(threadID:t.id)
                     } label: {
                         HStack(spacing:14){
-                            AvatarView(person:store.peer(t),size:58,ring:store.unseenStories(store.peer(t).id),online:store.online(store.peer(t).id))
+                            AvatarView(person:store.peer(t),size:62,ring:store.unseenStories(store.peer(t).id),online:store.online(store.peer(t).id))
                             VStack(alignment:.leading,spacing:5){
-                                Text(store.threadTitle(t)).font(.system(size:15,weight:store.unread(t)>0 ? .semibold:.regular))
-                                Text(preview(t)).font(.system(size:13,weight:store.unread(t)>0 ? .semibold:.regular)).foregroundStyle(store.unread(t)>0 ? .primary:.secondary).lineLimit(1)
+                                Text(store.threadTitle(t)).font(.system(size:16,weight:store.unread(t)>0 ? .semibold:.regular))
+                                Text(preview(t)).font(.system(size:14,weight:store.unread(t)>0 ? .semibold:.regular)).foregroundStyle(store.unread(t)>0 ? .primary:.secondary).lineLimit(1)
                             }
                             Spacer(minLength:4)
                             if store.unread(t)>0{
                                 Circle().fill(gpixPurple).frame(width:8,height:8)
                             }
                         }
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(.primary).padding(.vertical,5).contentShape(Rectangle())
                     }
+                    .buttonStyle(GpixPressStyle())
                 }
                 if rows.isEmpty{
                     EmptyViewCard(icon:"paperplane",title:"Le tue conversazioni",subtitle:"Scrivi a una persona per iniziare.")
@@ -475,6 +472,7 @@ struct ChatView:View{
                 await typingOff()
             }
         }
+        .preference(key:HideBottomNavigation.self,value:true)
     }
     var status:String{
         if !typing.isEmpty{
@@ -491,13 +489,13 @@ struct ChatView:View{
             Button{
                 camera=true
             } label: {
-                Image(systemName:"camera").font(.system(size:21,weight:.medium)).foregroundStyle(.white).frame(width:38,height:38).background(gpixPurple,in:Circle())
+                Image(systemName:"camera.fill").font(.system(size:20,weight:.medium)).foregroundStyle(Color.white).frame(width:40,height:40).background(gpixPurple,in:Circle())
             }
             if recorder.recording{
                 Text("Registrazione · \(Int(recorder.seconds)) s").font(.subheadline).foregroundStyle(.red).frame(maxWidth:.infinity,alignment:.leading)
             }
             else{
-                TextField(thread.n("messageTTL")==0 ? "Scrivi…":"Scrivi a scadenza…",text:$text,axis:.vertical).textFieldStyle(.plain).lineLimit(1...5).padding(.leading,3)
+                TextField(thread.n("messageTTL")==0 ? "Messaggio…":"Messaggio a scadenza…",text:$text,axis:.vertical).textFieldStyle(.plain).lineLimit(1...5).padding(.leading,3)
             }
             if !text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty{
                 Button("Invia"){
@@ -530,7 +528,11 @@ struct ChatView:View{
                 }
             }
         }
-        .foregroundStyle(.primary).padding(.horizontal,6).padding(.vertical,6).background(Color.secondary.opacity(0.08),in:RoundedRectangle(cornerRadius:28)).overlay(RoundedRectangle(cornerRadius:28).stroke(.secondary.opacity(0.14))).padding(.horizontal,12).padding(.vertical,9)
+        .foregroundStyle(Color.primary).padding(.leading,5).padding(.trailing,13).padding(.vertical,5)
+        .background(Color(uiColor:.secondarySystemBackground),in:Capsule())
+        .overlay(Capsule().stroke(Color.primary.opacity(0.06)))
+        .padding(.horizontal,12).padding(.vertical,8)
+        .background(Color(uiColor:.systemBackground))
     }
     func sendText(){
         let value=text

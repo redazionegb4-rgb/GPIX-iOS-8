@@ -3,22 +3,25 @@ import UIKit
 @MainActor
 struct InstantBubble:View{
     @EnvironmentObject var store:GpixStore
-    var body:some View{
-        HStack(spacing:12){
-            ZStack{
-                RoundedRectangle(cornerRadius:13).fill(gpixGradient).frame(width:52,height:62).rotationEffect(.degrees(-9))
-                RoundedRectangle(cornerRadius:13).fill(gpixPurple).frame(width:49,height:59).rotationEffect(.degrees(5))
-                Image(systemName:"camera.fill").foregroundStyle(.white).font(.title3)
+    var body: some View {
+        HStack(spacing:14) {
+            ZStack {
+                RoundedRectangle(cornerRadius:11).fill(gpixPurple.opacity(0.16)).frame(width:39,height:48).rotationEffect(.degrees(-12))
+                RoundedRectangle(cornerRadius:11).fill(gpixPurple).frame(width:39,height:48).rotationEffect(.degrees(7))
+                Image(systemName:"camera.fill").font(.system(size:18)).foregroundStyle(Color.white)
             }
-            VStack(alignment:.leading,spacing:4){
-                Text("Istantanee").font(.headline)
-                Text("I momenti degli amici, per 24 ore").font(.caption).foregroundStyle(.secondary)
+            VStack(alignment:.leading,spacing:4) {
+                Text("Istantanee").font(.system(size:16,weight:.semibold))
+                Text("Apri i momenti degli amici").font(.system(size:12)).foregroundStyle(Color.secondary)
             }
-            Spacer()
-            Image(systemName:"chevron.right").foregroundStyle(.secondary)
+            Spacer(minLength:4)
+            Image(systemName:"chevron.right").font(.system(size:13,weight:.semibold)).foregroundStyle(Color.secondary)
         }
-        .foregroundStyle(.primary).padding(16).background(Color.secondary.opacity(0.07),in:RoundedRectangle(cornerRadius:22))
+        .foregroundStyle(Color.primary).padding(17)
+        .background(Color(uiColor:.secondarySystemBackground),in:RoundedRectangle(cornerRadius:21))
+        .overlay(RoundedRectangle(cornerRadius:21).stroke(Color.primary.opacity(0.04)))
     }
+
 }
 @MainActor
 struct InstantsView:View{
@@ -34,8 +37,8 @@ struct InstantsView:View{
             VStack(alignment:.leading,spacing:25){
                 HStack{
                     VStack(alignment:.leading,spacing:6){
-                        Text("Un momento. Solo adesso.").font(.title2.bold())
-                        Text("Le istantanee restano disponibili per 24 ore.").font(.subheadline).foregroundStyle(.secondary)
+                        Text("I momenti dei tuoi amici").font(.system(size:23,weight:.bold))
+                        Text("Disponibili per 24 ore").font(.system(size:13)).foregroundStyle(Color.secondary)
                     }
                     Spacer()
                     NavigationLink{
@@ -59,12 +62,22 @@ struct InstantsView:View{
                                 .buttonStyle(.plain)
                             }
                         }
-                        .frame(height:340)
+                        .frame(height:390)
                     }
                 }
-                PrimaryButton(title:"Scatta un’istantanea"){
-                    camera=true
+                Button { camera=true } label: {
+                    HStack(spacing:14) {
+                        Image(systemName:"camera.fill").font(.system(size:22)).frame(width:49,height:49).background(Color.white.opacity(0.16),in:RoundedRectangle(cornerRadius:15))
+                        VStack(alignment:.leading,spacing:4) {
+                            Text("Crea un’istantanea").font(.system(size:16,weight:.semibold))
+                            Text("Scatta e condividi il tuo momento").font(.system(size:12)).opacity(0.85)
+                        }
+                        Spacer()
+                        Image(systemName:"plus").font(.system(size:19,weight:.medium))
+                    }
+                    .foregroundStyle(Color.white).padding(16).background(gpixPurple,in:RoundedRectangle(cornerRadius:22))
                 }
+                .buttonStyle(GpixPressStyle())
                 if !active.isEmpty{
                     Text("Le tue istantanee attive").font(.headline)
                     ForEach(active,id:\.id){
@@ -137,27 +150,48 @@ struct InstantCard:View{
     @EnvironmentObject var store:GpixStore
     let item:Row
     @State private var preview:Data?
-    var body:some View{
-        ZStack(alignment:.bottomLeading){
-            RoundedRectangle(cornerRadius:25).fill(gpixGradient)
-            if let data=preview,let img=UIImage(data:data){
-                Image(uiImage:img).resizable().scaledToFill().frame(width:245,height:325).clipped()
-            }
-            LinearGradient(colors:[.clear,.black.opacity(0.65)],startPoint:.center,endPoint:.bottom)
-            VStack(alignment:.leading,spacing:10){
-                HStack{
-                    AvatarView(person:store.person(item.s("owner")),size:33)
-                    Text(store.person(item.s("owner")).s("username",item.s("username"))).font(.subheadline.bold())
+    private var cardWidth: CGFloat { min(290,max(220,UIScreen.main.bounds.width-86)) }
+    var body: some View {
+        VStack(alignment:.leading,spacing:0) {
+            previewPhoto
+            HStack(spacing:10) {
+                AvatarView(person:store.person(item.s("owner")),size:34)
+                VStack(alignment:.leading,spacing:3) {
+                    Text(store.person(item.s("owner")).s("username",item.s("username"))).font(.system(size:14,weight:.semibold)).lineLimit(1)
+                    Text("Tocca per aprire").font(.system(size:11)).foregroundStyle(Color.secondary)
                 }
-                Text(item.s("caption")).font(.subheadline)
-                Label("Tocca per aprire",systemImage:"hand.tap").font(.caption)
+                Spacer(minLength:0)
+                Image(systemName:"arrow.up.right").font(.system(size:13,weight:.medium)).foregroundStyle(Color.secondary)
             }
-            .foregroundStyle(.white).padding(18)
+            .padding(13)
         }
-        .frame(width:245,height:325).clipShape(RoundedRectangle(cornerRadius:25)).rotationEffect(.degrees(-2)).task{
-            preview=try? await store.instantPhoto(item.id,archive:false,preview:true)
+        .foregroundStyle(Color.primary).frame(width:cardWidth)
+        .background(Color(uiColor:.secondarySystemBackground),in:RoundedRectangle(cornerRadius:25))
+        .clipShape(RoundedRectangle(cornerRadius:25))
+        .overlay(RoundedRectangle(cornerRadius:25).stroke(Color.primary.opacity(0.07)))
+        .shadow(color:Color.black.opacity(0.06),radius:12,y:5)
+        .task(id:item.id) { preview=try? await store.instantPhoto(item.id,archive:false,preview:true) }
+    }
+    private var previewPhoto: some View {
+        ZStack(alignment:.bottomLeading) {
+            Color.black.opacity(0.92)
+            if let data=preview,let image=UIImage(data:data) {
+                Image(uiImage:image).resizable().scaledToFill().frame(width:cardWidth,height:290).blur(radius:20).clipped().opacity(0.55)
+                Image(uiImage:image).resizable().scaledToFit().frame(width:cardWidth,height:290)
+            } else {
+                ProgressView().tint(Color.white).frame(width:cardWidth,height:290)
+            }
+            LinearGradient(colors:[Color.clear,Color.black.opacity(0.55)],startPoint:.center,endPoint:.bottom)
+            if !item.s("caption").isEmpty {
+                Text(item.s("caption")).font(.system(size:14,weight:.medium)).foregroundStyle(Color.white).lineLimit(2).padding(16)
+            }
+        }
+        .frame(width:cardWidth,height:290).clipped()
+        .overlay(alignment:.topTrailing) {
+            Image(systemName:"lock.fill").font(.system(size:11)).foregroundStyle(Color.white).padding(9).background(Color.black.opacity(0.3),in:Circle()).padding(12)
         }
     }
+
 }
 @MainActor
 struct InstantDeck:View{

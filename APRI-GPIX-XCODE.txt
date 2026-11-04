@@ -1,4 +1,4 @@
-GPIX iPhone — build 50
+GPIX iPhone — build 52
 
 Apri GPIX.xcodeproj (icona blu).
 Schema: GPIX.

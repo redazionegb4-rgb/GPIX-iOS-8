@@ -1,0 +1,21 @@
+{
+  "build": 52,
+  "changes": [
+    "Feed carousel counter and spacing",
+    "Profile photo grid and button alignment",
+    "Inbox typography/avatar sizing/pressed feedback",
+    "Chat capsule camera controls and hidden root navigation",
+    "Shared search fields including follow requests",
+    "Instant preview cards preserve image aspect ratio and separate author footer",
+    "Instant creation action and inbox bubble",
+    "Note speech bubble styling",
+    "Login password visibility",
+    "Main navigation content inset and smaller floating control"
+  ],
+  "swift592ParsePassed": true,
+  "projectChecksPassed": true,
+  "androidUnchanged": true,
+  "iosSDKBuild": false,
+  "uiRendered": false,
+  "fullParityVerified": false
+}

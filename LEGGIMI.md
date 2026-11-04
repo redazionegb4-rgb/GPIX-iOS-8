@@ -1,3 +1,15 @@
+## Aggiornamento grafico 52
+Revisione dei componenti di feed (contatore caroselli, spaziature), profilo (pulsanti, griglia, link), conversazioni (avatar, testi, feedback), campo chat (capsula, fotocamera, controlli e spazio tastiera), barra principale (spazio contenuti e visibilità nelle chat), note (fumetti), ricerca/richieste (campo condiviso), istantanee (card senza ritaglio centrale della foto, informazioni autore e pulsante creazione) e accesso (visibilità password). Conservate impostazioni e correzioni media della 51.
+
+Il pacchetto include tutti i sorgenti e le risorse della versione iPhone Swift. Apri GPIX.xcodeproj. Il controllo sintattico con Swift 5.9.2, i riferimenti del progetto, le risorse e l’integrità Android sono verificati. Questa revisione non è stata renderizzata su simulatore iOS e non certifica una corrispondenza pixel per pixel con Android. La compilazione Xcode completa e la prova su dispositivo restano necessarie.
+
+## Aggiornamento 51 — foto e impostazioni
+Corretto il caricamento delle foto con percorsi relativi /media/ restituiti dal backend: vengono risolti su https://gpix.cc conservando la firma. Gestiti caroselli di URL e oggetti, URL dei nuovi upload, dati del profilo personale e anteprime video dei reel. Ripristinato il viola Flutter #7145E8.
+
+Impostazioni ricostruite con ricerca interna, righe con icone, contatori, sezioni e accessi del progetto originale: account, contenuti, privacy/interazioni, app/notifiche, persone/assistenza, accesso. Esposti note, bozze, raccolte, archivio, riordino griglia, richieste, aspetto, dispositivi e sicurezza. Preferenze collegate alle azioni backend esistenti; Firebase resta da configurare.
+
+13 test del resolver media compilati ed eseguiti con Swift5.9.2; parsing dei 12 sorgenti e controlli progetto superati. La build iOS con SDK Apple e la parità completa dell’interfaccia non sono state verificate. Questo aggiornamento corregge i problemi descritti, non certifica la riscrittura come identica ad Android.
+
 ## Correzione 50
 Il dettaglio archivio riceve item.row, anziché il contenitore IdentifiedRow. Controllati gli altri passaggi sheet/fullScreenCover. Parsing Swift5.9.2 superato; compilazione iOS da verificare.
 
@@ -14,7 +26,7 @@ Il workspace già incluso è facoltativo. Aggiornamenti: sostituisci il contenut
 
 Corretto l’errore nel dizionario degli attributi di disegno del testo in Composer.swift: una closure immediata era separata dalla sua chiamata. Ora usa un oggetto NSShadow esplicito. Tutti i 12 sorgenti superano il parser del compilatore Swift 5.9.2. Conservate le correzioni Build46 di pulsanti e delegate WebKit. Config/App.xcconfig riprende il formato di PRISM e il tuo Team. Il compilatore Linux non include SwiftUI/UIKit: questa verifica non equivale a una build iOS completa.
 
-# GPIX iPhone — Swift / SwiftUI — versione 2.24, build 50
+# GPIX iPhone — Swift / SwiftUI — versione 2.24, build 52
 
 ## Apri in Xcode
 1. Estrai lo ZIP in una cartella NUOVA. Non sovrapporlo alla vecchia cartella Flutter.
@@ -27,7 +39,7 @@ Requisiti del sorgente: Xcode 15.2 o successivo; iPhone con iOS 17 o successivo.
 
 ## GitHub e aggiornamenti
 Crea una cartella/repository dedicato alla versione iPhone Swift e carica il CONTENUTO di GPIX-iOS: GPIX.xcodeproj, GPIX.xcworkspace, GPIX, ci_scripts e la documentazione. Non usare il vecchio workspace Runner del progetto Flutter.
-Configura una volta Xcode Cloud per il nuovo workspace GPIX.xcworkspace, schema GPIX, azione Archive, ramo principale e post-action TestFlight. Scegli un runner con Xcode 26 e SDK iOS 26 o successivi per le consegne attuali ad Apple. Imposta Next Build Number maggiore dell’ultima build già caricata (almeno 50 per questa consegna).
+Configura una volta Xcode Cloud per il nuovo workspace GPIX.xcworkspace, schema GPIX, azione Archive, ramo principale e post-action TestFlight. Scegli un runner con Xcode 26 e SDK iOS 26 o successivi per le consegne attuali ad Apple. Imposta Next Build Number maggiore dell’ultima build già caricata (almeno 52 per questa consegna).
 Da quel momento sostituisci i file con quelli degli ZIP successivi nello STESSO repository e conferma il commit/push. Conserva il tuo Team, il bundle identifier e il workflow. Non devi reinstallare strumenti a ogni aggiornamento.
 Non caricare lo ZIP come singolo file: carica i file estratti. Gli eventuali script Flutter rimasti da un vecchio repository non devono essere usati; ci_post_clone.sh in questa consegna non installa nulla.
 

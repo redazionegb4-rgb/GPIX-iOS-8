@@ -1,0 +1,17 @@
+{
+  "build": 51,
+  "changes": [
+    "Relative signed media URL resolution matching Flutter",
+    "Mixed string/map carousel support",
+    "Own profile metadata resolution",
+    "Uploaded media URL lookup",
+    "Profile reel video thumbnails",
+    "Original Flutter violet 0xff7145e8",
+    "Settings sections and navigation aligned with Flutter"
+  ],
+  "mediaResolverCompiledExecutedTests": 13,
+  "swift592ParsePassed": true,
+  "androidChanged": false,
+  "iosSDKBuild": false,
+  "fullVisualFunctionalParityVerified": false
+}

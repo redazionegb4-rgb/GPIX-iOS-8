@@ -3,14 +3,28 @@ import UIKit
 import PhotosUI
 import AVKit
 import WebKit
-func mediaURL(_ reference:String)->URL{
-    if let url=URL(string:reference),["https","file"].contains(url.scheme ?? ""){
-        return url
+// Shared URL rules match the original Flutter GpixStore.url implementation.
+func resolvedRemoteMediaURL(_ reference: String, server: String = "https://gpix.cc") -> URL? {
+    let value = reference.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !value.isEmpty else { return nil }
+    if let url = URL(string: value), url.scheme == "https", url.host != nil { return url }
+    guard value.hasPrefix("/media/") || value.hasPrefix("/music/audio/") else { return nil }
+    return URL(string: server.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + value)
+}
+func postMediaReferences(_ post: Row) -> [String] {
+    let values = (post["mediaItems"] as? [Any] ?? []).compactMap { item -> String? in
+        if let text = item as? String, !text.isEmpty { return text }
+        if let row = item as? Row, !row.s("url").isEmpty { return row.s("url") }
+        return nil
     }
-    if let url=Bundle.main.url(forResource:reference,withExtension:nil,subdirectory:"Media"){
-        return url
-    }
-    return URL(string:"https://gpix.cc"+reference) ?? URL(string:"https://gpix.cc")!
+    if !values.isEmpty { return values }
+    return post.s("media").isEmpty ? [] : [post.s("media")]
+}
+func mediaURL(_ reference: String) -> URL {
+    if let url = resolvedRemoteMediaURL(reference) { return url }
+    if reference.hasPrefix("file://"), let url = URL(string: reference) { return url }
+    if let url = Bundle.main.url(forResource: reference, withExtension: nil, subdirectory: "Media") { return url }
+    return URL(fileURLWithPath: "/unavailable-gpix-media")
 }
 @MainActor
 struct NativeVideo:View{
@@ -358,6 +372,45 @@ struct MusicPicker:View{
         }
         catch{
             message=error.localizedDescription
+        }
+    }
+}
+
+@MainActor
+struct ProfilePostMedia: View {
+    let post: Row
+    var body: some View {
+        if post.s("kind") == "reel" {
+            VideoThumbnail(reference: post.s("media"))
+        } else {
+            MediaView(reference: postMediaReferences(post).first ?? "", fill: true)
+        }
+    }
+}
+@MainActor
+struct VideoThumbnail: View {
+    let reference: String
+    @State private var image: UIImage?
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                Color.secondary.opacity(0.09)
+                if let image = image {
+                    Image(uiImage: image).resizable().scaledToFill()
+                } else {
+                    Image(systemName: "play.rectangle").foregroundStyle(Color.secondary)
+                }
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height).clipped()
+        }
+        .task(id: reference) {
+            image = nil
+            let generator = AVAssetImageGenerator(asset: AVURLAsset(url: mediaURL(reference)))
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: 600, height: 600)
+            if let result = try? await generator.image(at: CMTime(seconds: 0, preferredTimescale: 600)), !Task.isCancelled {
+                image = UIImage(cgImage: result.image)
+            }
         }
     }
 }

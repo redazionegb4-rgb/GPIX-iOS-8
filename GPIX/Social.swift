@@ -152,18 +152,14 @@ struct PostCard:View {
     let post:Row
     @State private var comments=false
     @State private var share=false
+    @State private var mediaPage=0
     var author:Row{
         store.person(post.s("author"))
     }
     var liked:Bool{
         post.ids("likes").contains(store.myID)
     }
-    var media:[String]{
-        let rows=post.rows("mediaItems").map{
-            $0.s("url")
-        }
-        return rows.isEmpty ? [post.s("media")]:rows
-    }
+    var media: [String] { postMediaReferences(post) }
     var body:some View{
         VStack(alignment:.leading,spacing:0){
             HStack(spacing:10){
@@ -189,14 +185,7 @@ struct PostCard:View {
                 PostOptions(post:post)
             }
             .padding(.horizontal,13).padding(.vertical,12)
-            TabView{
-                ForEach(Array(media.enumerated()),id:\.offset){
-                    _,reference in MediaView(reference:reference,fill:true)
-                }
-            }
-            .tabViewStyle(.page(indexDisplayMode:media.count>1 ? .automatic:.never)).aspectRatio(max(0.55,min(1.91,post.row("style").n("aspect",1))),contentMode:.fit).onTapGesture(count:2){
-                store.perform("like",["id":post.id,"enabled":true])
-            }
+            carousel
             HStack(spacing:18){
                 Button{
                     store.perform("like",["id":post.id,"enabled":!liked])
@@ -241,7 +230,8 @@ struct PostCard:View {
                 }
                 Text(ago(post.n("created"))).font(.caption2).foregroundStyle(.secondary)
             }
-            .padding(14)
+            .padding(.horizontal,14).padding(.top,10).padding(.bottom,18)
+            Rectangle().fill(Color.primary.opacity(0.06)).frame(height:0.5)
         }
         .sheet(isPresented:$comments){
             CommentsView(postID:post.id)
@@ -250,6 +240,24 @@ struct PostCard:View {
             SharePostView(postID:post.id)
         }
     }
+    private var carousel: some View {
+        TabView(selection:$mediaPage) {
+            ForEach(Array(media.enumerated()),id:\.offset) { index,reference in
+                MediaView(reference:reference,fill:true).tag(index)
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode:.never))
+        .aspectRatio(max(0.55,min(1.91,post.row("style").n("aspect",1))),contentMode:.fit)
+        .overlay(alignment:.topTrailing) {
+            if media.count>1 {
+                Text("\(mediaPage+1)/\(media.count)").font(.system(size:12,weight:.semibold))
+                    .foregroundStyle(Color.white).padding(.horizontal,10).padding(.vertical,6)
+                    .background(Color.black.opacity(0.55),in:Capsule()).padding(12)
+            }
+        }
+        .onTapGesture(count:2) { store.perform("like",["id":post.id,"enabled":true]) }
+    }
+
 }
 @MainActor
 struct PostOptions:View {
@@ -524,11 +532,7 @@ struct RequestsView:View{
     var body:some View{
         ScrollView{
             VStack(spacing:22){
-                HStack{
-                    Image(systemName:"magnifyingglass")
-                    TextField("Cerca nome utente o nome visualizzato",text:$query)
-                }
-                .padding(14).background(Color.secondary.opacity(0.08),in:Capsule()).padding(.top,8)
+                GpixSearchField(text:$query,placeholder:"Nome utente o nome visualizzato").padding(.top,8)
                 NavigationLink{
                     SearchView()
                 } label: {
@@ -653,20 +657,8 @@ struct SearchView:View{
     var body:some View{
         ScrollView{
             VStack(alignment:.leading,spacing:18){
-                HStack{
-                    Image(systemName:"magnifyingglass")
-                    TextField("Cerca",text:$query).onSubmit{
-                        store.remember(query)
-                    }
-                    if !query.isEmpty{
-                        Button{
-                            query=""
-                        } label: {
-                            Image(systemName:"xmark.circle.fill")
-                        }
-                    }
-                }
-                .padding(14).background(Color.secondary.opacity(0.08),in:Capsule())
+                GpixSearchField(text:$query,placeholder:"Cerca persone")
+                    .onSubmit { store.remember(query) }
                 if query.isEmpty && !store.history().isEmpty{
                     HStack{
                         Text("Ricerche recenti").bold()
