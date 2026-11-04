@@ -1,0 +1,13 @@
+{
+  "build": 49,
+  "swift592ParsePassed": true,
+  "iosSDKBuild": false,
+  "fixes": [
+    "InstantDeck split into eight smaller view/gesture helpers",
+    "Archive grid split into month, cell and menu builders",
+    "MainActor preserved on instant callbacks",
+    "iOS17 async microphone permission",
+    "Immutable recorder capture in MainActor timer task"
+  ],
+  "androidChanged": false
+}

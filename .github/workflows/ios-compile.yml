@@ -1,0 +1,23 @@
+name: Verifica progetto iPhone Swift
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compila per simulatore senza firma
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild -project GPIX.xcodeproj -scheme GPIX -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tee compilazione-ios.log
+      - name: Conserva il log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compilazione-ios
+          path: compilazione-ios.log

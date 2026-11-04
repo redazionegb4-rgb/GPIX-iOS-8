@@ -1,0 +1,15 @@
+{
+  "passed": [
+    "Native auth payload and state keys",
+    "Private follow pending / accept / follow back",
+    "Profile links and privacy payloads",
+    "Photo upload/post/tags/pin/order and comment moderation",
+    "Chat/reactions/read/after-read expiry/typing endpoints",
+    "Notes 60-character protocol and reactions",
+    "Instants preview/open/archive/views/reactions/recap payloads",
+    "Sessions/RTC config/music endpoints"
+  ],
+  "cases": 8,
+  "target": "local test database, backend 2.24",
+  "swiftUICompiled": false
+}

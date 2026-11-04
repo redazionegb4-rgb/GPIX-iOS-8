@@ -1,0 +1,11 @@
+{
+  "build": 46,
+  "fixes": [
+    "statement separators and multiline source formatting",
+    "explicit Button label closures",
+    "nonisolated WebKit callbacks dispatch UI work to MainActor"
+  ],
+  "swiftGrammarFilesPassed": 12,
+  "xcodeCompiledHere": false,
+  "androidChanged": false
+}

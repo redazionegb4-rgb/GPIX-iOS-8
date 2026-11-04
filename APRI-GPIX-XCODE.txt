@@ -1,0 +1,7 @@
+GPIX iPhone — build 50
+
+Apri GPIX.xcodeproj (icona blu).
+Schema: GPIX.
+Non creare workspace. Non aprire Runner.
+Per GitHub carica il contenuto di questa cartella nello stesso repository iOS.
+Android non cambia.

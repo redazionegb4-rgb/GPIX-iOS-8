@@ -1,0 +1,27 @@
+{
+  "build": 47,
+  "swiftCompilerVersion": "Swift version 5.9.2 (swift-5.9.2-RELEASE)\nTarget: x86_64-unknown-linux-gnu",
+  "swiftCompilerParse": true,
+  "files": 12,
+  "iosSDKBuild": false,
+  "changes": [
+    "Explicit NSShadow object replaces broken immediate closure call in photo text attributes",
+    "Xcode configuration file with Team from supplied PRISM project",
+    "Xcode Cloud compiler syntax gate"
+  ],
+  "androidChanged": false,
+  "sourceSHA256": {
+    "App.swift": "9e5ae52906be12554a862cf58c97d9e897ccc07b493bd800f91a528df0703acf",
+    "Composer.swift": "f12f8616e87ac9f9b730c4d09a4c1b872c365dfa9e927ec1555273e400620340",
+    "Core.swift": "bb568a48dea077c6cfe8dc07b85502caed281712f965fa6b8dcb678cf0c43119",
+    "Demo.swift": "3b6247e7b0036e81c371a447d57e3a7b950561395ad1f081f8c89a24cc12187c",
+    "Instants.swift": "17dcc05a270c73946681970ae30fc32d5e7a9b2a0ae9d2a6ac98a28ed722c4bf",
+    "Media.swift": "f4f0c55d9b187bae56799f8f43a19ecb6adae4c938ef6ce7fddc73284ec22b09",
+    "Messages.swift": "65fe3508fa2478a9ababf6bacf8ebfc87e7eb7d55ab001f179492eefdd50fdf0",
+    "Profile.swift": "2485e81f08f14995b9d287ddf1f599771797c49c84508c0294a236698c04487e",
+    "Realtime.swift": "f9433bf56ed04028ca204ed90c5162af1b24d3473fac34d720aa524abd09f3de",
+    "Settings.swift": "311792720be303e8e460fd0fbbec942e4dbc6f80184fbb3d9e1b0cf8db1873f4",
+    "Social.swift": "4b5f4cd84ff9b8a7b224189524d9f7bd82bc58dd8cc376cd6fb5af7b08c832af",
+    "Stories.swift": "dd475e282b6b1de9989d4e27e7e8c35569df94cf90460ad292e7743fe2c6dd7a"
+  }
+}

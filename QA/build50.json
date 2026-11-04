@@ -1,0 +1,7 @@
+{
+  "build": 50,
+  "fix": "ArchivePhotoView receives item.row from IdentifiedRow in fullScreenCover",
+  "swift592ParsePassed": true,
+  "iosSDKBuild": false,
+  "androidChanged": false
+}

@@ -1,0 +1,541 @@
+{
+  "me": {
+    "id": "me",
+    "name": "Dmb",
+    "username": "dmb",
+    "bio": "Ogni sfumatura, una storia. 🏳️‍🌈",
+    "avatar": "avatar4.jpg",
+    "pronouns": "lui / he",
+    "followers": 2,
+    "following": 2,
+    "followersList": [
+      "u0",
+      "u2"
+    ],
+    "followingList": [
+      "u0",
+      "u1"
+    ],
+    "pinnedPosts": [
+      "own0"
+    ],
+    "links": [],
+    "readReceipts": true,
+    "postCount": 3
+  },
+  "users": [
+    {
+      "id": "me",
+      "name": "Dmb",
+      "username": "dmb",
+      "bio": "Ogni sfumatura, una storia. 🏳️‍🌈",
+      "avatar": "avatar4.jpg",
+      "pronouns": "lui / he",
+      "followers": 2,
+      "following": 2,
+      "followersList": [
+        "u0",
+        "u2"
+      ],
+      "followingList": [
+        "u0",
+        "u1"
+      ],
+      "pinnedPosts": [
+        "own0"
+      ],
+      "links": [],
+      "readReceipts": true,
+      "postCount": 3
+    },
+    {
+      "id": "u0",
+      "name": "Andrea Rossi",
+      "username": "andrea.rossi",
+      "bio": "Piccoli momenti, persone vere.\nItalia",
+      "avatar": "avatar0.jpg",
+      "followers": 2,
+      "following": 2,
+      "followersList": [
+        "me",
+        "u2"
+      ],
+      "followingList": [
+        "me",
+        "u1"
+      ],
+      "private": false,
+      "postCount": 1,
+      "readReceipts": true
+    },
+    {
+      "id": "u1",
+      "name": "Giulia Bianchi",
+      "username": "giulia.b",
+      "bio": "Piccoli momenti, persone vere.\nItalia",
+      "avatar": "avatar1.jpg",
+      "followers": 2,
+      "following": 2,
+      "followersList": [
+        "me",
+        "u2"
+      ],
+      "followingList": [
+        "me",
+        "u1"
+      ],
+      "private": false,
+      "postCount": 1,
+      "readReceipts": true
+    },
+    {
+      "id": "u2",
+      "name": "Alex Rivera",
+      "username": "alex.rivera",
+      "bio": "Piccoli momenti, persone vere.\nItalia",
+      "avatar": "avatar2.jpg",
+      "followers": 2,
+      "following": 2,
+      "followersList": [
+        "me",
+        "u2"
+      ],
+      "followingList": [
+        "me",
+        "u1"
+      ],
+      "private": false,
+      "postCount": 1,
+      "readReceipts": true
+    },
+    {
+      "id": "u3",
+      "name": "Matteo Costa",
+      "username": "matteo.costa",
+      "bio": "Piccoli momenti, persone vere.\nItalia",
+      "avatar": "avatar3.jpg",
+      "followers": 2,
+      "following": 2,
+      "followersList": [
+        "me",
+        "u2"
+      ],
+      "followingList": [
+        "me",
+        "u1"
+      ],
+      "private": true,
+      "postCount": 1,
+      "readReceipts": true
+    }
+  ],
+  "posts": [
+    {
+      "id": "p0",
+      "author": "u0",
+      "kind": "post",
+      "text": "Un posto nel mondo. Le persone giuste. 🌈",
+      "media": "post5.jpg",
+      "mediaItems": [
+        {
+          "url": "post5.jpg"
+        }
+      ],
+      "age": 1800,
+      "style": {
+        "aspect": 1
+      },
+      "likes": [
+        "u0",
+        "u2"
+      ],
+      "comments": [
+        {
+          "id": "c0",
+          "author": "u1",
+          "text": "Questo è il mood giusto ✨",
+          "parent": "",
+          "likes": [
+            "u2"
+          ]
+        }
+      ],
+      "location": "Roma, Italia"
+    },
+    {
+      "id": "p1",
+      "author": "u1",
+      "kind": "post",
+      "text": "Ci sono momenti che vorresti tenere per sempre.",
+      "media": "post1.jpg",
+      "mediaItems": [
+        {
+          "url": "post1.jpg"
+        }
+      ],
+      "age": 2520,
+      "style": {
+        "aspect": 1
+      },
+      "likes": [
+        "u0",
+        "u2"
+      ],
+      "comments": [
+        {
+          "id": "c1",
+          "author": "u1",
+          "text": "Questo è il mood giusto ✨",
+          "parent": "",
+          "likes": [
+            "u2"
+          ]
+        }
+      ],
+      "location": "Dolomiti"
+    },
+    {
+      "id": "p2",
+      "author": "u2",
+      "kind": "post",
+      "text": "Il mare, un respiro e niente da dimostrare.",
+      "media": "post2.jpg",
+      "mediaItems": [
+        {
+          "url": "post2.jpg"
+        }
+      ],
+      "age": 3240,
+      "style": {
+        "aspect": 1
+      },
+      "likes": [
+        "u0",
+        "u2"
+      ],
+      "comments": [
+        {
+          "id": "c2",
+          "author": "u1",
+          "text": "Questo è il mood giusto ✨",
+          "parent": "",
+          "likes": [
+            "u2"
+          ]
+        }
+      ],
+      "location": "Un posto felice"
+    },
+    {
+      "id": "p3",
+      "author": "u3",
+      "kind": "post",
+      "text": "Fuori dagli schemi. Dentro la vita.",
+      "media": "post3.jpg",
+      "mediaItems": [
+        {
+          "url": "post3.jpg"
+        }
+      ],
+      "age": 3960,
+      "style": {
+        "aspect": 1
+      },
+      "likes": [
+        "u0",
+        "u2"
+      ],
+      "comments": [
+        {
+          "id": "c3",
+          "author": "u1",
+          "text": "Questo è il mood giusto ✨",
+          "parent": "",
+          "likes": [
+            "u2"
+          ]
+        }
+      ],
+      "location": "Firenze"
+    },
+    {
+      "id": "own0",
+      "author": "me",
+      "kind": "post",
+      "text": "Momenti da tenere con me.",
+      "media": "post0.jpg",
+      "style": {
+        "aspect": 1
+      },
+      "age": 5000,
+      "likes": [
+        "u0"
+      ],
+      "comments": [
+        {
+          "id": "ownc0",
+          "author": "u0",
+          "text": "Bellissimo momento!",
+          "likes": []
+        }
+      ]
+    },
+    {
+      "id": "own1",
+      "author": "me",
+      "kind": "post",
+      "text": "Momenti da tenere con me.",
+      "media": "post1.jpg",
+      "style": {
+        "aspect": 1
+      },
+      "age": 5100,
+      "likes": [
+        "u0"
+      ],
+      "comments": [
+        {
+          "id": "ownc1",
+          "author": "u0",
+          "text": "Bellissimo momento!",
+          "likes": []
+        }
+      ]
+    },
+    {
+      "id": "own2",
+      "author": "me",
+      "kind": "post",
+      "text": "Momenti da tenere con me.",
+      "media": "post2.jpg",
+      "style": {
+        "aspect": 1
+      },
+      "age": 5200,
+      "likes": [
+        "u0"
+      ],
+      "comments": [
+        {
+          "id": "ownc2",
+          "author": "u0",
+          "text": "Bellissimo momento!",
+          "likes": []
+        }
+      ]
+    },
+    {
+      "id": "s0",
+      "author": "u0",
+      "kind": "story",
+      "text": "Una nuova storia",
+      "media": "post0.jpg",
+      "style": {},
+      "age": 3600,
+      "likes": [],
+      "viewers": []
+    },
+    {
+      "id": "s1",
+      "author": "u1",
+      "kind": "story",
+      "text": "Una nuova storia",
+      "media": "post1.jpg",
+      "style": {},
+      "age": 3600,
+      "likes": [],
+      "viewers": []
+    },
+    {
+      "id": "s2",
+      "author": "u2",
+      "kind": "story",
+      "text": "Una nuova storia",
+      "media": "post2.jpg",
+      "style": {},
+      "age": 3600,
+      "likes": [],
+      "viewers": []
+    },
+    {
+      "id": "r0",
+      "author": "u0",
+      "kind": "reel",
+      "media": "reel.mp4",
+      "text": "Un momento da vivere.",
+      "style": {},
+      "age": 3600,
+      "likes": [
+        "me"
+      ],
+      "comments": []
+    }
+  ],
+  "threads": [
+    {
+      "id": "t0",
+      "members": [
+        "me",
+        "u0"
+      ],
+      "title": "",
+      "requestDecision": "accepted",
+      "messageTTL": 0,
+      "messages": [
+        {
+          "id": "m0",
+          "author": "u0",
+          "kind": "text",
+          "text": "Ehi! Come è andata la giornata? 😊",
+          "age": 600,
+          "readBy": [],
+          "reactions": {}
+        },
+        {
+          "id": "m1",
+          "author": "me",
+          "kind": "text",
+          "text": "Bene! Mi serviva proprio un po’ di aria nuova.",
+          "age": 500,
+          "readBy": [
+            "me",
+            "u0"
+          ],
+          "reactions": {
+            "u0": "❤️"
+          }
+        },
+        {
+          "id": "m2",
+          "author": "u0",
+          "kind": "text",
+          "text": "Allora un caffè nel weekend? ☕",
+          "age": 60,
+          "readBy": [],
+          "reactions": {}
+        }
+      ]
+    },
+    {
+      "id": "t1",
+      "members": [
+        "me",
+        "u2"
+      ],
+      "title": "",
+      "requestDecision": "accepted",
+      "messages": [
+        {
+          "id": "m3",
+          "author": "u2",
+          "kind": "text",
+          "text": "Ci sentiamo dopo 🌈",
+          "age": 1800,
+          "readBy": [
+            "me"
+          ],
+          "reactions": {}
+        }
+      ]
+    },
+    {
+      "id": "t2",
+      "members": [
+        "me",
+        "u3"
+      ],
+      "requestDecision": "",
+      "messages": [
+        {
+          "id": "m4",
+          "author": "u3",
+          "kind": "text",
+          "text": "Ciao! Come stai?",
+          "age": 7200,
+          "readBy": [],
+          "reactions": {}
+        }
+      ]
+    }
+  ],
+  "following": [
+    "u0",
+    "u1"
+  ],
+  "pending": [],
+  "requests": [
+    "u3"
+  ],
+  "requestDetails": {
+    "u3": {
+      "mutualCount": 2,
+      "mutualUsers": [
+        "u0",
+        "u2"
+      ]
+    }
+  },
+  "closeFriends": [
+    "u0"
+  ],
+  "blocks": [],
+  "notes": [
+    {
+      "id": "u0",
+      "owner": "u0",
+      "text": "Prossima tappa? Milano 😅",
+      "likedByMe": false,
+      "audience": "mutual"
+    },
+    {
+      "id": "u2",
+      "owner": "u2",
+      "text": "Nuovo giorno, nuova nota…",
+      "likedByMe": false,
+      "audience": "mutual"
+    }
+  ],
+  "highlights": [],
+  "notifications": [
+    {
+      "id": "n0",
+      "actor": "u0",
+      "type": "storyLike",
+      "seen": false,
+      "created": 0
+    }
+  ],
+  "preferences": {
+    "activityStatus": true
+  },
+  "lives": [],
+  "calls": [],
+  "demoInstants": {
+    "received": [
+      {
+        "id": "i0",
+        "owner": "u0",
+        "caption": "Un istante, solo adesso.",
+        "username": "andrea.rossi",
+        "media": "post1.jpg"
+      },
+      {
+        "id": "i1",
+        "owner": "u2",
+        "caption": "Un sorriso da condividere.",
+        "username": "alex.rivera",
+        "media": "post2.jpg"
+      }
+    ],
+    "sent": [
+      {
+        "id": "im0",
+        "owner": "me",
+        "caption": "Il mio momento",
+        "media": "post0.jpg",
+        "viewsCount": 2
+      }
+    ],
+    "active": []
+  }
+}
