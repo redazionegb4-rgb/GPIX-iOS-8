@@ -1,0 +1,14 @@
+{
+  "build": 54,
+  "swift592ParsePassed": true,
+  "sourceFiles": 12,
+  "originalAndroidDartFilesComparedUnchanged": 32,
+  "projectReferences": true,
+  "fontRegisteredAndVerified": true,
+  "javaScriptParsed": true,
+  "iosSDKBuild": false,
+  "uiRendered": false,
+  "fullVisualParityVerified": false,
+  "designSource": "GPIX Flutter 2.24 lib/ui/icons.dart, lib/ui/kit.dart, lib/main.dart, screens/auth.dart, screens/instants.dart, screens/social.dart",
+  "mediaFontSHA256": "d7598e12c5dbef095ff8272cfc55da0250bd07fbdecbac8a530b9b277872a134"
+}

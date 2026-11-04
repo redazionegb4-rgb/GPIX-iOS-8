@@ -83,7 +83,7 @@ struct ReelsView:View {
             Button{
                 create=true
             } label: {
-                Image(systemName:"camera")
+                GpixIcon(systemName:"camera")
             }
         }
         .sheet(isPresented:$create){
@@ -109,25 +109,25 @@ struct ReelPage:View {
                             Text(store.person(post.s("author")).s("username")).bold()
                         }
                     }
-                    Text(post.s("text")).font(.subheadline)
+                    Text(post.s("text")).font(.gpix(size:14,weight:.regular))
                 }
                 Spacer()
                 VStack(spacing:23){
                     Button{
                         store.perform("like",["id":post.id,"enabled":!post.ids("likes").contains(store.myID)])
                     } label: {
-                        Image(systemName:post.ids("likes").contains(store.myID) ? "heart.fill":"heart").font(.title).foregroundStyle(post.ids("likes").contains(store.myID) ? Color.red:Color.white)
+                        Image(systemName:post.ids("likes").contains(store.myID) ? "heart.fill":"heart").font(.gpix(size:28,weight:.regular)).foregroundStyle(post.ids("likes").contains(store.myID) ? Color.red:Color.white)
                     }
-                    Text("\(post.ids("likes").count)").font(.caption)
+                    Text("\(post.ids("likes").count)").font(.gpix(size:12,weight:.regular))
                     NavigationLink{
                         CommentsView(postID:post.id)
                     } label: {
-                        Image(systemName:"bubble.right").font(.title)
+                        GpixIcon(systemName:"bubble.right").font(.gpix(size:28,weight:.regular))
                     }
                     NavigationLink{
                         SharePostView(postID:post.id)
                     } label: {
-                        Image(systemName:"paperplane").font(.title)
+                        GpixIcon(systemName:"paperplane").font(.gpix(size:28,weight:.regular))
                     }
                     PostOptions(post:post)
                 }
@@ -175,7 +175,7 @@ struct GiphyPicker:View{
                     }
                 }
                 if !message.isEmpty{
-                    Text(message).foregroundStyle(.secondary).padding()
+                    Text(message).foregroundStyle(gpixMuted).padding()
                 }
                 if loading{
                     ProgressView()
@@ -321,7 +321,7 @@ struct MusicPicker:View{
         NavigationStack{
             List{
                 if !message.isEmpty{
-                    Text(message).foregroundStyle(.secondary)
+                    Text(message).foregroundStyle(gpixMuted)
                 }
                 ForEach(tracks,id:\.id){
                     track in HStack{
@@ -330,11 +330,11 @@ struct MusicPicker:View{
                             player=AVPlayer(url:mediaURL(track.s("audio")))
                             player?.play()
                         } label: {
-                            Image(systemName:"play.circle").font(.title)
+                            Image(systemName:"play.circle").font(.gpix(size:28,weight:.regular))
                         }
                         VStack(alignment:.leading){
                             Text(track.s("title")).bold()
-                            Text(track.s("artist")).font(.caption).foregroundStyle(.secondary)
+                            Text(track.s("artist")).font(.gpix(size:12,weight:.regular)).foregroundStyle(gpixMuted)
                         }
                         Spacer()
                         Button("Aggiungi"){

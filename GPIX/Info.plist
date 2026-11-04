@@ -20,24 +20,6 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>LSRequiresIPhoneOS</key>
-	<true/>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
-	<key>UILaunchScreen</key>
-	<dict/>
-	<key>UISupportedInterfaceOrientations</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-	</array>
-	<key>NSCameraUsageDescription</key>
-	<string>Scatta foto, istantanee e video e partecipa alle videochiamate su GPIX.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Registra messaggi vocali, video e partecipa alle chiamate.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Seleziona foto e video da condividere su GPIX.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Salva le tue foto sul dispositivo.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSApplicationQueriesSchemes</key>
@@ -47,10 +29,32 @@
 		<string>whatsapp</string>
 		<string>tg</string>
 	</array>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
 		<false/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Scatta foto, istantanee e video e partecipa alle videochiamate su GPIX.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Registra messaggi vocali, video e partecipa alle chiamate.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Salva le tue foto sul dispositivo.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Seleziona foto e video da condividere su GPIX.</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Media/Roboto.ttf</string>
+	</array>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
 </dict>
 </plist>

@@ -11,6 +11,8 @@ struct ProfileView:View{
     @State private var links=false
     @State private var people=false
     @State private var story=false
+    @State private var createStory=false
+    @State private var showOwnNote=false
     var person:Row{
         store.person(userID)
     }
@@ -53,22 +55,9 @@ struct ProfileView:View{
         ScrollView{
             VStack(alignment:.leading,spacing:16){
                 HStack(spacing:20){
-                    Button{
-                        if !store.visibleStories(userID).isEmpty{
-                            story=true
-                        }
-                        else if mine{
-                            create=true
-                        }
-                    } label: {
-                        AvatarView(person:person,size:86,ring:store.unseenStories(userID)).overlay(alignment:.bottomTrailing){
-                            if mine{
-                                Image(systemName:"plus.circle.fill").font(.title3).symbolRenderingMode(.palette).foregroundStyle(.white,.primary)
-                            }
-                        }
-                    }
+                    profileAvatar
                     VStack(alignment:.leading,spacing:13){
-                        Text(person.s("name")).font(.system(size:16,weight:.semibold))
+                        Text(person.s("name")).font(.gpix(size:16,weight:.semibold))
                         HStack(spacing:22){
                             stat(Int(person.n("postCount",Double(grid.count))),title:"post")
                             stat(Int(person.n("followers")),title:"follower")
@@ -79,16 +68,16 @@ struct ProfileView:View{
                 }
                 VStack(alignment:.leading,spacing:4){
                     if !person.s("pronouns").isEmpty{
-                        Text(person.s("pronouns")).foregroundStyle(.secondary)
+                        Text(person.s("pronouns")).foregroundStyle(gpixMuted)
                     }
-                    Text(person.s("bio")).font(.subheadline)
+                    Text(person.s("bio")).font(.gpix(size:14,weight:.regular))
                 }
                 ScrollView(.horizontal,showsIndicators:false){
                     HStack(spacing:8){
                         ForEach(Array(person.rows("links").enumerated()),id:\.offset){
                             _,link in if let url=URL(string:link.s("url")){
                                 Link(destination:ProfileLinks.deepLink(link) ?? url){
-                                    Label(link.s("title"),systemImage:ProfileLinks.icon(link.s("type"))).font(.system(size:13,weight:.semibold)).padding(.horizontal,12).padding(.vertical,9).overlay(Capsule().stroke(.secondary.opacity(0.25)))
+                                    Label(link.s("title"),systemImage:ProfileLinks.icon(link.s("type"))).font(.gpix(size:13,weight:.semibold)).padding(.horizontal,12).padding(.vertical,9).overlay(Capsule().stroke(.secondary.opacity(0.25)))
                                 }
                             }
                         }
@@ -96,12 +85,12 @@ struct ProfileView:View{
                             Button{
                                 links=true
                             } label: {
-                                Label("Aggiungi",systemImage:"plus").font(.system(size:13,weight:.semibold)).fixedSize().padding(.horizontal,13).padding(.vertical,9).background(Color(uiColor:.systemBackground),in:Capsule()).overlay(Capsule().stroke(Color.primary.opacity(0.14)))
+                                Label("Aggiungi",systemImage:"plus").font(.gpix(size:13,weight:.semibold)).fixedSize().padding(.horizontal,13).padding(.vertical,9).background(Color(uiColor:.systemBackground),in:Capsule()).overlay(Capsule().stroke(Color.primary.opacity(0.14)))
                             }
                         }
                     }
                 }
-                .foregroundStyle(.primary)
+                .foregroundStyle(gpixInk)
                 HStack(spacing:8){
                     if mine{
                         Button("Modifica"){
@@ -133,7 +122,7 @@ struct ProfileView:View{
                     }
                 }
                 if people{
-                    Text("Persone suggerite").font(.headline)
+                    Text("Persone suggerite").font(.gpix(size:17,weight:.semibold))
                     ScrollView(.horizontal,showsIndicators:false){
                         HStack(spacing:12){
                             ForEach(store.users.filter{
@@ -142,7 +131,7 @@ struct ProfileView:View{
                             ,id:\.id){
                                 p in VStack(spacing:12){
                                     AvatarView(person:p,size:72)
-                                    Text(p.s("name")).font(.subheadline.bold())
+                                    Text(p.s("name")).font(.gpix(size:14,weight:.bold))
                                     Button(store.following(p.id) ? "Segui già":"Segui"){
                                         store.perform("follow",["user":p.id,"enabled":!store.following(p.id)])
                                     }
@@ -159,7 +148,7 @@ struct ProfileView:View{
                         index,icon in Button{
                             section=index
                         } label: {
-                            Image(systemName:icon).font(.system(size:24,weight:.medium)).frame(maxWidth:.infinity).padding(.vertical,10).foregroundStyle(section==index ? Color.primary:Color.secondary).overlay(alignment:.bottom){
+                            GpixIcon(systemName:icon,size:24).frame(maxWidth:.infinity).padding(.vertical,10).foregroundStyle(section==index ? Color.primary:Color.secondary).overlay(alignment:.bottom){
                                 if section==index{
                                     Rectangle().frame(height:2)
                                 }
@@ -210,9 +199,9 @@ struct ProfileView:View{
             ToolbarItem(placement:.principal){
                 HStack(spacing:6){
                     if person.b("private"){
-                        Image(systemName:"lock").font(.caption)
+                        Image(systemName:"lock").font(.gpix(size:12,weight:.regular))
                     }
-                    Text(person.s("username")).font(.title3.bold())
+                    Text(person.s("username")).font(.gpix(size:20,weight:.bold))
                 }
             }
             ToolbarItem(placement:.navigationBarLeading){
@@ -220,7 +209,7 @@ struct ProfileView:View{
                     Button{
                         create=true
                     } label: {
-                        Image(systemName:"plus").font(.title2)
+                        Image(systemName:"plus").font(.gpix(size:22,weight:.regular))
                     }
                 }
             }
@@ -229,7 +218,7 @@ struct ProfileView:View{
                     NavigationLink{
                         SettingsView()
                     } label: {
-                        Image(systemName:"line.3.horizontal").font(.title2)
+                        Image(systemName:"line.3.horizontal").font(.gpix(size:22,weight:.regular))
                     }
                 }
                 else{
@@ -241,11 +230,13 @@ struct ProfileView:View{
                             store.perform("closeFriend",["user":userID,"enabled":!store.state.ids("closeFriends").contains(userID)])
                         }
                     } label: {
-                        Image(systemName:"ellipsis")
+                        GpixIcon(systemName:"ellipsis")
                     }
                 }
             }
         }
+        .sheet(isPresented:$showOwnNote) { if let note=ownNote { NoteDetail(note:note) } else { NoteComposer() } }
+        .sheet(isPresented:$createStory) { ComposerView(kind:"story") }
         .sheet(isPresented:$edit){
             EditProfileView()
         }
@@ -259,15 +250,37 @@ struct ProfileView:View{
             StoryViewer(userID:userID)
         }
     }
+    private var ownNote:Row? {
+        store.state.rows("notes").first { $0.s("owner")==store.myID && $0.n("expires")>Date().timeIntervalSince1970 }
+    }
+    private var profileAvatar:some View {
+        ZStack(alignment:.bottomTrailing) {
+            Button { if !store.visibleStories(userID).isEmpty { story=true } else if mine { edit=true } } label: {
+                AvatarView(person:person,size:80,ring:store.unseenStories(userID))
+            }
+            if mine {
+                Button { createStory=true } label: {
+                    Image(systemName:"plus").font(.gpix(size:19)).foregroundStyle(Color(uiColor:.systemBackground)).frame(width:28,height:28).background(gpixInk,in:Circle()).overlay(Circle().stroke(Color(uiColor:.systemBackground),lineWidth:2.5))
+                }.offset(y:1)
+            }
+        }
+        .overlay(alignment:.top) {
+            if mine {
+                Button { showOwnNote=true } label: {
+                    Text(ownNote?.s("text") ?? "Lascia una nota…").font(.gpix(size:11)).lineLimit(2).multilineTextAlignment(.center).foregroundStyle(gpixInk).padding(.horizontal,9).padding(.vertical,8).frame(width:84).background(Color(uiColor:.systemBackground),in:RoundedRectangle(cornerRadius:18)).shadow(color:Color.black.opacity(0.09),radius:7,y:3)
+                }.offset(y:-17)
+            }
+        }.padding(.top,mine ? 10:0)
+    }
     func stat(_ count:Int,title:String)->some View{
         NavigationLink{
             PeopleListView(title:title,ids:person.ids(title=="follower" ? "followersList":"followingList"))
         } label: {
             VStack(alignment:.leading,spacing:2){
-                Text("\(count)").font(.system(size:18,weight:.semibold))
-                Text(title).font(.system(size:13))
+                Text("\(count)").font(.gpix(size:18,weight:.semibold))
+                Text(title).font(.gpix(size:13))
             }
-            .foregroundStyle(.primary)
+            .foregroundStyle(gpixInk)
         }
     }
     var highlights:some View{
@@ -278,8 +291,8 @@ struct ProfileView:View{
                         HighlightEditor()
                     } label: {
                         VStack{
-                            Image(systemName:"plus").font(.title).frame(width:66,height:66).overlay(Circle().stroke(.secondary.opacity(0.2),lineWidth:2))
-                            Text("Nuova").font(.caption)
+                            Image(systemName:"plus").font(.gpix(size:28,weight:.regular)).frame(width:66,height:66).overlay(Circle().stroke(.secondary.opacity(0.2),lineWidth:2))
+                            Text("Nuova").font(.gpix(size:12,weight:.regular))
                         }
                     }
                 }
@@ -292,7 +305,7 @@ struct ProfileView:View{
                     } label: {
                         VStack{
                             MediaView(reference:store.post(h.ids("posts").first ?? "").s("media"),fill:true).frame(width:66,height:66).clipShape(Circle())
-                            Text(h.s("title")).font(.caption)
+                            Text(h.s("title")).font(.gpix(size:12,weight:.regular))
                         }
                     }
                     .contextMenu{
@@ -304,13 +317,13 @@ struct ProfileView:View{
                     }
                 }
             }
-            .foregroundStyle(.primary)
+            .foregroundStyle(gpixInk)
         }
     }
 }
 struct ProfileButton:ButtonStyle{
     func makeBody(configuration:Configuration)->some View{
-        configuration.label.font(.system(size:13,weight:.semibold)).lineLimit(1).minimumScaleFactor(0.8).frame(maxWidth:.infinity,minHeight:38).padding(.horizontal,8).background(Color(uiColor:.secondarySystemBackground),in:RoundedRectangle(cornerRadius:11)).foregroundStyle(Color.primary).scaleEffect(configuration.isPressed ? 0.98:1).opacity(configuration.isPressed ? 0.7:1)
+        configuration.label.font(.gpix(size:13,weight:.semibold)).lineLimit(1).minimumScaleFactor(0.8).frame(maxWidth:.infinity,minHeight:38).padding(.horizontal,8).background(gpixSoft,in:RoundedRectangle(cornerRadius:11)).foregroundStyle(Color.primary).scaleEffect(configuration.isPressed ? 0.98:1).opacity(configuration.isPressed ? 0.7:1)
     }
 }
 @MainActor
@@ -359,12 +372,12 @@ struct EditProfileView:View{
     @State private var busy=false
     var body:some View{
         NavigationStack{
-            Form{
+            List{
                 Section{
                     VStack(spacing:15){
                         AvatarView(person:avatar.isEmpty ? store.me:["avatar":avatar],size:100)
                         PhotosPicker(selection:$image,matching:.images){
-                            Text("Modifica immagine del profilo").font(.headline)
+                            Text("Modifica immagine del profilo").font(.gpix(size:17,weight:.semibold))
                         }
                     }
                     .frame(maxWidth:.infinity).padding(.vertical,18)
@@ -481,7 +494,7 @@ struct ProfileLinks:View{
                         Image(systemName:Self.icon(row.s("type")))
                         VStack(alignment:.leading){
                             Text(row.s("title"))
-                            Text(row.s("value",row.s("url"))).font(.caption).foregroundStyle(.secondary)
+                            Text(row.s("value",row.s("url"))).font(.gpix(size:12,weight:.regular)).foregroundStyle(gpixMuted)
                         }
                     }
                 }
@@ -497,7 +510,7 @@ struct ProfileLinks:View{
                 .disabled(links.count>=5)
             }
             Section{
-                Text("Per i social inserisci il nome utente; per WhatsApp il numero completo di prefisso. Per un sito inserisci l’indirizzo HTTPS.").font(.footnote).foregroundStyle(.secondary)
+                Text("Per i social inserisci il nome utente; per WhatsApp il numero completo di prefisso. Per un sito inserisci l’indirizzo HTTPS.").font(.gpix(size:12,weight:.regular)).foregroundStyle(gpixMuted)
             }
         }
         .navigationTitle("Link").onAppear{
@@ -505,7 +518,7 @@ struct ProfileLinks:View{
         }
         .sheet(isPresented:$adding){
             NavigationStack{
-                Form{
+                List{
                     Picker("Tipo",selection:$type){
                         ForEach(Self.kinds,id:\.self){
                             Label($0.capitalized,systemImage:Self.icon($0))

@@ -62,10 +62,10 @@ struct DraftsView:View{
                     selected=draft
                 } label: {
                     HStack{
-                        Image(systemName:draft.kind=="reel" ? "play.rectangle":"photo").font(.title2)
+                        Image(systemName:draft.kind=="reel" ? "play.rectangle":"photo").font(.gpix(size:22,weight:.regular))
                         VStack(alignment:.leading){
                             Text(draft.caption.isEmpty ? draft.kind.capitalized:draft.caption).lineLimit(2)
-                            Text(ago(draft.created)+" fa").font(.caption).foregroundStyle(.secondary)
+                            Text(ago(draft.created)+" fa").font(.gpix(size:12,weight:.regular)).foregroundStyle(gpixMuted)
                         }
                     }
                 }
@@ -77,7 +77,7 @@ struct DraftsView:View{
                 }
             }
             if drafts.isEmpty{
-                Text("Non hai ancora bozze salvate").foregroundStyle(.secondary)
+                Text("Non hai ancora bozze salvate").foregroundStyle(gpixMuted)
             }
         }
         .navigationTitle("Bozze").onAppear{
@@ -163,7 +163,7 @@ struct ComposerView:View{
                             Label("Fotocamera",systemImage:"camera")
                         }
                     }
-                    .font(.subheadline.bold())
+                    .font(.gpix(size:14,weight:.bold))
                     if images.count>1{
                         Picker("Foto",selection:$page){
                             ForEach(0..<images.count,id:\.self){
@@ -191,7 +191,7 @@ struct ComposerView:View{
                                 Label("Modifica",systemImage:"slider.horizontal.3")
                             }
                         }
-                        Text("Trascina il testo in qualsiasi punto della foto.").font(.caption).foregroundStyle(.secondary)
+                        Text("Trascina il testo in qualsiasi punto della foto.").font(.gpix(size:12,weight:.regular)).foregroundStyle(gpixMuted)
                         ScrollView(.horizontal,showsIndicators:false){
                             HStack(spacing:12){
                                 ForEach(PhotoEffects.filters,id:\.self){
@@ -200,7 +200,7 @@ struct ComposerView:View{
                                     } label: {
                                         VStack(spacing:6){
                                             Image(uiImage:PhotoEffects.render(image:current!,filter:name,adjustments:[:],thumbnail:true)).resizable().scaledToFill().frame(width:64,height:70).clipped().clipShape(RoundedRectangle(cornerRadius:9)).overlay(RoundedRectangle(cornerRadius:9).stroke(filter==name ? gpixPurple:Color.clear,lineWidth:2))
-                                            Text(name).font(.system(size:10)).foregroundStyle(.primary)
+                                            Text(name).font(.gpix(size:10)).foregroundStyle(gpixInk)
                                         }
                                     }
                                 }
@@ -221,7 +221,7 @@ struct ComposerView:View{
                     }
                     if !musicTrack.isEmpty{
                         HStack{
-                            Text("Inizio \(Int(musicTrack.n("start"))) s").font(.caption)
+                            Text("Inizio \(Int(musicTrack.n("start"))) s").font(.gpix(size:12,weight:.regular))
                             Slider(value:Binding(get:{
                                 musicTrack.n("start")
                             }
@@ -233,7 +233,7 @@ struct ComposerView:View{
                         Button("Rimuovi musica"){
                             musicTrack=[:]
                         }
-                        .font(.caption)
+                        .font(.gpix(size:12,weight:.regular))
                     }
                     Picker("Pubblico",selection:$audience){
                         Text("Tutti").tag("all")
@@ -366,7 +366,7 @@ struct ComposerView:View{
             g in ZStack{
                 Image(uiImage:PhotoEffects.render(image:image,filter:filter,adjustments:adjustments)).resizable().scaledToFit()
                 if !overlay.isEmpty{
-                    Text(overlay).font(.system(size:textSize,weight:.semibold)).foregroundStyle(textColor).shadow(radius:2).fixedSize(horizontal:false,vertical:true).frame(maxWidth:g.size.width*0.95).position(x:textX*g.size.width,y:textY*g.size.height).gesture(DragGesture(coordinateSpace:.named("photoEdit")).onChanged{
+                    Text(overlay).font(.gpix(size:textSize,weight:.semibold)).foregroundStyle(textColor).shadow(radius:2).fixedSize(horizontal:false,vertical:true).frame(maxWidth:g.size.width*0.95).position(x:textX*g.size.width,y:textY*g.size.height).gesture(DragGesture(coordinateSpace:.named("photoEdit")).onChanged{
                         v in textX=min(0.98,max(0.02,v.location.x/g.size.width))
                         textY=min(0.98,max(0.02,v.location.y/g.size.height))
                     }
@@ -535,7 +535,7 @@ struct AdjustmentSheet:View{
                         HStack{
                             Label(name,systemImage:icon(name))
                             Spacer()
-                            Text("\(Int(values[name] ?? 0))").foregroundStyle(.secondary)
+                            Text("\(Int(values[name] ?? 0))").foregroundStyle(gpixMuted)
                         }
                         Slider(value:Binding(get:{
                             values[name] ?? 0

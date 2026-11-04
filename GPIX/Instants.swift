@@ -3,25 +3,67 @@ import UIKit
 @MainActor
 struct InstantBubble:View{
     @EnvironmentObject var store:GpixStore
+    private var paused:Bool { store.preferences.n("instantsSnoozedUntil")>Date().timeIntervalSince1970 }
+    private var pile:[Row] { paused ? [] : store.demo ? store.state.row("demoInstants").rows("received") : store.state.rows("instantPile") }
     var body: some View {
-        HStack(spacing:14) {
+        VStack(spacing:0) {
             ZStack {
-                RoundedRectangle(cornerRadius:11).fill(gpixPurple.opacity(0.16)).frame(width:39,height:48).rotationEffect(.degrees(-12))
-                RoundedRectangle(cornerRadius:11).fill(gpixPurple).frame(width:39,height:48).rotationEffect(.degrees(7))
-                Image(systemName:"camera.fill").font(.system(size:18)).foregroundStyle(Color.white)
+                ForEach((0..<3).reversed(),id:\.self) { index in
+                    RoundedRectangle(cornerRadius:22)
+                        .fill(gpixSoft)
+                        .overlay(RoundedRectangle(cornerRadius:22).stroke(Color(uiColor:.systemBackground),lineWidth:3))
+                        .overlay {
+                            if pile.indices.contains(index) { InstantPilePreview(id:pile[index].id).clipShape(RoundedRectangle(cornerRadius:19)) }
+                            if index==0 { GpixIcon(systemName:paused ? "pause" : pile.isEmpty ? "camera" : "photo.on.rectangle",size:25).foregroundStyle(pile.isEmpty ? Color.primary : Color.white) }
+                        }
+                        .frame(width:82,height:88)
+                        .rotationEffect(.radians(Double(index)*0.12-0.07))
+                        .offset(x:CGFloat(index)*7,y:CGFloat(index)*(-5))
+                        .shadow(color:Color.black.opacity(0.15),radius:12,y:5)
+                }
             }
-            VStack(alignment:.leading,spacing:4) {
-                Text("Istantanee").font(.system(size:16,weight:.semibold))
-                Text("Apri i momenti degli amici").font(.system(size:12)).foregroundStyle(Color.secondary)
-            }
-            Spacer(minLength:4)
-            Image(systemName:"chevron.right").font(.system(size:13,weight:.semibold)).foregroundStyle(Color.secondary)
+            .frame(width:104,height:98)
+            Text(paused ? "In pausa" : "Istantanee").font(.gpix(size:11,weight:.semibold))
+                .foregroundStyle(Color.primary).padding(.horizontal,11).padding(.vertical,6)
+                .background(Color(uiColor:.systemBackground),in:Capsule())
         }
-        .foregroundStyle(Color.primary).padding(17)
-        .background(Color(uiColor:.secondarySystemBackground),in:RoundedRectangle(cornerRadius:21))
-        .overlay(RoundedRectangle(cornerRadius:21).stroke(Color.primary.opacity(0.04)))
+        .frame(width:104,height:126)
+        .contextMenu {
+            Button(paused ? "Riprendi istantanee" : "Pausa per 24 ore",systemImage:paused ? "play" : "pause") { snooze() }
+            NavigationLink { InstantArchiveView() } label: { Label("Archivio privato",systemImage:"archivebox") }
+        }
+    }
+    private func snooze() {
+        Task {
+            do {
+                if store.demo {
+                    var prefs=store.preferences
+                    prefs["instantsSnoozedUntil"]=paused ? 0 : Date().timeIntervalSince1970+86400
+                    store.state["preferences"]=prefs
+                } else {
+                    _ = try await store.api("/instants/preferences",["paused":!paused])
+                    await store.sync()
+                }
+            } catch { store.error=error.localizedDescription }
+        }
     }
 
+}
+@MainActor
+struct InstantPilePreview:View {
+    @EnvironmentObject var store:GpixStore
+    let id:String
+    @State private var image:UIImage?
+    var body:some View {
+        GeometryReader { geometry in
+            if let image=image {
+                Image(uiImage:image).resizable().scaledToFill().frame(width:geometry.size.width,height:geometry.size.height).clipped()
+            }
+        }
+        .task(id:id) {
+            if let data=try? await store.instantPhoto(id,archive:false,preview:true) { image=UIImage(data:data) }
+        }
+    }
 }
 @MainActor
 struct InstantsView:View{
@@ -32,105 +74,115 @@ struct InstantsView:View{
     @State private var camera=false
     @State private var refreshing=false
     @State private var afterViewer=false
-    var body:some View{
-        ScrollView{
-            VStack(alignment:.leading,spacing:25){
-                HStack{
-                    VStack(alignment:.leading,spacing:6){
-                        Text("I momenti dei tuoi amici").font(.system(size:23,weight:.bold))
-                        Text("Disponibili per 24 ore").font(.system(size:13)).foregroundStyle(Color.secondary)
-                    }
-                    Spacer()
-                    NavigationLink{
-                        InstantArchiveView()
-                    } label: {
-                        Image(systemName:"clock.arrow.circlepath").font(.title2)
-                    }
-                }
-                if received.isEmpty{
-                    EmptyViewCard(icon:"square.stack.3d.up",title:"Nessuna nuova istantanea",subtitle:"Puoi comunque scattare e condividere la tua.")
-                }
-                else{
-                    ScrollView(.horizontal,showsIndicators:false){
-                        HStack(spacing:15){
-                            ForEach(received,id:\.id){
-                                item in Button{
-                                    selected=IdentifiedRow(row:item)
-                                } label: {
-                                    InstantCard(item:item)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .frame(height:390)
-                    }
-                }
-                Button { camera=true } label: {
-                    HStack(spacing:14) {
-                        Image(systemName:"camera.fill").font(.system(size:22)).frame(width:49,height:49).background(Color.white.opacity(0.16),in:RoundedRectangle(cornerRadius:15))
+    @State private var filter="all"
+    @State private var ownSelected:IdentifiedRow?
+    private var owners:[String] {
+        var result:[String]=[]
+        for row in received { let owner=row.s("owner"); if !result.contains(owner) { result.append(owner) } }
+        return result
+    }
+    var body:some View {
+        ScrollView {
+            VStack(alignment:.leading,spacing:0) {
+                Text("Nuovi momenti").font(.gpix(size:27,weight:.bold)).tracking(-0.6)
+                Text("Apri le card degli amici. Scatta e condividi le tue.").foregroundStyle(gpixMuted).padding(.top,8)
+                if store.demo { Text("Stai provando la demo").font(.gpix(size:12)).foregroundStyle(gpixMuted).padding(.top,10) }
+                createCard.padding(.top,22)
+                filters.padding(.top,20)
+                if filter != "mine" { friendsSection }
+                if filter != "new" { ownSection }
+                NavigationLink { InstantArchiveView() } label: {
+                    HStack(spacing:16) {
+                        Image(systemName:"archivebox").font(.gpix(size:28))
                         VStack(alignment:.leading,spacing:4) {
-                            Text("Crea un’istantanea").font(.system(size:16,weight:.semibold))
-                            Text("Scatta e condividi il tuo momento").font(.system(size:12)).opacity(0.85)
+                            Text("Il tuo archivio").font(.gpix(size:16,weight:.bold))
+                            Text("Solo tuo. Rivedi, elimina o crea un riepilogo.").font(.gpix(size:12)).foregroundStyle(gpixMuted)
                         }
-                        Spacer()
-                        Image(systemName:"plus").font(.system(size:19,weight:.medium))
-                    }
-                    .foregroundStyle(Color.white).padding(16).background(gpixPurple,in:RoundedRectangle(cornerRadius:22))
-                }
-                .buttonStyle(GpixPressStyle())
-                if !active.isEmpty{
-                    Text("Le tue istantanee attive").font(.headline)
-                    ForEach(active,id:\.id){
-                        item in NavigationLink{
-                            InstantArchiveView()
-                        } label: {
-                            HStack{
-                                Image(systemName:"camera.on.rectangle")
-                                Text(item.s("caption","Istantanea"))
-                                Spacer()
-                                Label("\(Int(item.n("viewsCount")))",systemImage:"eye")
-                            }
-                            .font(.subheadline).foregroundStyle(.primary)
-                        }
-                    }
-                }
-                NavigationLink{
-                    InstantArchiveView()
-                } label: {
-                    Label("Apri archivio",systemImage:"archivebox")
-                }
-            }
-            .padding(20)
+                        Spacer(minLength:0)
+                        Image(systemName:"chevron.right").font(.gpix(size:18))
+                    }.foregroundStyle(gpixInk).padding(.horizontal,18).padding(.vertical,20).background(gpixSoft,in:RoundedRectangle(cornerRadius:23))
+                }.padding(.top,28)
+            }.padding(.horizontal,18).padding(.top,12).padding(.bottom,40)
         }
-        .navigationTitle("Istantanee").navigationBarTitleDisplayMode(.inline).refreshable{
-            await load()
-        }
-        .task{
-            await load()
-        }
-        .sheet(isPresented:$camera,onDismiss:{
-            Task{
-                await load()
-            }
-        }
-        ){
-            InstantCamera()
-        }
+        .navigationTitle("Istantanee").navigationBarTitleDisplayMode(.inline)
+        .refreshable { await load() }.task { await load() }
+        .sheet(isPresented:$camera,onDismiss:{ Task { await load() } }) { InstantCamera() }
         .fullScreenCover(item:$selected,onDismiss:{
-            Task{
-                await load()
-            }
-            if afterViewer{
-                afterViewer=false
-                DispatchQueue.main.asyncAfter(deadline:.now()+0.3){
-                    camera=true
+            Task { await load() }
+            if afterViewer { afterViewer=false; Task { @MainActor in try? await Task.sleep(nanoseconds:300_000_000); camera=true } }
+        }) { item in InstantDeck(items:received,startID:item.id) { afterViewer=true; selected=nil } }
+        .fullScreenCover(item:$ownSelected,onDismiss:{ Task { await load() } }) { item in
+            ArchivePhotoView(item:item.row,onDelete:{ Task { try? await store.deleteInstant(item.id); await load() } })
+        }
+    }
+    private var createCard:some View {
+        Button { camera=true } label: {
+            HStack(spacing:15) {
+                GpixIcon(systemName:"camera",size:29).frame(width:54,height:54).background(Color.white.opacity(0.17),in:RoundedRectangle(cornerRadius:18))
+                VStack(alignment:.leading,spacing:5) {
+                    Text("Crea un’istantanea").font(.gpix(size:19,weight:.bold))
+                    Text("Scatta ora. Condividi il tuo momento.").font(.gpix(size:12)).foregroundStyle(Color.white.opacity(0.7))
+                }
+                Spacer(minLength:6)
+                Image(systemName:"plus").font(.gpix(size:25))
+            }.foregroundStyle(Color.white).padding(21)
+                .background(LinearGradient(colors:[Color(red:103.0/255,green:72.0/255,blue:246.0/255),Color(red:189.0/255,green:72.0/255,blue:199.0/255)],startPoint:.topLeading,endPoint:.bottomTrailing),in:RoundedRectangle(cornerRadius:26))
+        }.buttonStyle(GpixPressStyle())
+    }
+    private var filters:some View {
+        HStack(spacing:8) {
+            filterChip("all","Tutte")
+            filterChip("new","Da aprire")
+            filterChip("mine","Le tue")
+        }
+    }
+    private func filterChip(_ id:String,_ title:String)->some View {
+        Button { filter=id } label: {
+            HStack(spacing:6) { if filter==id { Image(systemName:"checkmark").font(.gpix(size:13,weight:.semibold)) }; Text(title).font(.gpix(size:14,weight:.medium)) }
+                .foregroundStyle(gpixInk).padding(.horizontal,14).padding(.vertical,9)
+                .background(filter==id ? gpixPurple.opacity(0.13) : Color.clear,in:RoundedRectangle(cornerRadius:9))
+                .overlay(RoundedRectangle(cornerRadius:9).stroke(gpixMuted.opacity(filter==id ? 0:0.35)))
+        }.buttonStyle(.plain)
+    }
+    private func sectionHeading(_ title:String,_ detail:String)->some View {
+        HStack { Text(title).font(.gpix(size:22,weight:.bold)); Spacer(); Text(detail).font(.gpix(size:12)).foregroundStyle(gpixMuted) }.padding(.top,25).padding(.bottom,14)
+    }
+    private var friendsSection:some View {
+        VStack(alignment:.leading,spacing:0) {
+            sectionHeading("Dai tuoi amici","\(received.count) nuove")
+            if owners.isEmpty {
+                VStack(spacing:12) {
+                    Image(systemName:"photo.on.rectangle").font(.gpix(size:35)).foregroundStyle(gpixMuted)
+                    Text("Nessuna nuova istantanea").font(.gpix(size:17,weight:.semibold))
+                    Text("Quando arrivano nuovi scatti, li trovi qui.\nIntanto puoi creare il tuo.").multilineTextAlignment(.center).foregroundStyle(gpixMuted)
+                }.padding(24).frame(maxWidth:.infinity).background(gpixSoft,in:RoundedRectangle(cornerRadius:24))
+            } else {
+                LazyVGrid(columns:[GridItem(.flexible(),spacing:12),GridItem(.flexible())],spacing:12) {
+                    ForEach(owners,id:\.self) { owner in friendCard(owner) }
                 }
             }
         }
-        ){
-            item in InstantDeck(items:received,startID:item.id){
-                afterViewer=true
-                selected=nil
+    }
+    private func friendCard(_ owner:String)->some View {
+        let rows=received.filter { $0.s("owner")==owner }
+        return Button { if let first=rows.first { selected=IdentifiedRow(row:first) } } label: {
+            CollectionInstantCard(item:rows.first ?? [:],count:rows.count,own:false)
+        }.buttonStyle(GpixPressStyle())
+    }
+    private var ownSection:some View {
+        VStack(alignment:.leading,spacing:0) {
+            sectionHeading("Le tue · 24 ore","\(active.count) attive")
+            if active.isEmpty {
+                HStack(spacing:16) {
+                    GpixIcon(systemName:"camera",size:31).foregroundStyle(gpixMuted)
+                    Text("Il prossimo istante è tuo.\nPuoi pubblicare anche senza amici.").foregroundStyle(gpixMuted)
+                }.padding(20).frame(maxWidth:.infinity,alignment:.leading).overlay(RoundedRectangle(cornerRadius:23).stroke(gpixMuted.opacity(0.25)))
+            } else {
+                LazyVGrid(columns:[GridItem(.flexible(),spacing:12),GridItem(.flexible())],spacing:12) {
+                    ForEach(active,id:\.id) { item in
+                        Button { ownSelected=IdentifiedRow(row:item) } label: { CollectionInstantCard(item:item,count:1,own:true) }.buttonStyle(GpixPressStyle())
+                    }
+                }
             }
         }
     }
@@ -157,16 +209,16 @@ struct InstantCard:View{
             HStack(spacing:10) {
                 AvatarView(person:store.person(item.s("owner")),size:34)
                 VStack(alignment:.leading,spacing:3) {
-                    Text(store.person(item.s("owner")).s("username",item.s("username"))).font(.system(size:14,weight:.semibold)).lineLimit(1)
-                    Text("Tocca per aprire").font(.system(size:11)).foregroundStyle(Color.secondary)
+                    Text(store.person(item.s("owner")).s("username",item.s("username"))).font(.gpix(size:14,weight:.semibold)).lineLimit(1)
+                    Text("Tocca per aprire").font(.gpix(size:11)).foregroundStyle(Color.secondary)
                 }
                 Spacer(minLength:0)
-                Image(systemName:"arrow.up.right").font(.system(size:13,weight:.medium)).foregroundStyle(Color.secondary)
+                GpixIcon(systemName:"arrow.up.right",size:13).foregroundStyle(Color.secondary)
             }
             .padding(13)
         }
         .foregroundStyle(Color.primary).frame(width:cardWidth)
-        .background(Color(uiColor:.secondarySystemBackground),in:RoundedRectangle(cornerRadius:25))
+        .background(gpixSoft,in:RoundedRectangle(cornerRadius:25))
         .clipShape(RoundedRectangle(cornerRadius:25))
         .overlay(RoundedRectangle(cornerRadius:25).stroke(Color.primary.opacity(0.07)))
         .shadow(color:Color.black.opacity(0.06),radius:12,y:5)
@@ -183,12 +235,12 @@ struct InstantCard:View{
             }
             LinearGradient(colors:[Color.clear,Color.black.opacity(0.55)],startPoint:.center,endPoint:.bottom)
             if !item.s("caption").isEmpty {
-                Text(item.s("caption")).font(.system(size:14,weight:.medium)).foregroundStyle(Color.white).lineLimit(2).padding(16)
+                Text(item.s("caption")).font(.gpix(size:14,weight:.medium)).foregroundStyle(Color.white).lineLimit(2).padding(16)
             }
         }
         .frame(width:cardWidth,height:290).clipped()
         .overlay(alignment:.topTrailing) {
-            Image(systemName:"lock.fill").font(.system(size:11)).foregroundStyle(Color.white).padding(9).background(Color.black.opacity(0.3),in:Circle()).padding(12)
+            GpixIcon(systemName:"lock.fill",size:11).foregroundStyle(Color.white).padding(9).background(Color.black.opacity(0.3),in:Circle()).padding(12)
         }
     }
 
@@ -282,10 +334,10 @@ struct InstantDeck:View{
     private var reactionBar: some View {
         HStack {
             ForEach(["❤️", "😂", "😍", "🔥"], id: \.self) { emoji in
-                Button(emoji) { feedback(emoji, reaction: true) }.font(.title2)
+                Button(emoji) { feedback(emoji, reaction: true) }.font(.gpix(size:22,weight:.regular))
             }
             Spacer()
-            Text("\(index + 1)/\(items.count)").font(.caption)
+            Text("\(index + 1)/\(items.count)").font(.gpix(size:12,weight:.regular))
         }
         .padding(.horizontal, 20)
     }
@@ -358,8 +410,8 @@ struct ProtectedPhoto:View{
             }
             else{
                 VStack(spacing:20){
-                    Image(systemName:"rectangle.slash").font(.system(size:60))
-                    Text("Contenuto protetto").font(.title2.bold())
+                    GpixIcon(systemName:"rectangle.slash",size:60)
+                    Text("Contenuto protetto").font(.gpix(size:22,weight:.bold))
                     Text("Interrompi la registrazione o duplicazione dello schermo per continuare.").multilineTextAlignment(.center)
                 }
                 .foregroundStyle(.white).padding(35)
@@ -370,7 +422,7 @@ struct ProtectedPhoto:View{
                         Button{
                             dismiss()
                         } label: {
-                            Image(systemName:"xmark").font(.title2).foregroundStyle(.white).padding()
+                            Image(systemName:"xmark").font(.gpix(size:22,weight:.regular)).foregroundStyle(.white).padding()
                         }
                         Spacer()
                     }
@@ -420,7 +472,7 @@ struct InstantCamera:View{
                 PrimaryButton(title:busy ? "Condivisione…":"Condividi istantanea",disabled:image==nil || busy){
                     send()
                 }
-                Text("Puoi crearla anche senza amici. Scade dopo 24 ore e rimane nel tuo archivio privato.").font(.caption).foregroundStyle(.secondary)
+                Text("Puoi crearla anche senza amici. Scade dopo 24 ore e rimane nel tuo archivio privato.").font(.gpix(size:12,weight:.regular)).foregroundStyle(gpixMuted)
             }
             .padding(22).navigationTitle("Nuova istantanea").toolbar{
                 Button("Annulla"){
@@ -485,7 +537,7 @@ struct InstantArchiveView:View{
     }
     private func archiveMonth(_ key: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(key).font(.headline)
+            Text(key).font(.gpix(size:17,weight:.semibold))
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: 3), spacing: 3) {
                 ForEach(rows.filter { month($0) == key }, id: \.id) { item in
                     archiveCell(item)
@@ -514,7 +566,7 @@ struct InstantArchiveView:View{
     var body:some View{
         ScrollView{
             VStack(alignment:.leading,spacing:20){
-                Label("Solo tu puoi vedere le tue istantanee archiviate, conservate fino a un anno.",systemImage:"lock").font(.caption).foregroundStyle(.secondary).padding(13).frame(maxWidth:.infinity,alignment:.leading).background(Color.secondary.opacity(0.07),in:RoundedRectangle(cornerRadius:17))
+                Label("Solo tu puoi vedere le tue istantanee archiviate, conservate fino a un anno.",systemImage:"lock").font(.gpix(size:12,weight:.regular)).foregroundStyle(gpixMuted).padding(13).frame(maxWidth:.infinity,alignment:.leading).background(Color.secondary.opacity(0.07),in:RoundedRectangle(cornerRadius:17))
                 HStack(spacing:10){
                     Button("Tutte"){
                         activeOnly=false
@@ -529,7 +581,7 @@ struct InstantArchiveView:View{
                         selecting.toggle()
                         selection=[]
                     }
-                    .font(.caption.bold())
+                    .font(.gpix(size:12,weight:.bold))
                 }
                 if rows.isEmpty{
                     EmptyViewCard(icon:"square.grid.2x2",title:"Ancora nessuna istantanea qui",subtitle:"I tuoi momenti saranno raccolti qui, solo per te.")
@@ -581,7 +633,7 @@ struct InstantArchiveView:View{
                     if let image=recapImages.first{
                         Image(uiImage:image).resizable().scaledToFit()
                     }
-                    Text("Il riepilogo verrà pubblicato come storia.").font(.caption)
+                    Text("Il riepilogo verrà pubblicato come storia.").font(.gpix(size:12,weight:.regular))
                     PrimaryButton(title:"Condividi riepilogo"){
                         Task{
                             do{
@@ -690,14 +742,14 @@ struct ArchiveThumb:View{
                 LinearGradient(colors:[.clear,.black.opacity(0.5)],startPoint:.center,endPoint:.bottom)
                 VStack{
                     HStack{
-                        Text(Date(timeIntervalSince1970:item.n("created")).formatted(.dateTime.day())).font(.caption.bold())
+                        Text(Date(timeIntervalSince1970:item.n("created")).formatted(.dateTime.day())).font(.gpix(size:12,weight:.bold))
                         Spacer()
                         if selected{
                             Image(systemName:"checkmark.circle.fill").foregroundStyle(gpixPurple)
                         }
                     }
                     Spacer()
-                    Label("\(Int(item.n("viewsCount")))",systemImage:"eye").font(.system(size:10,weight:.semibold)).frame(maxWidth:.infinity,alignment:.leading)
+                    Label("\(Int(item.n("viewsCount")))",systemImage:"eye").font(.gpix(size:10,weight:.semibold)).frame(maxWidth:.infinity,alignment:.leading)
                 }
                 .foregroundStyle(.white).padding(8)
             }
@@ -763,7 +815,7 @@ struct InstantViewers:View{
     var body:some View{
         NavigationStack{
             List{
-                Text("\(total) visualizzazioni").font(.headline)
+                Text("\(total) visualizzazioni").font(.gpix(size:17,weight:.semibold))
                 ForEach(Array(items.enumerated()),id:\.offset){
                     _,p in PersonLine(person:["id":p.s("user"),"name":p.s("name"),"username":p.s("username"),"avatar":p.s("avatar")],subtitle:ago(p.n("opened"))+" fa")
                 }
@@ -864,5 +916,37 @@ extension GpixStore{
             return
         }
         _ = try await api("/instants/\(id)/delete",[:])
+    }
+}
+
+@MainActor
+struct CollectionInstantCard:View {
+    @EnvironmentObject var store:GpixStore
+    let item:Row
+    let count:Int
+    let own:Bool
+    @State private var image:UIImage?
+    private var remaining:String {
+        let seconds=max(0,item.n("expires")-Date().timeIntervalSince1970)
+        return seconds>=3600 ? "\(Int(ceil(seconds/3600))) h":"\(Int(ceil(seconds/60))) min"
+    }
+    var body:some View {
+        GeometryReader { geometry in
+            ZStack(alignment:.bottomLeading) {
+                gpixSoft
+                if let image=image { Image(uiImage:image).resizable().scaledToFill().frame(width:geometry.size.width,height:geometry.size.height).clipped() }
+                LinearGradient(colors:[Color.black.opacity(own ? 0:0.26),Color.clear,Color.black.opacity(0.87)],startPoint:.top,endPoint:.bottom)
+                if !own { Image(systemName:"viewfinder").font(.gpix(size:35)).foregroundStyle(Color.white).frame(maxWidth:.infinity,maxHeight:.infinity) }
+                VStack(alignment:.leading,spacing:4) {
+                    Text(own ? item.s("caption").isEmpty ? "Il tuo istante":item.s("caption") : item.s("username",store.person(item.s("owner")).s("username"))).font(.gpix(size:16,weight:.bold)).lineLimit(own ? 2:1)
+                    if !own { Text("Tocca per aprire").font(.gpix(size:11)).foregroundStyle(Color.white.opacity(0.7)) }
+                }.foregroundStyle(Color.white).padding(.horizontal,13).padding(.bottom,15)
+            }.overlay(alignment:.topLeading) {
+                Text(own ? "Scade tra \(remaining)":"\(count) \(count==1 ? "nuova":"nuove")").font(.gpix(size:11,weight:own ? .regular:.bold))
+                    .foregroundStyle(own ? Color.white:Color.black).padding(.horizontal,8).padding(.vertical,5).background(own ? Color.black.opacity(0.54):Color.white,in:RoundedRectangle(cornerRadius:12)).padding(12)
+            }
+            .frame(width:geometry.size.width,height:geometry.size.height).clipped().clipShape(RoundedRectangle(cornerRadius:25))
+        }.aspectRatio(1,contentMode:.fit)
+        .task(id:item.id) { if let data=try? await store.instantPhoto(item.id,archive:own,preview:!own) { image=UIImage(data:data) } }
     }
 }

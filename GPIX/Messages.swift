@@ -14,57 +14,60 @@ struct InboxView:View{
     var body:some View{
         ScrollView{
             VStack(alignment:.leading,spacing:20){
-                GpixSearchField(text:$query,placeholder:"Cerca una conversazione")
+                GpixSearchField(text:$query,placeholder:"Cerca persone e messaggi")
                 NoteStrip()
                 HStack{
-                    Text("Messaggi").font(.headline)
+                    Text("Messaggi").font(.gpix(size:17,weight:.semibold))
                     Spacer()
                     NavigationLink("Richieste"){
                         MessageRequestsView(hidden:false)
                     }
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(.gpix(size:14,weight:.regular)).foregroundStyle(gpixMuted)
                 }
                 ForEach(rows,id:\.id){
                     t in NavigationLink{
                         ChatView(threadID:t.id)
                     } label: {
                         HStack(spacing:14){
-                            AvatarView(person:store.peer(t),size:62,ring:store.unseenStories(store.peer(t).id),online:store.online(store.peer(t).id))
+                            AvatarView(person:store.peer(t),size:64,ring:store.unseenStories(store.peer(t).id),online:store.online(store.peer(t).id))
                             VStack(alignment:.leading,spacing:5){
-                                Text(store.threadTitle(t)).font(.system(size:16,weight:store.unread(t)>0 ? .semibold:.regular))
-                                Text(preview(t)).font(.system(size:14,weight:store.unread(t)>0 ? .semibold:.regular)).foregroundStyle(store.unread(t)>0 ? .primary:.secondary).lineLimit(1)
+                                Text(store.threadTitle(t)).font(.gpix(size:16,weight:store.unread(t)>0 ? .semibold:.regular))
+                                Text(preview(t)).font(.gpix(size:14,weight:store.unread(t)>0 ? .semibold:.regular)).foregroundStyle(store.unread(t)>0 ? .primary:.secondary).lineLimit(1)
                             }
                             Spacer(minLength:4)
                             if store.unread(t)>0{
                                 Circle().fill(gpixPurple).frame(width:8,height:8)
                             }
                         }
-                        .foregroundStyle(.primary).padding(.vertical,5).contentShape(Rectangle())
+                        .foregroundStyle(gpixInk).padding(.vertical,5).contentShape(Rectangle())
                     }
                     .buttonStyle(GpixPressStyle())
                 }
                 if rows.isEmpty{
                     EmptyViewCard(icon:"paperplane",title:"Le tue conversazioni",subtitle:"Scrivi a una persona per iniziare.")
                 }
-                if store.preferences["hideInstantBubble"] as? Bool != true{
-                    NavigationLink{
-                        InstantsView()
-                    } label: {
-                        InstantBubble()
-                    }
-                }
+
             }
             .padding(16)
         }
+        .overlay(alignment:.bottomTrailing) {
+            if store.preferences["hideInstantBubble"] as? Bool != true {
+                NavigationLink { InstantsView() } label: { InstantBubble() }
+                    .buttonStyle(GpixPressStyle()).padding(.trailing,10).padding(.bottom,30)
+            }
+        }
         .navigationBarTitleDisplayMode(.inline).toolbar{
             ToolbarItem(placement:.principal){
-                Text(store.me.s("username")).font(.title3.bold())
+                Text(store.me.s("username")).font(.gpix(size:25,weight:.bold))
             }
             ToolbarItem(placement:.navigationBarTrailing){
+                HStack(spacing:16) {
+                if store.preferences.b("hideInstantBubble") { NavigationLink { InstantsView() } label: { Image(systemName:"photo.on.rectangle") } }
                 Button{
                     newChat=true
                 } label: {
-                    Image(systemName:"square.and.pencil").font(.title2)
+                    Image(systemName:"square.and.pencil").font(.gpix(size:22,weight:.regular))
+                }
                 }
             }
         }
@@ -118,10 +121,10 @@ struct MessageRequestsView:View{
                         HStack{
                             Label("Richieste nascoste",systemImage:"eye.slash")
                             Spacer()
-                            Text("\(store.threads.filter{store.requestHidden($0)}.count)").foregroundStyle(.secondary)
+                            Text("\(store.threads.filter{store.requestHidden($0)}.count)").foregroundStyle(gpixMuted)
                             Image(systemName:"chevron.right")
                         }
-                        .foregroundStyle(.primary).padding(.vertical,12)
+                        .foregroundStyle(gpixInk).padding(.vertical,12)
                     }
                 }
                 if rows.isEmpty{
@@ -129,7 +132,7 @@ struct MessageRequestsView:View{
                     Button("Mostra tutto"){
                         all=true
                     }
-                    .font(.headline)
+                    .font(.gpix(size:17,weight:.semibold))
                 }
                 ForEach(rows,id:\.id){
                     t in NavigationLink{
@@ -288,12 +291,12 @@ struct ChatView:View{
                     LazyVStack(spacing:13){
                         VStack(spacing:10){
                             AvatarView(person:peer,size:85)
-                            Text(store.threadTitle(thread)).font(.title3.bold())
-                            Text("@"+peer.s("username")).font(.subheadline).foregroundStyle(.secondary)
+                            Text(store.threadTitle(thread)).font(.gpix(size:20,weight:.bold))
+                            Text("@"+peer.s("username")).font(.gpix(size:14,weight:.regular)).foregroundStyle(gpixMuted)
                             NavigationLink("Visualizza profilo"){
                                 ProfileView(userID:peer.id)
                             }
-                            .font(.subheadline.bold()).padding(.horizontal,20).padding(.vertical,10).overlay(Capsule().stroke(.secondary.opacity(0.25)))
+                            .font(.gpix(size:14,weight:.bold)).padding(.horizontal,20).padding(.vertical,10).overlay(Capsule().stroke(.secondary.opacity(0.25)))
                         }
                         .padding(.vertical,28)
                         ForEach(thread.rows("messages").filter{
@@ -315,7 +318,7 @@ struct ChatView:View{
                                 Text(typing.contains{
                                     $0.s("kind")=="recording"
                                 }
-                                ? "Sta registrando un vocale…":"Sta scrivendo…").font(.caption).foregroundStyle(.secondary)
+                                ? "Sta registrando un vocale…":"Sta scrivendo…").font(.gpix(size:12,weight:.regular)).foregroundStyle(gpixMuted)
                                 Spacer()
                             }
                         }
@@ -355,7 +358,7 @@ struct ChatView:View{
                 HStack{
                     Text(edit.isEmpty ? "Rispondi: "+(thread.rows("messages").first{
                         $0.id==reply
-                    }?.s("text") ?? "Foto") : "Modifica messaggio").font(.caption).lineLimit(1)
+                    }?.s("text") ?? "Foto") : "Modifica messaggio").font(.gpix(size:12,weight:.regular)).lineLimit(1)
                     Spacer()
                     Button{
                         reply=""
@@ -377,11 +380,11 @@ struct ChatView:View{
                     HStack(spacing:9){
                         AvatarView(person:peer,size:31,online:store.online(peer.id))
                         VStack(alignment:.leading,spacing:2){
-                            Text(store.threadTitle(thread)).font(.subheadline.bold())
-                            Text(status).font(.caption2).foregroundStyle(.secondary)
+                            Text(store.threadTitle(thread)).font(.gpix(size:14,weight:.bold))
+                            Text(status).font(.gpix(size:11,weight:.regular)).foregroundStyle(gpixMuted)
                         }
                     }
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(gpixInk)
                 }
             }
             ToolbarItem(placement:.navigationBarTrailing){
@@ -489,10 +492,10 @@ struct ChatView:View{
             Button{
                 camera=true
             } label: {
-                Image(systemName:"camera.fill").font(.system(size:20,weight:.medium)).foregroundStyle(Color.white).frame(width:40,height:40).background(gpixPurple,in:Circle())
+                GpixIcon(systemName:"camera.fill",size:20).foregroundStyle(Color.white).frame(width:40,height:40).background(gpixPurple,in:Circle())
             }
             if recorder.recording{
-                Text("Registrazione · \(Int(recorder.seconds)) s").font(.subheadline).foregroundStyle(.red).frame(maxWidth:.infinity,alignment:.leading)
+                Text("Registrazione · \(Int(recorder.seconds)) s").font(.gpix(size:14,weight:.regular)).foregroundStyle(.red).frame(maxWidth:.infinity,alignment:.leading)
             }
             else{
                 TextField(thread.n("messageTTL")==0 ? "Messaggio…":"Messaggio a scadenza…",text:$text,axis:.vertical).textFieldStyle(.plain).lineLimit(1...5).padding(.leading,3)
@@ -501,16 +504,16 @@ struct ChatView:View{
                 Button("Invia"){
                     sendText()
                 }
-                .font(.subheadline.bold()).foregroundStyle(.white).padding(.horizontal,14).padding(.vertical,9).background(gpixPurple,in:Capsule())
+                .font(.gpix(size:14,weight:.bold)).foregroundStyle(.white).padding(.horizontal,14).padding(.vertical,9).background(gpixPurple,in:Capsule())
             }
             else{
                 PhotosPicker(selection:$image,matching:.images){
-                    Image(systemName:"photo").font(.system(size:21))
+                    GpixIcon(systemName:"photo",size:21)
                 }
                 Button{
                     voice()
                 } label: {
-                    Image(systemName:recorder.recording ? "stop.circle.fill":"mic").font(.system(size:22)).foregroundStyle(recorder.recording ? .red:.primary)
+                    GpixIcon(systemName:recorder.recording ? "stop.circle.fill":"mic",size:22).foregroundStyle(recorder.recording ? .red:.primary)
                 }
                 Menu{
                     Button("GIF e sticker",systemImage:"face.smiling"){
@@ -524,12 +527,12 @@ struct ChatView:View{
                         camera=true
                     }
                 } label: {
-                    Image(systemName:"plus.circle").font(.system(size:23))
+                    GpixIcon(systemName:"plus.circle",size:23)
                 }
             }
         }
         .foregroundStyle(Color.primary).padding(.leading,5).padding(.trailing,13).padding(.vertical,5)
-        .background(Color(uiColor:.secondarySystemBackground),in:Capsule())
+        .background(gpixSoft,in:Capsule())
         .overlay(Capsule().stroke(Color.primary.opacity(0.06)))
         .padding(.horizontal,12).padding(.vertical,8)
         .background(Color(uiColor:.systemBackground))
@@ -689,11 +692,11 @@ struct MessageBubble:View{
                     if !message.s("reply").isEmpty{
                         Text("↪ "+(store.thread(threadID).rows("messages").first{
                             $0.id==message.s("reply")
-                        }?.s("text") ?? "Foto")).font(.caption).lineLimit(2).padding(7).background(.primary.opacity(0.08),in:RoundedRectangle(cornerRadius:8))
+                        }?.s("text") ?? "Foto")).font(.gpix(size:12,weight:.regular)).lineLimit(2).padding(7).background(.primary.opacity(0.08),in:RoundedRectangle(cornerRadius:8))
                     }
                     content
                     if message.b("edited"){
-                        Text("Modificato").font(.caption2)
+                        Text("Modificato").font(.gpix(size:11,weight:.regular))
                     }
                 }
                 .padding(message.s("kind")=="image" && !message.b("viewOnce") ? 5:13).background(mine ? gpixPurple:Color.secondary.opacity(0.15),in:RoundedRectangle(cornerRadius:22)).foregroundStyle(mine ? .white:.primary)
@@ -701,12 +704,12 @@ struct MessageBubble:View{
                     Text(message.row("reactions").values.compactMap{
                         $0 as? String
                     }
-                    .joined()).font(.caption).padding(.horizontal,7).padding(.vertical,3).background(.regularMaterial,in:Capsule()).overlay(Capsule().stroke(.secondary.opacity(0.2)))
+                    .joined()).font(.gpix(size:12,weight:.regular)).padding(.horizontal,7).padding(.vertical,3).background(.regularMaterial,in:Capsule()).overlay(Capsule().stroke(.secondary.opacity(0.2)))
                 }
                 Text(clock(message.n("created"))+(mine ? (message.ids("readBy").contains(where:{
                     $0 != store.myID
                 }
-                ) ? " · Visto":" · Inviato"):"")).font(.system(size:10)).foregroundStyle(.secondary)
+                ) ? " · Visto":" · Inviato"):"")).font(.gpix(size:10)).foregroundStyle(gpixMuted)
             }
             .frame(maxWidth:290,alignment:mine ? .trailing:.leading).contextMenu{
                 Button("Rispondi",systemImage:"arrowshape.turn.up.left",action:onReply)
@@ -761,19 +764,19 @@ struct MessageBubble:View{
             }
             case "gif":GIFView(reference:message.s("media")).frame(width:210,height:175)
             case "audio":AudioBubble(reference:message.s("media"))
-            case "sticker":Text(message.s("text")).font(.system(size:44))
+            case "sticker":Text(message.s("text")).font(.gpix(size:44))
             case "post":NavigationLink{
                 PostDetailView(postID:message.row("story").s("postId"))
             } label: {
                 VStack{
                     MediaView(reference:store.post(message.row("story").s("postId")).s("media"),fill:true).frame(width:200,height:210)
-                    Text("Post condiviso").font(.caption)
+                    Text("Post condiviso").font(.gpix(size:12,weight:.regular))
                 }
             }
             default:if !message.row("story").s("media").isEmpty{
                 MediaView(reference:message.row("story").s("media"),fill:true).frame(width:110,height:140)
             }
-            Text(message.s("text")).font(.system(size:15))
+            Text(message.s("text")).font(.gpix(size:15))
         }
     }
     func openPhoto(){
@@ -817,10 +820,10 @@ struct AudioBubble:View{
                 }
                 playing.toggle()
             } label: {
-                Image(systemName:playing ? "pause.fill":"play.fill").font(.title3)
+                Image(systemName:playing ? "pause.fill":"play.fill").font(.gpix(size:20,weight:.regular))
             }
-            Image(systemName:"waveform").font(.title2)
-            Text("Messaggio vocale").font(.caption)
+            Image(systemName:"waveform").font(.gpix(size:22,weight:.regular))
+            Text("Messaggio vocale").font(.gpix(size:12,weight:.regular))
         }
         .padding(5).onDisappear{
             player?.pause()
@@ -841,7 +844,7 @@ struct ThreadSettingsView:View{
         store.thread(threadID)
     }
     var body:some View{
-        Form{
+        List{
             Section("Messaggi temporanei"){
                 Picker("Scompaiono",selection:Binding(get:{
                     Int(t.n("messageTTL"))

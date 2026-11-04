@@ -6,9 +6,13 @@ struct FeedView:View {
     @State private var compose=false
     @State private var activity=false
     @State private var followingOnly=false
+    @State private var createMenu=false
+    @State private var creationKind="post"
+    @State private var pendingCreation=""
+    @State private var live=false
     var feed:[Row]{
         store.posts.filter{
-            $0.s("kind")=="post" && !$0.b("archived") && (!followingOnly || store.following($0.s("author")))
+            $0.s("kind")=="post" && !$0.b("archived") && !store.preferences.ids("muted").contains($0.s("author")) && (!followingOnly || store.following($0.s("author")) || $0.s("author")==store.myID)
         }
     }
     var body:some View{
@@ -39,28 +43,8 @@ struct FeedView:View {
         }
         .toolbar{
             ToolbarItem(placement:.navigationBarLeading){
-                Menu{
-                    Button("Nuovo post",systemImage:"photo"){
-                        compose=true
-                    }
-                    NavigationLink{
-                        ComposerView(kind:"reel")
-                    } label: {
-                        Label("Nuovo reel",systemImage:"play.rectangle")
-                    }
-                    NavigationLink{
-                        ComposerView(kind:"story")
-                    } label: {
-                        Label("Nuova storia",systemImage:"plus.circle")
-                    }
-                    NavigationLink{
-                        LiveListView()
-                    } label: {
-                        Label("Dirette",systemImage:"video")
-                    }
-                } label: {
-                    Image(systemName:"plus").font(.title2)
-                }
+                Button { createMenu=true } label: { Image(systemName:"plus").font(.gpix(size:30)) }
+
             }
             ToolbarItem(placement:.principal){
                 Menu{
@@ -72,8 +56,8 @@ struct FeedView:View {
                     }
                 } label: {
                     HStack(spacing:5){
-                        Text(followingOnly ? "Seguiti":"Per te").font(.title3.bold())
-                        Image(systemName:"chevron.down").font(.caption)
+                        Text(followingOnly ? "Seguiti":"Per te").font(.gpix(size:23,weight:.bold)).tracking(-0.5)
+                        Image(systemName:"chevron.down").font(.gpix(size:12,weight:.regular))
                     }
                 }
             }
@@ -81,7 +65,7 @@ struct FeedView:View {
                 Button{
                     activity=true
                 } label: {
-                    Image(systemName:"heart").font(.title2).overlay(alignment:.topTrailing){
+                    GpixIcon(systemName:"heart").font(.gpix(size:22,weight:.regular)).overlay(alignment:.topTrailing){
                         if store.state.rows("notifications").contains(where:{
                             !$0.b("seen") && !["messageReaction","message","call","instant"].contains($0.s("type"))
                         }
@@ -92,15 +76,28 @@ struct FeedView:View {
                 }
             }
         }
-        .sheet(isPresented:$compose){
-            ComposerView(kind:"post")
+        .sheet(isPresented:$createMenu,onDismiss:{
+            guard !pendingCreation.isEmpty else { return }
+            let kind=pendingCreation; pendingCreation=""
+            if kind=="live" { live=true } else { creationKind=kind; compose=true }
+        }) {
+            VStack(spacing:0) {
+                GpixActionRow(title:"Post",icon:"photo") { chooseCreation("post") }
+                GpixActionRow(title:"Reel",icon:"play.rectangle") { chooseCreation("reel") }
+                GpixActionRow(title:"Storia",icon:"plus.circle") { chooseCreation("story") }
+                GpixActionRow(title:"Diretta",icon:"video") { chooseCreation("live") }
+            }.padding(.top,16).padding(.bottom,12).presentationDetents([.height(270)]).presentationDragIndicator(.visible).presentationCornerRadius(24)
         }
+        .sheet(isPresented:$live) { NavigationStack { LiveListView() } }
+        .sheet(isPresented:$compose){ ComposerView(kind:creationKind) }
         .sheet(isPresented:$activity){
             NavigationStack{
                 ActivityView()
             }
         }
     }
+    private func chooseCreation(_ kind:String) { pendingCreation=kind; createMenu=false }
+
 }
 @MainActor
 struct StoryStrip:View {
@@ -127,13 +124,13 @@ struct StoryStrip:View {
                         VStack(spacing:7){
                             AvatarView(person:person,size:74,ring:store.unseenStories(person.id)).overlay(alignment:.bottomTrailing){
                                 if person.id==store.myID{
-                                    Image(systemName:"plus.circle.fill").font(.title3).symbolRenderingMode(.palette).foregroundStyle(.white,.black)
+                                    Image(systemName:"plus.circle.fill").font(.gpix(size:20,weight:.regular)).symbolRenderingMode(.palette).foregroundStyle(.white,.black)
                                 }
                             }
-                            Text(person.id==store.myID ? "La tua storia":person.s("username")).font(.caption).lineLimit(1).frame(width:85)
+                            Text(person.id==store.myID ? "La tua storia":person.s("username")).font(.gpix(size:12,weight:.regular)).lineLimit(1).frame(width:85)
                         }
                     }
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(gpixInk)
                 }
             }
             .padding(.horizontal,14)
@@ -168,19 +165,19 @@ struct PostCard:View {
                 } label: {
                     AvatarView(person:author,size:34,ring:store.unseenStories(author.id))
                     VStack(alignment:.leading,spacing:2){
-                        Text(author.s("username")).font(.system(size:14,weight:.semibold))
+                        Text(author.s("username")).font(.gpix(size:14,weight:.semibold))
                         if !post.s("location").isEmpty{
-                            Text(post.s("location")).font(.caption2)
+                            Text(post.s("location")).font(.gpix(size:11,weight:.regular))
                         }
                     }
                 }
-                .foregroundStyle(.primary)
+                .foregroundStyle(gpixInk)
                 Spacer()
                 if author.id != store.myID && !store.following(author.id){
                     Button(store.pending(author.id) ? "Richiesta inviata":"Segui"){
                         store.perform("follow",["user":author.id,"enabled":!store.pending(author.id)])
                     }
-                    .font(.caption.bold()).padding(.horizontal,14).padding(.vertical,9).background(Color.secondary.opacity(0.10),in:RoundedRectangle(cornerRadius:10))
+                    .font(.gpix(size:12,weight:.bold)).padding(.horizontal,14).padding(.vertical,9).background(Color.secondary.opacity(0.10),in:RoundedRectangle(cornerRadius:10))
                 }
                 PostOptions(post:post)
             }
@@ -190,45 +187,45 @@ struct PostCard:View {
                 Button{
                     store.perform("like",["id":post.id,"enabled":!liked])
                 } label: {
-                    Image(systemName:liked ? "heart.fill":"heart").foregroundStyle(liked ? .red:.primary)
+                    GpixIcon(systemName:liked ? "heart.fill":"heart").foregroundStyle(liked ? .red:.primary)
                 }
                 Button{
                     comments=true
                 } label: {
-                    Image(systemName:"bubble.right")
+                    GpixIcon(systemName:"bubble.right")
                 }
                 Button{
                     share=true
                 } label: {
-                    Image(systemName:"paperplane")
+                    GpixIcon(systemName:"paperplane")
                 }
                 Button{
                     store.perform("repost",["id":post.id,"enabled":!post.ids("reposts").contains(store.myID)])
                 } label: {
-                    Image(systemName:"arrow.2.squarepath").font(.system(size:20))
+                    GpixIcon(systemName:"arrow.2.squarepath",size:20)
                 }
                 Spacer()
                 Button{
                     store.perform("save",["id":post.id,"enabled":!post.b("saved")])
                 } label: {
-                    Image(systemName:post.b("saved") ? "bookmark.fill":"bookmark")
+                    GpixIcon(systemName:post.b("saved") ? "bookmark.fill":"bookmark")
                 }
             }
-            .font(.system(size:24)).foregroundStyle(.primary).padding(.horizontal,14).padding(.top,12)
+            .font(.gpix(size:24)).foregroundStyle(gpixInk).padding(.horizontal,14).padding(.top,12)
             VStack(alignment:.leading,spacing:6){
                 if !post.b("hideLikes"){
-                    Text("\(post.ids("likes").count) Mi piace").font(.system(size:13,weight:.semibold))
+                    Text("\(post.ids("likes").count) Mi piace").font(.gpix(size:13,weight:.semibold))
                 }
                 if !post.s("text").isEmpty{
-                    (Text(author.s("username")+" ").bold()+Text(post.s("text"))).font(.system(size:14))
+                    (Text(author.s("username")+" ").bold()+Text(post.s("text"))).font(.gpix(size:14))
                 }
                 if !post.rows("comments").isEmpty{
                     Button("Visualizza tutti i \(post.rows("comments").count) commenti"){
                         comments=true
                     }
-                    .font(.system(size:13)).foregroundStyle(.secondary)
+                    .font(.gpix(size:13)).foregroundStyle(gpixMuted)
                 }
-                Text(ago(post.n("created"))).font(.caption2).foregroundStyle(.secondary)
+                Text(ago(post.n("created"))).font(.gpix(size:11,weight:.regular)).foregroundStyle(gpixMuted)
             }
             .padding(.horizontal,14).padding(.top,10).padding(.bottom,18)
             Rectangle().fill(Color.primary.opacity(0.06)).frame(height:0.5)
@@ -250,7 +247,7 @@ struct PostCard:View {
         .aspectRatio(max(0.55,min(1.91,post.row("style").n("aspect",1))),contentMode:.fit)
         .overlay(alignment:.topTrailing) {
             if media.count>1 {
-                Text("\(mediaPage+1)/\(media.count)").font(.system(size:12,weight:.semibold))
+                Text("\(mediaPage+1)/\(media.count)").font(.gpix(size:12,weight:.semibold))
                     .foregroundStyle(Color.white).padding(.horizontal,10).padding(.vertical,6)
                     .background(Color.black.opacity(0.55),in:Capsule()).padding(12)
             }
@@ -301,12 +298,12 @@ struct PostOptions:View {
                 }
             }
         } label: {
-            Image(systemName:"ellipsis").font(.title3).padding(5)
+            GpixIcon(systemName:"ellipsis").font(.gpix(size:20,weight:.regular)).padding(5)
         }
-        .foregroundStyle(.primary)
+        .foregroundStyle(gpixInk)
         .sheet(isPresented:$editing){
             NavigationStack{
-                Form{
+                List{
                     TextField("Didascalia",text:$text,axis:.vertical)
                     TextField("Luogo",text:$location)
                 }
@@ -363,7 +360,7 @@ struct CommentsView:View {
                 Divider()
                 if !reply.isEmpty{
                     HStack{
-                        Text("Risposta al commento").font(.caption)
+                        Text("Risposta al commento").font(.gpix(size:12,weight:.regular))
                         Spacer()
                         Button{
                             reply=""
@@ -424,8 +421,8 @@ struct CommentsView:View {
         HStack(alignment:.top,spacing:11){
             AvatarView(person:store.person(c.s("author")),size:33)
             VStack(alignment:.leading,spacing:6){
-                Text(store.person(c.s("author")).s("username")).font(.caption.bold())
-                Text(c.s("text")).font(.subheadline)
+                Text(store.person(c.s("author")).s("username")).font(.gpix(size:12,weight:.bold))
+                Text(c.s("text")).font(.gpix(size:14,weight:.regular))
                 if !c.s("media").isEmpty{
                     GIFView(reference:c.s("media")).frame(height:120)
                 }
@@ -438,14 +435,14 @@ struct CommentsView:View {
                         Text("Nascosto agli altri").foregroundStyle(.orange)
                     }
                 }
-                .font(.caption2).foregroundStyle(.secondary)
+                .font(.gpix(size:11,weight:.regular)).foregroundStyle(gpixMuted)
             }
             Spacer(minLength:0)
             VStack{
                 Button{
                     store.perform("likeComment",["id":c.id,"enabled":!c.ids("likes").contains(store.myID)])
                 } label: {
-                    Image(systemName:c.ids("likes").contains(store.myID) ? "heart.fill":"heart").font(.caption).foregroundStyle(c.ids("likes").contains(store.myID) ? .red:.secondary)
+                    Image(systemName:c.ids("likes").contains(store.myID) ? "heart.fill":"heart").font(.gpix(size:12,weight:.regular)).foregroundStyle(c.ids("likes").contains(store.myID) ? .red:.secondary)
                 }
                 if c.s("author")==store.myID || post.s("author")==store.myID{
                     Menu{
@@ -458,7 +455,7 @@ struct CommentsView:View {
                             remove=IdentifiedRow(row:c)
                         }
                     } label: {
-                        Image(systemName:"ellipsis").padding(.top,8)
+                        GpixIcon(systemName:"ellipsis").padding(.top,8)
                     }
                 }
             }
@@ -537,16 +534,16 @@ struct RequestsView:View{
                     SearchView()
                 } label: {
                     HStack(spacing:15){
-                        Image(systemName:"sparkle.magnifyingglass").font(.title).padding(14).overlay(Circle().stroke(.primary))
+                        Image(systemName:"sparkle.magnifyingglass").font(.gpix(size:28,weight:.regular)).padding(14).overlay(Circle().stroke(.primary))
                         VStack(alignment:.leading){
-                            Text("Scopri altri profili").font(.subheadline.bold())
-                            Text("Vedi suggerimenti non personalizzati").font(.caption).foregroundStyle(.secondary)
+                            Text("Scopri altri profili").font(.gpix(size:14,weight:.bold))
+                            Text("Vedi suggerimenti non personalizzati").font(.gpix(size:12,weight:.regular)).foregroundStyle(gpixMuted)
                         }
                         Spacer()
-                        Image(systemName:"chevron.right").foregroundStyle(.secondary)
+                        Image(systemName:"chevron.right").foregroundStyle(gpixMuted)
                     }
                 }
-                .foregroundStyle(.primary)
+                .foregroundStyle(gpixInk)
                 ForEach(ids,id:\.self){
                     id in HStack(spacing:10){
                         if manage && !accepted.contains(id){
@@ -642,7 +639,7 @@ struct RequestsView:View{
 struct RequestButton:ButtonStyle{
     let primary:Bool
     func makeBody(configuration:Configuration)->some View{
-        configuration.label.font(.system(size:12,weight:.semibold)).lineLimit(1).minimumScaleFactor(0.8).padding(.horizontal,11).padding(.vertical,12).background(primary ? gpixPurple:Color.secondary.opacity(0.10),in:RoundedRectangle(cornerRadius:11)).foregroundStyle(primary ? .white:.primary).opacity(configuration.isPressed ? 0.65:1)
+        configuration.label.font(.gpix(size:12,weight:.semibold)).lineLimit(1).minimumScaleFactor(0.8).padding(.horizontal,11).padding(.vertical,12).background(primary ? gpixPurple:Color.secondary.opacity(0.10),in:RoundedRectangle(cornerRadius:11)).foregroundStyle(primary ? .white:.primary).opacity(configuration.isPressed ? 0.65:1)
     }
 }
 @MainActor
@@ -666,14 +663,14 @@ struct SearchView:View{
                         Button("Cancella cronologia"){
                             store.clearHistory()
                         }
-                        .font(.caption)
+                        .font(.gpix(size:12,weight:.regular))
                     }
                     ForEach(store.history(),id:\.self){
                         value in Button{
                             query=value
                             store.remember(value)
                         } label: {
-                            Label(value,systemImage:"clock.arrow.circlepath").foregroundStyle(.primary)
+                            Label(value,systemImage:"clock.arrow.circlepath").foregroundStyle(gpixInk)
                         }
                     }
                     Divider()

@@ -1,64 +1,22 @@
-## Aggiornamento grafico 52
-Revisione dei componenti di feed (contatore caroselli, spaziature), profilo (pulsanti, griglia, link), conversazioni (avatar, testi, feedback), campo chat (capsula, fotocamera, controlli e spazio tastiera), barra principale (spazio contenuti e visibilità nelle chat), note (fumetti), ricerca/richieste (campo condiviso), istantanee (card senza ritaglio centrale della foto, informazioni autore e pulsante creazione) e accesso (visibilità password). Conservate impostazioni e correzioni media della 51.
+# GPIX iPhone Swift — 2.24.0, build 54
 
-Il pacchetto include tutti i sorgenti e le risorse della versione iPhone Swift. Apri GPIX.xcodeproj. Il controllo sintattico con Swift 5.9.2, i riferimenti del progetto, le risorse e l’integrità Android sono verificati. Questa revisione non è stata renderizzata su simulatore iOS e non certifica una corrispondenza pixel per pixel con Android. La compilazione Xcode completa e la prova su dispositivo restano necessarie.
+Apri GPIX.xcodeproj. Non devi creare un workspace, installare CocoaPods o usare Flutter. GPIX.xcworkspace è incluso ma facoltativo. Team B8SC92LPR5 recuperato dal progetto PRISM; se utilizzi un altro account scegli il Team corrispondente. Bundle identifier app.gpix.gpix. Xcode 15.2 o successivo; iOS 17 o successivo.
 
-## Aggiornamento 51 — foto e impostazioni
-Corretto il caricamento delle foto con percorsi relativi /media/ restituiti dal backend: vengono risolti su https://gpix.cc conservando la firma. Gestiti caroselli di URL e oggetti, URL dei nuovi upload, dati del profilo personale e anteprime video dei reel. Ripristinato il viola Flutter #7145E8.
+## Aggiornamenti
+Carica il CONTENUTO di GPIX-iOS nello stesso repository iPhone: GPIX.xcodeproj, GPIX, Config e ci_scripts devono restare affiancati. Non caricare lo ZIP come singolo file. Il workflow Xcode Cloud usa schema GPIX e Archive; conserva Team e bundle identifier. Il numero build deve superare l’ultima versione già caricata. Il progetto Android non viene modificato.
 
-Impostazioni ricostruite con ricerca interna, righe con icone, contatori, sezioni e accessi del progetto originale: account, contenuti, privacy/interazioni, app/notifiche, persone/assistenza, accesso. Esposti note, bozze, raccolte, archivio, riordino griglia, richieste, aspetto, dispositivi e sicurezza. Preferenze collegate alle azioni backend esistenti; Firebase resta da configurare.
+## Revisione grafica
+Il riferimento è il codice Flutter 2.24, non un nuovo stile autonomo:
+- Roboto originale incluso nell’app, font e pesi condivisi fra tutte le schermate; palette ink/muted/soft/violet ripresa da kit.dart.
+- Icone vettoriali principali trascritte da icons.dart, con le stesse coordinate e spessore.
+- Schermata iniziale distinta da login/registrazione, testi, dimensioni, campi con icone e conferma password dell’originale.
+- Raccolta istantanee con titolo Nuovi momenti, scheda creazione a gradiente, filtri Tutte/Da aprire/Le tue, griglia a due colonne raggruppata per amico, card personali con scadenza e collegamento all’archivio. Le anteprime ricevute usano l’endpoint protetto di preview.
+- Profilo con avatar di 80 punti, nota sopra la foto, pulsante per creare una storia, link e pulsanti con gli stessi riferimenti di stile.
+- Menu Crea come pannello inferiore con righe di 55 punti, invece del menu a comparsa.
+- Conservate le correzioni dei media, i caroselli, le impostazioni, la pila istantanee flottante e la navigazione delle versioni precedenti. Le pagine secondarie condividono font, colori, icone e righe senza gruppi di schede standard iOS.
 
-13 test del resolver media compilati ed eseguiti con Swift5.9.2; parsing dei 12 sorgenti e controlli progetto superati. La build iOS con SDK Apple e la parità completa dell’interfaccia non sono state verificate. Questo aggiornamento corregge i problemi descritti, non certifica la riscrittura come identica ad Android.
+## Verifiche e limiti
+Parsing di tutti i 12 sorgenti con compilatore Swift 5.9.2, riferimenti progetto, XML, plist, font registrato e sintassi JavaScript controllati. I 32 sorgenti Dart originali sono stati confrontati byte per byte e lasciati invariati.
+Questo ambiente non dispone dell’SDK iOS o di un simulatore Apple. NON è stata eseguita una compilazione Xcode completa né una verifica visiva delle schermate su iPhone. La corrispondenza grafica e funzionale completa con Android non è certificata da questi controlli. Non confondere il parsing con la compilazione dell’app.
 
-## Correzione 50
-Il dettaglio archivio riceve item.row, anziché il contenitore IdentifiedRow. Controllati gli altri passaggi sheet/fullScreenCover. Parsing Swift5.9.2 superato; compilazione iOS da verificare.
-
-## Correzioni 49
-Scomposti viewer e griglia archivio in espressioni minori; callback istantanee MainActor; permesso microfono asincrono iOS17; cattura immutabile nel timer del registratore. Parsing Swift5.9.2 superato. La compilazione con SDK iOS resta da verificare.
-
-## Correzioni 48
-Riordino griglia: concatenazione esplicita di due array, senza operatore unario a inizio riga. Quattro casi del blocco effettivo compilati ed eseguiti con Swift 5.9.2. Aggiornati onChange alla firma iOS 17 e tre callback WebKit alle chiamate asincrone. Parsing dei 12 file riuscito; compilazione con SDK iOS ancora da verificare.
-
-# Correzione 48 — progetto Xcode diretto
-
-Apri **GPIX.xcodeproj**. Non devi creare un workspace né installare strumenti.
-Il workspace già incluso è facoltativo. Aggiornamenti: sostituisci il contenuto dello stesso repository GitHub, come per PRISM.
-
-Corretto l’errore nel dizionario degli attributi di disegno del testo in Composer.swift: una closure immediata era separata dalla sua chiamata. Ora usa un oggetto NSShadow esplicito. Tutti i 12 sorgenti superano il parser del compilatore Swift 5.9.2. Conservate le correzioni Build46 di pulsanti e delegate WebKit. Config/App.xcconfig riprende il formato di PRISM e il tuo Team. Il compilatore Linux non include SwiftUI/UIKit: questa verifica non equivale a una build iOS completa.
-
-# GPIX iPhone — Swift / SwiftUI — versione 2.24, build 52
-
-## Apri in Xcode
-1. Estrai lo ZIP in una cartella NUOVA. Non sovrapporlo alla vecchia cartella Flutter.
-2. Apri GPIX.xcworkspace (oppure GPIX.xcodeproj). Schema e target: GPIX.
-3. La firma automatica usa il Team B8SC92LPR5 presente nel tuo progetto PRISM. Se usi un altro account, scegli il relativo Team in Signing & Capabilities. Bundle identifier: app.gpix.gpix, da conservare se corrisponde alla tua app.
-4. Per una build locale seleziona un simulatore iOS 17 o un dispositivo generico iOS e usa Product → Build. Non servono Terminale, Homebrew, Ruby, CocoaPods, Flutter o Generated.xcconfig.
-5. Per provare senza account tocca “Esplora la demo” all’avvio. Gli account reali usano sempre https://gpix.cc.
-
-Requisiti del sorgente: Xcode 15.2 o successivo; iPhone con iOS 17 o successivo. Il tuo vecchio Xcode non può eseguire direttamente un iPhone con una versione iOS molto più recente del proprio SDK; in quel caso usa TestFlight tramite Cloud.
-
-## GitHub e aggiornamenti
-Crea una cartella/repository dedicato alla versione iPhone Swift e carica il CONTENUTO di GPIX-iOS: GPIX.xcodeproj, GPIX.xcworkspace, GPIX, ci_scripts e la documentazione. Non usare il vecchio workspace Runner del progetto Flutter.
-Configura una volta Xcode Cloud per il nuovo workspace GPIX.xcworkspace, schema GPIX, azione Archive, ramo principale e post-action TestFlight. Scegli un runner con Xcode 26 e SDK iOS 26 o successivi per le consegne attuali ad Apple. Imposta Next Build Number maggiore dell’ultima build già caricata (almeno 52 per questa consegna).
-Da quel momento sostituisci i file con quelli degli ZIP successivi nello STESSO repository e conferma il commit/push. Conserva il tuo Team, il bundle identifier e il workflow. Non devi reinstallare strumenti a ogni aggiornamento.
-Non caricare lo ZIP come singolo file: carica i file estratti. Gli eventuali script Flutter rimasti da un vecchio repository non devono essere usati; ci_post_clone.sh in questa consegna non installa nulla.
-
-## Contenuti
-Interfaccia SwiftUI, login/registrazione/recupero/verifica email, demo locale, feed e caroselli, storie e raccolte, reel verticali, profili/modifica/link social e sito, richieste con segui anche tu, commenti con eliminazione e nascondi, note 60 caratteri/24 ore, chat con vocali/foto/GIF/reazioni/risposte/modifica/eliminazione, presenza e digitazione, richieste nascoste, scadenza dopo lettura, gruppi, privacy, dispositivi, editor Core Image (20 filtri e 12 regolazioni), testo trascinabile, ritaglio e bozze persistenti, musica dal catalogo del server, istantanee con anteprime/visualizzazione/archivio/contatori/riepilogo, chiamate e dirette tramite WebRTC incorporato per evitare dipendenze esterne.
-Le informazioni e i contenuti reali vengono dal backend 2.24 già consegnato. Non occorre un nuovo APK né un aggiornamento backend per il solo passaggio di interfaccia a Swift. Le credenziali salvate da Flutter non vengono migrate: accedi nuovamente nell’app Swift.
-
-## Verifica effettuata e stato della consegna
-Sono stati eseguiti il parsing con il compilatore ufficiale Swift 5.9.2 (stessa versione linguaggio di Xcode 15.2), controlli strutturali progetto/workspace/risorse, sintassi JavaScript WebRTC e test locali dei payload contro il backend. Il parsing NON è una compilazione SwiftUI e i test API NON sono test dell’interfaccia iPhone.
-Non sono disponibili Mac/Xcode o il tuo account Apple in questo ambiente: questo ZIP è il PROGETTO SORGENTE, non un IPA compilato, e non è ancora una build iOS verificata. La prima compilazione Xcode/Cloud, la firma e la resa grafica su dispositivo restano da controllare. Non è stata verificata una corrispondenza grafica e funzionale completa con Android.
-
-Limiti espliciti di questa prima riscrittura:
-- Le schermate e le animazioni sono ricostruite in SwiftUI; non sono state confrontate pixel per pixel con Flutter su iPhone.
-- iOS permette di oscurare quando rileva registrazione/duplicazione e dopo la notifica di screenshot; non è garantito impedire il primo screenshot. Il viewer nasconde anche quando l’app lascia il primo piano. La protezione non è DRM.
-- Le chiamate/dirette usano WebRTC in un componente WKWebView all’interno delle schermate Swift. Audio/video, autorizzazioni e interoperabilità con Android devono essere provati su due dispositivi. Non c’è CallKit o ricezione chiamate a processo chiuso.
-- Push Firebase native non attivate, come concordato in attesa della configurazione.
-- Le bozze nuove sono locali alla versione Swift e non importano quelle Flutter. Non vengono salvate automaticamente durante l’arresto forzato; il pulsante Salva bozza è sempre disponibile.
-- Il catalogo musicale è esclusivamente quello autorizzato e configurato dal server, non il catalogo commerciale di Instagram.
-
-## Android
-APK 2.24 originale lasciato invariato. SHA-256:
-f418e058c8897d154f735ae503a9568bc2766debaf47702e60cb3e9977c5dbac
+Le credenziali Flutter non sono importate: accedi nuovamente oppure usa Esplora la demo. I dati reali usano https://gpix.cc e il backend 2.24 già consegnato. Firebase push è ancora da configurare; chiamate/dirette WebRTC richiedono prova su due dispositivi. iOS può oscurare registrazione/duplicazione e reagire allo screenshot ma non garantisce il blocco del primo screenshot. Le bozze sono locali alla versione Swift.

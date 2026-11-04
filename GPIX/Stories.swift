@@ -34,7 +34,7 @@ struct StoryViewer:View{
             }
             else{
                 gpixGradient.ignoresSafeArea()
-                Text(story.s("text")).font(.largeTitle.bold()).multilineTextAlignment(.center).foregroundStyle(.white).padding(35)
+                Text(story.s("text")).font(.gpix(size:34,weight:.bold)).multilineTextAlignment(.center).foregroundStyle(.white).padding(35)
             }
             HStack(spacing:0){
                 Color.clear.contentShape(Rectangle()).onTapGesture{
@@ -65,10 +65,10 @@ struct StoryViewer:View{
                     Button{
                         dismiss()
                     } label: {
-                        Image(systemName:"xmark").font(.title2)
+                        Image(systemName:"xmark").font(.gpix(size:22,weight:.regular))
                     }
                 }
-                .font(.subheadline).foregroundStyle(.white).padding(.top,12)
+                .font(.gpix(size:14,weight:.regular)).foregroundStyle(.white).padding(.top,12)
                 Spacer()
                 if !story.row("style").row("poll").isEmpty{
                     let poll=story.row("style").row("poll")
@@ -96,7 +96,7 @@ struct StoryViewer:View{
                         Button{
                             reply()
                         } label: {
-                            Image(systemName:"paperplane")
+                            GpixIcon(systemName:"paperplane")
                         }
                         Button{
                             store.perform("like",["id":story.id,"enabled":!story.ids("likes").contains(store.myID)])
@@ -206,7 +206,7 @@ struct StoryArchiveView:View{
                         selected=IdentifiedRow(row:story)
                     } label: {
                         MediaView(reference:story.s("media"),fill:true).aspectRatio(0.7,contentMode:.fit).overlay(alignment:.bottomLeading){
-                            Text(Date(timeIntervalSince1970:story.n("created")).formatted(date:.abbreviated,time:.omitted)).font(.caption2).padding(6).background(.ultraThinMaterial,in:Capsule()).padding(4)
+                            Text(Date(timeIntervalSince1970:story.n("created")).formatted(date:.abbreviated,time:.omitted)).font(.gpix(size:11,weight:.regular)).padding(6).background(.ultraThinMaterial,in:Capsule()).padding(4)
                         }
                     }
                 }
@@ -312,11 +312,11 @@ struct NoteStrip:View{
         VStack(spacing:7){
             ZStack(alignment:.top){
                 AvatarView(person:person,size:69).padding(.top,44)
-                Text(note?.s("text") ?? "Nuovo giorno,\nnuova nota…").font(.system(size:12)).lineLimit(3).multilineTextAlignment(.center).padding(.horizontal,10).padding(.vertical,10).frame(width:98).background(Color(uiColor:.secondarySystemGroupedBackground),in:RoundedRectangle(cornerRadius:22)).overlay(alignment:.bottomLeading) { Circle().fill(Color(uiColor:.secondarySystemGroupedBackground)).frame(width:12,height:12).offset(x:15,y:4) }.shadow(color:.black.opacity(0.07),radius:8,y:3)
+                Text(note?.s("text") ?? "Nuovo giorno,\nnuova nota…").font(.gpix(size:12)).lineLimit(3).multilineTextAlignment(.center).padding(.horizontal,10).padding(.vertical,10).frame(width:98).background(Color(uiColor:.secondarySystemGroupedBackground),in:RoundedRectangle(cornerRadius:22)).overlay(alignment:.bottomLeading) { Circle().fill(Color(uiColor:.secondarySystemGroupedBackground)).frame(width:12,height:12).offset(x:15,y:4) }.shadow(color:.black.opacity(0.07),radius:8,y:3)
             }
-            Text(person.id==store.myID ? "La tua nota":person.s("name")).font(.caption).lineLimit(1).frame(width:95)
+            Text(person.id==store.myID ? "La tua nota":person.s("name")).font(.gpix(size:12,weight:.regular)).lineLimit(1).frame(width:95)
         }
-        .foregroundStyle(.primary).contentShape(Rectangle()).gesture(
+        .foregroundStyle(gpixInk).contentShape(Rectangle()).gesture(
         TapGesture(count:2).exclusively(before:TapGesture(count:1)).onEnded {
             result in
             switch result {
@@ -350,12 +350,12 @@ struct NoteComposer:View{
         NavigationStack{
             VStack{
                 Spacer()
-                TextField("Condividi un pensiero…",text:$text,axis:.vertical).font(.title3).multilineTextAlignment(.center).padding(18).frame(width:230).background(Color(uiColor:.secondarySystemBackground),in:RoundedRectangle(cornerRadius:28)).onChange(of:text){
+                TextField("Condividi un pensiero…",text:$text,axis:.vertical).font(.gpix(size:20,weight:.regular)).multilineTextAlignment(.center).padding(18).frame(width:230).background(gpixSoft,in:RoundedRectangle(cornerRadius:28)).onChange(of:text){
                     _, value in if value.count>60{
                         text=String(value.prefix(60))
                     }
                 }
-                Text("\(text.count)/60").font(.caption).foregroundStyle(.secondary)
+                Text("\(text.count)/60").font(.gpix(size:12,weight:.regular)).foregroundStyle(gpixMuted)
                 AvatarView(person:store.me,size:125)
                 Spacer()
                 Picker("Condividi con",selection:$audience){
@@ -378,7 +378,7 @@ struct NoteComposer:View{
                         }
                     }
                 }
-                Text("La nota scompare dopo 24 ore.").font(.caption).foregroundStyle(.secondary)
+                Text("La nota scompare dopo 24 ore.").font(.gpix(size:12,weight:.regular)).foregroundStyle(gpixMuted)
             }
             .padding(24).navigationTitle("Nuova nota").navigationBarTitleDisplayMode(.inline).toolbar{
                 Button("Annulla"){
@@ -403,8 +403,8 @@ struct NoteDetail:View{
             VStack(spacing:23){
                 Capsule().fill(.secondary).frame(width:35,height:4)
                 AvatarView(person:store.person(owner),size:70)
-                Text(note.s("text")).font(.title3).multilineTextAlignment(.center)
-                Text("Condivisa con gli amici · "+ago(note.n("created"))).font(.caption).foregroundStyle(.secondary)
+                Text(note.s("text")).font(.gpix(size:20,weight:.regular)).multilineTextAlignment(.center)
+                Text("Condivisa con gli amici · "+ago(note.n("created"))).font(.gpix(size:12,weight:.regular)).foregroundStyle(gpixMuted)
                 if owner==store.myID{
                     PrimaryButton(title:"Lascia una nuova nota"){
                         new=true
@@ -418,7 +418,7 @@ struct NoteDetail:View{
                     Button{
                         store.perform("noteReact",["user":owner,"created":note.n("created"),"enabled":!note.b("likedByMe")])
                     } label: {
-                        Image(systemName:note.b("likedByMe") ? "heart.fill":"heart").font(.largeTitle).foregroundStyle(.pink)
+                        Image(systemName:note.b("likedByMe") ? "heart.fill":"heart").font(.gpix(size:34,weight:.regular)).foregroundStyle(.pink)
                     }
                     TextField("Rispondi alla nota…",text:$reply).textFieldStyle(.roundedBorder)
                     PrimaryButton(title:"Invia risposta",disabled:reply.isEmpty){

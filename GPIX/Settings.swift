@@ -16,7 +16,7 @@ struct SettingsView: View {
                     TextField("Cerca", text: $query).textInputAutocapitalization(.never).autocorrectionDisabled()
                     if !query.isEmpty { Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Color.secondary) } }
                 }
-                .padding(15).background(Color(uiColor: .secondarySystemBackground), in: Capsule()).padding(.horizontal,16).padding(.top,12).padding(.bottom,20)
+                .padding(15).background(gpixSoft, in: Capsule()).padding(.horizontal,16).padding(.top,12).padding(.bottom,20)
                 accountSection
                 contentSection
                 privacySection
@@ -94,7 +94,7 @@ struct SettingsView: View {
     @ViewBuilder private func settingSection<Content: View>(_ title: String, matches: String, @ViewBuilder content: () -> Content) -> some View {
         if query.isEmpty || matches.localizedCaseInsensitiveContains(query) {
             VStack(alignment: .leading, spacing: 5) {
-                Text(title).font(.system(size:14,weight:.semibold)).foregroundStyle(Color.secondary).padding(.horizontal,18).padding(.top,22).padding(.bottom,8)
+                Text(title).font(.gpix(size:14,weight:.semibold)).foregroundStyle(Color.secondary).padding(.horizontal,18).padding(.top,22).padding(.bottom,8)
                 content()
             }
             .padding(.bottom,16)
@@ -110,14 +110,14 @@ struct SettingsRow: View {
     var destructive = false
     var body: some View {
         HStack(spacing: 15) {
-            Image(systemName:icon).font(.system(size:23,weight:.regular)).frame(width:29)
+            GpixIcon(systemName:icon,size:23).frame(width:29)
             VStack(alignment:.leading,spacing:4) {
-                Text(title).font(.system(size:16))
-                if !subtitle.isEmpty { Text(subtitle).font(.system(size:12)).foregroundStyle(Color.secondary) }
+                Text(title).font(.gpix(size:16))
+                if !subtitle.isEmpty { Text(subtitle).font(.gpix(size:12)).foregroundStyle(Color.secondary) }
             }
             Spacer(minLength:8)
-            if !value.isEmpty { Text(value).font(.system(size:14)).foregroundStyle(Color.secondary) }
-            Image(systemName:"chevron.right").font(.system(size:14,weight:.medium)).foregroundStyle(Color.secondary)
+            if !value.isEmpty { Text(value).font(.gpix(size:14)).foregroundStyle(Color.secondary) }
+            GpixIcon(systemName:"chevron.right",size:14).foregroundStyle(Color.secondary)
         }
         .foregroundStyle(destructive ? Color.red : Color.primary)
         .padding(.horizontal,18).padding(.vertical,15).frame(maxWidth:.infinity,alignment:.leading).contentShape(Rectangle())
@@ -126,9 +126,9 @@ struct SettingsRow: View {
 @MainActor struct AccountPrivacyView: View {
     @EnvironmentObject var store:GpixStore
     var body:some View {
-        Form {
+        List {
             Toggle("Account privato",isOn:Binding(get:{ store.me.b("private") },set:{ store.perform("profile",["private":$0]) }))
-            Text("Con un account privato approvi tu le richieste di seguirti. Foto del profilo e contatori rimangono visibili.").font(.subheadline).foregroundStyle(Color.secondary)
+            Text("Con un account privato approvi tu le richieste di seguirti. Foto del profilo e contatori rimangono visibili.").font(.gpix(size:14,weight:.regular)).foregroundStyle(Color.secondary)
         }.navigationTitle("Privacy dell’account").navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -147,7 +147,7 @@ struct SettingsRow: View {
 @MainActor struct InstantBubbleSettingsView: View {
     @EnvironmentObject var store:GpixStore
     var body:some View {
-        Form { Toggle("Mostra bolla delle istantanee",isOn:Binding(get:{ !store.preferences.b("hideInstantBubble") },set:{ store.preference("hideInstantBubble",!$0) })); Text("Puoi aprire e creare istantanee dalla sezione dedicata anche quando la bolla è nascosta.").font(.subheadline).foregroundStyle(Color.secondary) }.navigationTitle("Bolla delle istantanee").navigationBarTitleDisplayMode(.inline)
+        List { Toggle("Mostra bolla delle istantanee",isOn:Binding(get:{ !store.preferences.b("hideInstantBubble") },set:{ store.preference("hideInstantBubble",!$0) })); Text("Puoi aprire e creare istantanee dalla sezione dedicata anche quando la bolla è nascosta.").font(.gpix(size:14,weight:.regular)).foregroundStyle(Color.secondary) }.navigationTitle("Bolla delle istantanee").navigationBarTitleDisplayMode(.inline)
     }
 }
 @MainActor struct AppearanceSettingsView: View {
@@ -165,9 +165,9 @@ struct SettingsRow: View {
 @MainActor struct NativeNotificationSettingsView: View {
     @EnvironmentObject var store:GpixStore
     var body:some View {
-        Form {
+        List {
             Section { Toggle("Ricevi notifiche",isOn:Binding(get:{ store.preferences["pushEnabled"] as? Bool ?? true },set:{ store.preference("pushEnabled",$0) })) } footer: { Text("Messaggi, richieste, commenti e chiamate in arrivo.") }
-            Section { Text("Le notifiche dentro l’app sono disponibili. Le push a schermo chiuso richiedono la configurazione Firebase ancora da integrare.").font(.subheadline) }
+            Section { Text("Le notifiche dentro l’app sono disponibili. Le push a schermo chiuso richiedono la configurazione Firebase ancora da integrare.").font(.gpix(size:14,weight:.regular)) }
         }.navigationTitle("Notifiche push")
     }
 }
@@ -220,7 +220,7 @@ struct MessagePrivacyView:View{
                     store.preference("imageProtection",$0)
                 }
                 ))
-                Text("Le foto temporanee si aprono su richiesta. Questa preferenza non costituisce un rilevatore automatico di nudità.").font(.caption).foregroundStyle(.secondary)
+                Text("Le foto temporanee si aprono su richiesta. Questa preferenza non costituisce un rilevatore automatico di nudità.").font(.gpix(size:12,weight:.regular)).foregroundStyle(gpixMuted)
                 Toggle("Anteprime",isOn:Binding(get:{
                     store.preferences["messagePreviews"] as? Bool ?? true
                 }
@@ -250,7 +250,7 @@ struct PermissionChoice:View{
                             Image(systemName:"checkmark").foregroundStyle(gpixPurple)
                         }
                     }
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(gpixInk)
                 }
             }
         }
@@ -302,7 +302,7 @@ struct AccountView:View{
     @State private var deleting=false
     @State private var password=""
     var body:some View{
-        Form{
+        List{
             Section("Profilo"){
                 NavigationLink("Modifica informazioni"){
                     EditProfileView()
@@ -353,7 +353,7 @@ struct SecurityView:View{
     @State private var busy=false
     @State private var info=""
     var body:some View{
-        Form{
+        List{
             if !info.isEmpty{
                 Text(info).foregroundStyle(gpixPurple)
             }
@@ -429,7 +429,7 @@ struct SessionView:View{
             ForEach(sessions,id:\.id){
                 s in VStack(alignment:.leading,spacing:7){
                     Label(s.s("name",s.s("device","Dispositivo")),systemImage:s.s("platform")=="ios" ? "iphone":"laptopcomputer")
-                    Text(s.b("current") ? "Questo dispositivo":"Ultimo accesso "+ago(s.n("lastSeen"))+" fa").font(.caption).foregroundStyle(.secondary)
+                    Text(s.b("current") ? "Questo dispositivo":"Ultimo accesso "+ago(s.n("lastSeen"))+" fa").font(.gpix(size:12,weight:.regular)).foregroundStyle(gpixMuted)
                     if !s.b("current"){
                         Button("Disconnetti",role:.destructive){
                             revoke(["id":s.id])
