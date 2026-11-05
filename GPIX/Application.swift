@@ -135,6 +135,9 @@ import UIKit
         scrollTravel = 0
         if index == 0 { (controllers[0].viewControllers.first as? FeedController)?.scrollToTop() }
         for (i,nav) in controllers.enumerated() { nav.viewIfLoaded?.isHidden = i != index }
+        for (i, controller) in controllers.enumerated() {
+            (controller.viewControllers.first as? ReelsController)?.setTabSelected(i == index)
+        }
         for (i,button) in buttons.arrangedSubviews.enumerated() { button.backgroundColor=i == index ? Design.soft:.clear;button.layer.cornerRadius=25;if i<4,let b=button as? UIButton { let normal=["home","reel","send","search"][i];b.setImage(Glyph.image(normal+(i==index && i<3 ? ".fill":""),size:25),for:.normal) } }
         bar.isHidden=controllers[index].viewControllers.count>1;compact(false)
     }

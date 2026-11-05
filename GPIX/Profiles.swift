@@ -9,20 +9,113 @@ import UIKit
     override func stateChanged() { render() }
     private func render() {
         let offset=scroll.contentOffset;clear();let p=session.person(id);let own=id==session.userID;title=p.text("username")
-        navigationItem.rightBarButtonItem=UIBarButtonItem(customView:Design.icon(own ? "line.3.horizontal":"more") { [weak self] in guard let self=self else { return };if own { self.push(SettingsController()) } else { self.profileMenu() } })
-        if own { navigationItem.leftBarButtonItem=UIBarButtonItem(customView:Design.icon("plus",size:28) { [weak self] in self?.sheet(CreateMenuController()) }) }
-        let avatar=Avatar(p,size:80,story:!session.stories(id).isEmpty);avatar.onTap { [weak self] in guard let self=self else { return };let stories=self.session.stories(self.id);if !stories.isEmpty { self.present(StoryViewer(stories:stories),animated:true) } else if own { self.sheet(StoryEditorController(),full:true) } }
-        let counts=Domain.counts(p,posts:session.posts);let stats=Design.stack(.horizontal);stats.distribution = .fillEqually
-        for (index,title) in ["Post","Follower","Seguiti"].enumerated() { let n=Design.label("\(counts[index])",size:19,weight:.bold);n.textAlignment = .center;let t=Design.label(title,size:12);t.textAlignment = .center;let stat=Design.stack(spacing:4,views:[n,t]);if index>0 { stat.onTap { [weak self] in self?.push(PeopleController(mode:index==1 ? .followers(self?.id ?? ""):.following(self?.id ?? ""))) } };stats.addArrangedSubview(stat) }
-        let header=Design.stack(.horizontal,spacing:24,views:[avatar,stats]);header.alignment = .center;add(header,inset:20)
-        let name=Design.stack(.horizontal,spacing:7,views:[Design.label(p.text("name"),size:14,weight:.semibold),Design.label(p.text("pronouns"),size:12,color:Design.muted),UIView()]);add(name,inset:18)
-        if !p.text("bio").isEmpty { add(Design.label(p.text("bio"),size:14,lines:0),inset:18) }
+        let titleLabel = Design.label(p.text("username"), size: 21, weight: .bold)
+        if p.flag("private") {
+            let lock = UIImageView(image: UIImage(systemName: "lock", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15)))
+            lock.tintColor = Design.ink
+            let heading = Design.stack(.horizontal, spacing: 5, views: [lock, titleLabel])
+            heading.alignment = .center
+            navigationItem.titleView = heading
+        } else {
+            navigationItem.titleView = titleLabel
+        }
+
+        let options = Design.icon(own ? "line.3.horizontal" : "more", size: 26) { [weak self] in
+            guard let self = self else { return }
+            if own { self.push(SettingsController()) } else { self.profileMenu() }
+        }
+        navigationItem.rightBarButtonItems = [UIBarButtonItem(customView: options)]
+        if own {
+            let requests = Design.icon("person.2") { [weak self] in self?.push(FollowRequestsController()) }
+            requests.accessibilityLabel = "Richieste di seguirti"
+            navigationItem.rightBarButtonItems?.append(UIBarButtonItem(customView: requests))
+            navigationItem.leftBarButtonItem = UIBarButtonItem(customView: Design.icon("plus", size: 28) { [weak self] in
+                self?.sheet(CreateMenuController())
+            })
+        }
+
+        let stories = session.stories(id)
+        let avatar = Avatar(p, size: 80, story: stories.contains { !$0.flag("seenByMe") && !$0.strings("viewers").contains(session.userID) })
+        avatar.onTap { [weak self] in
+            guard let self = self else { return }
+            if !stories.isEmpty { self.present(StoryViewer(stories: stories), animated: true) }
+            else if own { self.push(EditProfileController()) }
+        }
+        let avatarPanel = UIView()
+        avatarPanel.widthAnchor.constraint(equalToConstant: 94).isActive = true
+        avatarPanel.heightAnchor.constraint(equalToConstant: 106).isActive = true
+        avatarPanel.addSubview(avatar)
+        avatar.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            avatar.centerXAnchor.constraint(equalTo: avatarPanel.centerXAnchor),
+            avatar.bottomAnchor.constraint(equalTo: avatarPanel.bottomAnchor)
+        ])
+        if own {
+            let note = session.state.list("notes").first { $0.text("owner") == session.userID }?.text("text") ?? "Lascia una nota…"
+            let noteButton = UIButton(type: .system)
+            noteButton.setTitle(note, for: .normal)
+            noteButton.setTitleColor(Design.ink, for: .normal)
+            noteButton.titleLabel?.font = Design.font(10)
+            noteButton.titleLabel?.numberOfLines = 2
+            noteButton.titleLabel?.textAlignment = .center
+            noteButton.backgroundColor = Design.soft
+            noteButton.layer.cornerRadius = 15
+            noteButton.addAction(UIAction { [weak self] _ in
+                guard let self = self else { return }
+                self.sheet(NoteController(owner: self.id))
+            }, for: .touchUpInside)
+            let plus = UIButton(type: .system)
+            plus.setImage(UIImage(systemName: "plus"), for: .normal)
+            plus.tintColor = Design.background
+            plus.backgroundColor = Design.ink
+            plus.layer.cornerRadius = 14
+            plus.layer.borderWidth = 2.5
+            plus.layer.borderColor = Design.background.cgColor
+            plus.accessibilityLabel = "Crea storia"
+            plus.addAction(UIAction { [weak self] _ in self?.sheet(StoryEditorController(), full: true) }, for: .touchUpInside)
+            for button in [noteButton, plus] {
+                avatarPanel.addSubview(button)
+                button.translatesAutoresizingMaskIntoConstraints = false
+            }
+            NSLayoutConstraint.activate([
+                noteButton.topAnchor.constraint(equalTo: avatarPanel.topAnchor),
+                noteButton.leadingAnchor.constraint(equalTo: avatarPanel.leadingAnchor),
+                noteButton.trailingAnchor.constraint(equalTo: avatarPanel.trailingAnchor),
+                noteButton.heightAnchor.constraint(equalToConstant: 34),
+                plus.widthAnchor.constraint(equalToConstant: 28),
+                plus.heightAnchor.constraint(equalToConstant: 28),
+                plus.trailingAnchor.constraint(equalTo: avatarPanel.trailingAnchor),
+                plus.bottomAnchor.constraint(equalTo: avatarPanel.bottomAnchor)
+            ])
+        }
+
+        let counts = Domain.counts(p, posts: session.posts)
+        let stats = Design.stack(.horizontal)
+        stats.distribution = .fillEqually
+        for (index, label) in ["post", "follower", "seguiti"].enumerated() {
+            let number = Design.label(String(counts[index]), size: 17, weight: .bold)
+            let caption = Design.label(label, size: 12)
+            let stat = Design.stack(spacing: 3, views: [number, caption])
+            if index > 0 {
+                stat.onTap { [weak self] in
+                    guard let self = self else { return }
+                    self.push(PeopleController(mode: index == 1 ? .followers(self.id) : .following(self.id)))
+                }
+            }
+            stats.addArrangedSubview(stat)
+        }
+        let identity = Design.stack(spacing: 13, views: [Design.label(p.text("name"), size: 14, weight: .semibold), stats])
+        let header = Design.stack(.horizontal, spacing: 15, views: [avatarPanel, identity])
+        header.alignment = .center
+        add(header, inset: 16)
+        if !p.text("pronouns").isEmpty { add(Design.label(p.text("pronouns"), size: 12, color: Design.muted), inset: 19) }
+        if !p.text("bio").isEmpty { add(Design.label(p.text("bio").replacingOccurrences(of: "\\n", with: "\n"), size: 13, lines: 0), inset: 19) }
         let linksScroll=UIScrollView();linksScroll.showsHorizontalScrollIndicator=false;linksScroll.heightAnchor.constraint(equalToConstant:40).isActive=true;let links=Design.stack(.horizontal,spacing:8);links.alignment = .center;linksScroll.addSubview(links);links.pin(to:linksScroll);links.heightAnchor.constraint(equalTo:linksScroll.frameLayoutGuide.heightAnchor).isActive=true
         for link in p.list("links") { let b=Design.button(link.text("title",link.text("value",link.text("url"))),icon:link.text("type")=="website" ? "globe":"link") { if let url=URL(string:link.text("url")) { UIApplication.shared.open(url) } };b.layer.cornerRadius=20;b.layer.borderWidth=1;b.layer.borderColor=Design.line.cgColor;b.backgroundColor=Design.background;links.addArrangedSubview(b) }
         if own { links.addArrangedSubview(Design.button("Aggiungi",icon:"plus") { [weak self] in self?.sheet(LinksController()) }) };if !links.arrangedSubviews.isEmpty { add(linksScroll,inset:18) }
         let buttons=Design.stack(.horizontal,spacing:8);buttons.distribution = .fillEqually
         if own {
-            buttons.addArrangedSubview(Design.button("Modifica profilo") { [weak self] in self?.push(EditProfileController()) })
+            buttons.addArrangedSubview(Design.button("Modifica") { [weak self] in self?.push(EditProfileController()) })
             buttons.addArrangedSubview(Design.button("Condividi profilo") { [weak self] in self?.shareProfile() })
         } else {
             let pending=session.pending(id);let following=session.following(id)
@@ -36,12 +129,24 @@ import UIKit
             if own { let b=Design.button("Nuova",icon:"plus") { [weak self] in self?.push(HighlightsController()) };h.addArrangedSubview(b) };h.addArrangedSubview(UIView());add(h,inset:18)
         }
         let selectors=Design.stack(.horizontal);selectors.distribution = .fillEqually
-        for pair in [("post","square.grid.3x3"),("reel","reel"),("tagged","person.crop.rectangle")] { let b=Design.icon(pair.1,color:gridKind==pair.0 ? Design.ink:Design.muted) { [weak self] in self?.gridKind=pair.0;self?.render() };selectors.addArrangedSubview(b) };add(selectors);add(Design.divider())
+        for (kind, icon) in [("post", "square.grid.3x3"), ("reel", "reel"), ("repost", "arrow.2.squarepath"), ("tagged", "person.crop.rectangle")] {
+            let selected = gridKind == kind
+            let button = Design.icon(icon, color: selected ? Design.ink : Design.muted) { [weak self] in
+                self?.gridKind = kind
+                self?.render()
+            }
+            let indicator = UIView()
+            indicator.backgroundColor = selected ? Design.ink : Design.line
+            indicator.heightAnchor.constraint(equalToConstant: 1).isActive = true
+            selectors.addArrangedSubview(Design.stack(views: [button, indicator]))
+        }
+        add(selectors)
         let privateLocked=p.flag("private") && !own && !session.following(id)
         if privateLocked { empty("Questo account è privato",detail:"Segui questo account per vedere foto e video.",symbol:"lock") }
         else {
             var posts=session.posts.filter { $0.text("author")==id && !$0.flag("archived") && $0.text("kind")==gridKind }
             if gridKind=="tagged" { posts=session.posts.filter { $0.strings("tags").contains(id) && !$0.flag("archived") } }
+            if gridKind == "repost" { posts = session.posts.filter { !$0.flag("archived") && $0.text("kind") != "story" && $0.strings("reposts").contains(id) } }
             let pinned=p.strings("pinnedPosts"),order=p.strings("gridOrder")
             posts.sort { a,b in let ai=pinned.firstIndex(of:a.id).map { $0-10000 } ?? order.firstIndex(of:a.id) ?? 10000;let bi=pinned.firstIndex(of:b.id).map { $0-10000 } ?? order.firstIndex(of:b.id) ?? 10000;return ai==bi ? a.number("created")>b.number("created"):ai<bi }
             if posts.isEmpty { empty("Condividi i tuoi momenti",detail:own ? "Le tue foto e i tuoi video appariranno qui.":"Non ci sono ancora contenuti.",symbol:"camera") }
@@ -131,18 +236,78 @@ enum PeopleMode { case all, followers(String), following(String), share(String),
     @objc private func manage() { menu("Gestisci richieste",items:[("Conferma tutte",false,{ self.run { for id in self.session.state.strings("requests") { try await self.session.action("accept",["user":id,"enabled":true]);self.accepted.insert(id) };self.render() } })]) }
 }
 @MainActor final class SearchController: StackScreen {
-    let field=Design.field("Cerca persone, post e luoghi")
-    override func viewDidLoad() { super.viewDidLoad();title="Cerca";attachHeader(Design.inset(field,UIEdgeInsets(top:8,left:18,bottom:8,right:18)));field.addAction(UIAction { [weak self] _ in self?.render() },for:.editingChanged);field.addAction(UIAction { [weak self] _ in guard let self=self else { return };self.session.remember(self.field.text ?? "");self.field.resignFirstResponder() },for:.editingDidEndOnExit);render() }
+    private let field = Design.field("Cerca")
+    private let filters = UISegmentedControl(items: ["Tutto", "Account", "Post", "Luoghi"])
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = "Esplora"
+        field.returnKeyType = .search
+        field.autocorrectionType = .no
+        filters.selectedSegmentIndex = 0
+        filters.isHidden = true
+        let header = Design.stack(spacing: 8, views: [field, filters])
+        attachHeader(Design.inset(header, UIEdgeInsets(top: 8, left: 16, bottom: 8, right: 16)))
+        field.addAction(UIAction { [weak self] _ in self?.render() }, for: .editingChanged)
+        filters.addAction(UIAction { [weak self] _ in self?.render() }, for: .valueChanged)
+        field.addAction(UIAction { [weak self] _ in
+            guard let self = self else { return }
+            self.session.remember(self.field.text ?? "")
+            self.field.resignFirstResponder()
+        }, for: .editingDidEndOnExit)
+        render()
+    }
+
     override func stateChanged() { render() }
+
     private func render() {
-        clear();let q=(field.text ?? "").trimmingCharacters(in:.whitespacesAndNewlines)
-        if q.isEmpty {
-            row("Ricerche recenti",accessory:Design.button("Cancella") { [weak self] in self?.session.clearHistory() })
-            for term in session.history { row(term,icon:"clock.arrow.circlepath") { [weak self] in self?.field.text=term;self?.render() } }
-            add(PhotoGrid(posts:session.posts.filter { $0.text("kind") != "story" && !$0.flag("archived") },parent:self))
-        } else {
-            for u in session.users.filter({($0.text("username")+" "+$0.text("name")).localizedCaseInsensitiveContains(q)}) { row(u.text("name"),subtitle:u.text("username"),accessory:Avatar(u,size:42)) { [weak self] in self?.session.remember(q);self?.push(ProfileController(id:u.id)) } }
-            add(PhotoGrid(posts:session.posts.filter { $0.text("kind") != "story" && !$0.flag("archived") && ($0.text("text")+" "+$0.text("location")).localizedCaseInsensitiveContains(q) },parent:self))
+        clear()
+        let query = (field.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        filters.isHidden = query.isEmpty
+        let blocked = session.state.strings("blocks")
+        let posts = session.posts.filter {
+            $0.text("kind") != "story" && !$0.flag("archived") && !blocked.contains($0.text("author"))
+        }
+        if query.isEmpty {
+            if !session.history.isEmpty {
+                row("Ricerche recenti", accessory: Design.button("Cancella tutto") { [weak self] in
+                    self?.session.clearHistory()
+                })
+                for term in session.history {
+                    row(term, icon: "clock.arrow.circlepath") { [weak self] in
+                        self?.field.text = term
+                        self?.render()
+                    }
+                }
+            }
+            add(PhotoGrid(posts: posts, parent: self))
+            return
+        }
+
+        let filter = filters.selectedSegmentIndex
+        let accounts = session.users.filter {
+            !blocked.contains($0.id) && ($0.text("username") + " " + $0.text("name")).localizedCaseInsensitiveContains(query)
+        }
+        let matchingPosts = posts.filter { post in
+            let location = post.text("location")
+            if filter == 3 { return location.localizedCaseInsensitiveContains(query) }
+            return (post.text("text") + " " + location).localizedCaseInsensitiveContains(query)
+        }
+        let showAccounts = filter == 0 || filter == 1
+        let showPosts = filter != 1
+        if showAccounts {
+            for account in accounts {
+                row(account.text("name"), subtitle: account.text("username"), accessory: Avatar(account, size: 46)) { [weak self] in
+                    self?.session.remember(query)
+                    self?.push(ProfileController(id: account.id))
+                }
+            }
+        }
+        if showPosts && !matchingPosts.isEmpty {
+            add(PhotoGrid(posts: matchingPosts, parent: self))
+        }
+        if (!showAccounts || accounts.isEmpty) && (!showPosts || matchingPosts.isEmpty) {
+            empty("Nessun risultato", detail: "Prova a cercare un altro nome o una parola diversa.", symbol: "magnifyingglass")
         }
     }
 }

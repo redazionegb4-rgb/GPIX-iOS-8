@@ -14,6 +14,7 @@ import UIKit
         row("Bozze",icon:"doc.text") { [weak self] in self?.push(LibraryController(mode:"drafts")) }
         row("Elementi salvati",icon:"save") { [weak self] in self?.push(LibraryController(mode:"saved")) }
         row("Archivio",icon:"clock.arrow.circlepath") { [weak self] in self?.push(LibraryController(mode:"archive")) }
+        row("Archivio delle istantanee", icon: "camera") { [weak self] in self?.push(InstantArchiveController()) }
         row("Note",icon:"text.bubble") { [weak self] in self?.sheet(NoteController(owner:self?.session.userID ?? "")) }
         add(Design.divider());section("Chi può vedere i tuoi contenuti")
         toggle("Account privato",icon:"lock",value:session.me.flag("private")) { [weak self] in self?.action("profile",["private":$0]) }
@@ -33,7 +34,9 @@ import UIKit
         row("Assistenza",icon:"questionmark.circle") { [weak self] in self?.push(HelpController()) }
         row("Gestione account",icon:"person.crop.circle.badge.gearshape") { [weak self] in self?.push(SecurityController(mode:"account")) }
         row("Esci",icon:"rectangle.portrait.and.arrow.right") { [weak self] in self?.menu("Uscire da GPIX?",items:[("Esci",true,{ self?.run { await self?.session.logout() } })]) }
-        let footer=Design.label("GPIX · 3.0.0 (60)",size:11,color:Design.muted);footer.textAlignment = .center;add(footer,inset:24);scroll.setContentOffset(offset,animated:false)
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "3.0.0"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "61"
+        let footer=Design.label("GPIX · \(version) (\(build))",size:11,color:Design.muted);footer.textAlignment = .center;add(footer,inset:24);scroll.setContentOffset(offset,animated:false)
     }
     private func toggle(_ title:String,icon:String,value:Bool,changed:@escaping(Bool)->Void) { let control=UISwitch();control.onTintColor=Design.violet;control.isOn=value;control.addAction(UIAction { [weak control] _ in changed(control?.isOn ?? false) },for:.valueChanged);row(title,icon:icon,accessory:control) }
 }

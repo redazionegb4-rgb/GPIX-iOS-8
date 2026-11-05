@@ -150,7 +150,19 @@ import AVFoundation
         let nearBottom=scroll.contentSize.height-scroll.contentOffset.y-scroll.bounds.height<140 || messages.arrangedSubviews.isEmpty
         let offset=scroll.contentOffset;for item in messages.arrangedSubviews { messages.removeArrangedSubview(item);item.removeFromSuperview() }
         let ttl=t.number("messageTTL");if ttl != 0 { let caption=ttl == -1 ? "I messaggi scompaiono dopo la lettura":"Messaggi temporanei · \(Int(ttl/3600)) h";let label=Design.label(caption,size:11,color:Design.muted);label.textAlignment = .center;messages.addArrangedSubview(label) }
-        for m in rows { if m.number("expires")>0 && m.number("expires")<Date().timeIntervalSince1970 { continue };messages.addArrangedSubview(messageView(m)) }
+        var previousMessageTime: Double?
+        for message in rows {
+            let expires = message.number("expires")
+            if expires > 0 && expires < Date().timeIntervalSince1970 { continue }
+            let created = message.number("created")
+            if created > 0 && (previousMessageTime.map { abs(created - $0) > 900 } ?? true) {
+                let timestamp = Design.label(Domain.ago(created) + " · " + Domain.clock(created), size: 10, color: Design.muted)
+                timestamp.textAlignment = .center
+                messages.addArrangedSubview(Design.inset(timestamp, UIEdgeInsets(top: 8, left: 0, bottom: 8, right: 0)))
+            }
+            previousMessageTime = created
+            messages.addArrangedSubview(messageView(message))
+        }
         for reaction in session.reactions(t).filter({ !$0.flag("seen") }) { let label=Design.label(Domain.notificationText(reaction),size:11,color:Design.muted);label.textAlignment = .center;messages.addArrangedSubview(label) }
         view.layoutIfNeeded();if nearBottom { scroll.setContentOffset(CGPoint(x:0,y:max(-scroll.adjustedContentInset.top,scroll.contentSize.height-scroll.bounds.height+scroll.adjustedContentInset.bottom)),animated:false) } else { scroll.setContentOffset(offset,animated:false) };updateStatus()
         if view.window != nil { markRead() }
@@ -168,7 +180,16 @@ import AVFoundation
         let reactions=m.object("reactions").values.values.compactMap { $0 as? String }.joined(separator:" ");if !reactions.isEmpty { bubble.addArrangedSubview(Design.label(reactions,size:15)) }
         let container=UIView();container.addSubview(bubble);bubble.translatesAutoresizingMaskIntoConstraints=false;NSLayoutConstraint.activate([bubble.topAnchor.constraint(equalTo:container.topAnchor),bubble.bottomAnchor.constraint(equalTo:container.bottomAnchor),bubble.widthAnchor.constraint(lessThanOrEqualTo:container.widthAnchor,multiplier:0.8),mine ? bubble.trailingAnchor.constraint(equalTo:container.trailingAnchor):bubble.leadingAnchor.constraint(equalTo:container.leadingAnchor)])
         bubble.addGestureRecognizer(MessageLongPress { [weak self] in self?.messageOptions(m) });let swipe=MessageSwipe { [weak self] in self?.beginReply(m) };bubble.addGestureRecognizer(swipe)
-        let doubleTap=ClosureTap { [weak self] in self?.action("react",["id":m.id,"emoji":"❤️"]) };doubleTap.numberOfTapsRequired=2;bubble.addGestureRecognizer(doubleTap)
+        let doubleTap = ClosureTap { [weak self] in
+            guard let self = self else { return }
+            let selected = m.object("reactions").text(self.session.userID) == "❤️"
+            self.action("react", ["id": m.id, "emoji": selected ? "" : "❤️"])
+        }
+        doubleTap.numberOfTapsRequired = 2
+        bubble.addGestureRecognizer(doubleTap)
+        let reverseSwipe = MessageSwipe { [weak self] in self?.beginReply(m) }
+        reverseSwipe.direction = .left
+        bubble.addGestureRecognizer(reverseSwipe)
         return container
     }
     private func beginReply(_ message:Entity) { replyID=message.id;editID="";replyText.text="Rispondi a "+session.person(message.text("author")).text("name")+"\n"+message.text("text","Foto");replyPreview.isHidden=false;replyPreview.superview?.isHidden=false;input.becomeFirstResponder() }

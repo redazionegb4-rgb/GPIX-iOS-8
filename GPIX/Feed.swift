@@ -74,8 +74,13 @@ import AVKit
         let stack=Design.stack(.horizontal,spacing:13);stack.alignment = .top;horizontal.addSubview(stack);stack.pin(to:horizontal,insets:UIEdgeInsets(top:8,left:12,bottom:12,right:12));stack.heightAnchor.constraint(equalToConstant:122).isActive=true
         var people=[session.me];people += session.users.filter { $0.id != session.userID && !session.stories($0.id).isEmpty && !session.state.strings("blocks").contains($0.id) }
         for person in people {
-            let own=person.id==session.userID;let circle=Avatar(person,size:84,story:!session.stories(person.id).isEmpty)
-            let name=Design.label(own ? "La tua storia":person.text("username"),size:11);name.textAlignment = .center;name.widthAnchor.constraint(equalToConstant:94).isActive=true
+            let own = person.id == session.userID
+            let stories = session.stories(person.id)
+            let viewed = stories.allSatisfy { $0.flag("seenByMe") || $0.strings("viewers").contains(session.userID) }
+            let latest = stories.max { $0.number("created") < $1.number("created") }
+            let circle = Avatar(person, size: stories.isEmpty ? 84 : 94.2, story: !stories.isEmpty,
+                                viewed: viewed, closeFriends: latest?.text("audience") == "close")
+            let name=Design.label(own ? "La tua storia":person.text("username"),size:11);name.textAlignment = .center;name.widthAnchor.constraint(equalToConstant:94.2).isActive=true
             let item=Design.stack(spacing:7,views:[circle,name]);item.alignment = .center
             item.onTap { [weak self] in guard let self=self else { return };let stories=self.session.stories(person.id);if stories.isEmpty && own { self.sheet(StoryEditorController(),full:true) } else {
                     let queue = stories + people.filter { $0.id != person.id && $0.id != self.session.userID }
@@ -139,8 +144,31 @@ import AVKit
         }
         let liked=post.strings("likes").contains(s.userID)
         let like=Design.icon(liked ? "heart.fill":"heart",color:liked ? Design.danger:nil) { [weak parent] in parent?.action("like",["id":post.id,"enabled":!liked]) }
-        let actions=Design.stack(.horizontal,spacing:2,views:[like,Design.icon("bubble.right") { [weak parent] in parent?.sheet(CommentsController(postID:post.id)) },Design.icon("send") { [weak parent] in parent?.sheet(PeopleController(mode:.share(post.id))) },UIView(),Design.icon(post.flag("saved") ? "save.fill":"save") { [weak parent] in parent?.action("save",["id":post.id,"enabled":!post.flag("saved")]) }]);actions.alignment = .center
-        vertical.addArrangedSubview(Design.inset(actions,UIEdgeInsets(top:-5,left:5,bottom:-7,right:5)))
+        let comment = Design.icon("bubble.right") { [weak parent] in
+            parent?.sheet(CommentsController(postID: post.id))
+        }
+        comment.accessibilityLabel = "Commenti"
+        let share = Design.icon("send") { [weak parent] in
+            parent?.sheet(PeopleController(mode: .share(post.id)))
+        }
+        share.accessibilityLabel = "Invia post"
+        let saved = post.flag("saved")
+        let save = Design.icon(saved ? "save.fill" : "save") { [weak parent] in
+            parent?.action("save", ["id": post.id, "enabled": !saved])
+        }
+        save.accessibilityLabel = saved ? "Rimuovi dai salvati" : "Salva post"
+        let actions = Design.stack(.horizontal, spacing: 2, views: [like, comment])
+        actions.alignment = .center
+        if !author.flag("private") && post.text("audience") != "close" {
+            let reposted = post.strings("reposts").contains(s.userID)
+            let repost = Design.icon("arrow.2.squarepath", size: 22, color: reposted ? Design.violet : Design.ink) { [weak parent] in
+                parent?.action("repost", ["id": post.id, "enabled": !reposted])
+            }
+            repost.accessibilityLabel = reposted ? "Rimuovi ripubblicazione" : "Ripubblica"
+            actions.addArrangedSubview(repost)
+        }
+        for control in [share as UIView, UIView(), save as UIView] { actions.addArrangedSubview(control) }
+        vertical.addArrangedSubview(Design.inset(actions, UIEdgeInsets(top: -5, left: 5, bottom: -7, right: 5)))
         if !post.flag("hideLikes") { vertical.addArrangedSubview(Design.inset(Design.label("\(post.strings("likes").count) Mi piace",size:13,weight:.semibold),UIEdgeInsets(top:0,left:14,bottom:0,right:14))) }
         if !post.text("text").isEmpty { let caption=Design.label(author.text("username")+"  "+post.text("text"),size:14,lines:0);vertical.addArrangedSubview(Design.inset(caption,UIEdgeInsets(top:0,left:14,bottom:0,right:14))) }
         let comments=post.list("comments");if !comments.isEmpty { let link=Design.label("Visualizza tutti i \(comments.count) commenti",size:13,color:Design.muted);link.onTap { [weak parent] in parent?.sheet(CommentsController(postID:post.id)) };vertical.addArrangedSubview(Design.inset(link,UIEdgeInsets(top:0,left:14,bottom:0,right:14))) }

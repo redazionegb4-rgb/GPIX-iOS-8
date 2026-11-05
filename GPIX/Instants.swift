@@ -37,14 +37,14 @@ import UIKit
     private func load() async throws { guard !loading else { return };loading=true;defer { loading=false };snapshot=try await session.instantList();render() }
     private func render() {
         let offset=scroll.contentOffset;clear()
-        add(Design.label("Nuovi momenti.",size:30,weight:.bold),inset:20)
-        add(Design.label("Uno scatto vero, da condividere adesso.\nLe istantanee scadono dopo 24 ore.",size:14,color:Design.muted,lines:2),inset:20)
-        let create=Design.stack(.horizontal,spacing:16,views:[Design.icon("camera",size:30,color:.white) { [weak self] in self?.sheet(InstantCameraController(),full:true) },Design.stack(spacing:6,views:[Design.label("Crea un’istantanea",size:18,weight:.bold,color:.white),Design.label("Scatta e condividi il tuo momento",size:12,color:UIColor.white.withAlphaComponent(0.8))]),UIView(),Design.icon("plus",color:.white) { [weak self] in self?.sheet(InstantCameraController(),full:true) }]);create.alignment = .center
-        let hero=Design.inset(create,UIEdgeInsets(top:22,left:14,bottom:22,right:14));hero.backgroundColor=Design.violet;hero.layer.cornerRadius=24;hero.onTap { [weak self] in self?.sheet(InstantCameraController(),full:true) };add(hero,inset:18)
+        let capture = Design.button("Scatta un’istantanea", primary: true, icon: "camera") { [weak self] in
+            self?.sheet(InstantCameraController(), full: true)
+        }
+        add(capture, inset: 18)
         let filters=UISegmentedControl(items:["Tutte","Nuove","Le mie"]);filters.selectedSegmentIndex=filter;filters.selectedSegmentTintColor=Design.violet;filters.setTitleTextAttributes([.foregroundColor:UIColor.white,.font:Design.font(13,.semibold)],for:.selected);filters.setTitleTextAttributes([.foregroundColor:Design.ink,.font:Design.font(13)],for:.normal);filters.addAction(UIAction { [weak self,weak filters] _ in self?.filter=filters?.selectedSegmentIndex ?? 0;self?.render() },for:.valueChanged);add(filters,inset:20)
         var cards:[(Entity,[Entity],Bool)]=[]
-        if filter != 2 { let groups=Dictionary(grouping:snapshot.list("received"),by:{$0.text("owner")});for owner in groups.keys.sorted() { let items=groups[owner] ?? [];if let first=items.first { cards.append((first,items,false)) } } }
-        if filter != 1 { for item in snapshot.list("active") { cards.append((item,[item],true)) } }
+        if filter != 2 { let groups=Dictionary(grouping:snapshot.list("received").filter { $0.number("expires") == 0 || $0.number("expires") > Date().timeIntervalSince1970 },by:{$0.text("owner")});for owner in groups.keys.sorted() { let items=groups[owner] ?? [];if let first=items.first { cards.append((first,items,false)) } } }
+        if filter != 1 { for item in snapshot.list("active") where item.number("expires") == 0 || item.number("expires") > Date().timeIntervalSince1970 { cards.append((item,[item],true)) } }
         if cards.isEmpty { empty(filter==2 ? "Il tuo prossimo istante":"Nessuna nuova istantanea",detail:"Puoi creare un’istantanea anche se non hai ancora amici.",symbol:"camera") }
         for start in stride(from:0,to:cards.count,by:2) {
             let row=Design.stack(.horizontal,spacing:12);row.distribution = .fillEqually

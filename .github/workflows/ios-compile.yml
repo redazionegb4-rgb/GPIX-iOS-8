@@ -1,4 +1,4 @@
-name: Verifica progetto iPhone Swift
+name: Verifica GPIX iPhone
 on:
   push:
     branches: [main, master]
@@ -10,14 +10,20 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      - name: Compila per simulatore senza firma
+      - name: Verifica logica Swift
+        run: |
+          xcrun swiftc -swift-version 5 GPIX/Domain.swift GPIX/DemoData.swift GPIX/Credentials.swift GPIX/Session.swift GPIX/DemoSession.swift QA/DomainChecks.swift -o /tmp/gpix-checks
+          /tmp/gpix-checks
+      - name: Compila app per simulatore
         shell: bash
         run: |
           set -o pipefail
-          xcodebuild -project GPIX.xcodeproj -scheme GPIX -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tee compilazione-ios.log
-      - name: Conserva il log
+          xcodebuild -project GPIX.xcodeproj -scheme GPIX -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath build -resultBundlePath build/GPIX.xcresult CODE_SIGNING_ALLOWED=NO build | tee compilazione-ios.log
+      - name: Conserva risultato e log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: compilazione-ios
-          path: compilazione-ios.log
+          name: verifica-gpix-ios
+          path: |
+            compilazione-ios.log
+            build/GPIX.xcresult

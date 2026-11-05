@@ -19,7 +19,23 @@ import UIKit
     override func viewDidLoad() {
         super.viewDidLoad();view.backgroundColor=Design.background;let stack=Design.stack(spacing:3)
         if let title=heading { let l=Design.label(title,size:17,weight:.bold,lines:2);l.textAlignment = .center;stack.addArrangedSubview(Design.inset(l,UIEdgeInsets(top:6,left:8,bottom:12,right:8))) }
-        for item in items { let button=Design.button(item.0) { [weak self] in self?.dismiss(animated:true,completion:item.2) };var config=button.configuration;config?.baseBackgroundColor=Design.background;config?.baseForegroundColor=item.1 ? Design.danger:Design.ink;button.configuration=config;button.heightAnchor.constraint(equalToConstant:53).isActive=true;stack.addArrangedSubview(button) }
+        for (title, destructive, action) in items {
+            var config = UIButton.Configuration.plain()
+            config.title = title
+            config.baseForegroundColor = destructive ? Design.danger : Design.ink
+            config.contentInsets = NSDirectionalEdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16)
+            config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { attributes in
+                var attributes = attributes
+                attributes.font = Design.font(16, .semibold)
+                return attributes
+            }
+            let button = UIButton(configuration: config, primaryAction: UIAction { [weak self] _ in
+                self?.dismiss(animated: true, completion: action)
+            })
+            button.contentHorizontalAlignment = .leading
+            button.heightAnchor.constraint(greaterThanOrEqualToConstant: 52).isActive = true
+            stack.addArrangedSubview(button)
+        }
         stack.addArrangedSubview(Design.button("Annulla") { [weak self] in self?.dismiss(animated:true) });let scroll=UIScrollView();view.addSubview(scroll);scroll.pin(to:view,insets:UIEdgeInsets(top:25,left:16,bottom:16,right:16));scroll.addSubview(stack);stack.pin(to:scroll);stack.widthAnchor.constraint(equalTo:scroll.frameLayoutGuide.widthAnchor).isActive=true
     }
 }

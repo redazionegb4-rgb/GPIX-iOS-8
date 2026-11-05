@@ -37,10 +37,42 @@ import ImageIO
     deinit { task?.cancel() }
 }
 @MainActor final class Avatar: UIView {
-    init(_ person: Entity, size: CGFloat = 44, story: Bool = false, online: Bool = false) {
+    init(_ person: Entity, size: CGFloat = 44, story: Bool = false, online: Bool = false, viewed: Bool = false, closeFriends: Bool = false) {
         super.init(frame:.zero);widthAnchor.constraint(equalToConstant:size).isActive=true;heightAnchor.constraint(equalToConstant:size).isActive=true
-        if story { let ring=CAGradientLayer();ring.colors=[UIColor.systemYellow.cgColor,UIColor.systemPink.cgColor,Design.violet.cgColor];ring.startPoint=CGPoint(x:0,y:1);ring.endPoint=CGPoint(x:1,y:0);ring.frame=CGRect(x:0,y:0,width:size,height:size);ring.cornerRadius=size/2;layer.addSublayer(ring) }
-        let photo=PhotoView(person.text("avatar"));photo.layer.cornerRadius=(size-(story ? 8:0))/2;addSubview(photo);photo.pin(to:self,insets:UIEdgeInsets(top:story ? 4:0,left:story ? 4:0,bottom:story ? 4:0,right:story ? 4:0))
+        let inset: CGFloat = story ? 5.1 : 0
+        if story {
+            let ring = CAGradientLayer()
+            ring.type = .conic
+            ring.startPoint = CGPoint(x: 0.5, y: 0.5)
+            ring.endPoint = CGPoint(x: 1, y: 0.5)
+            if closeFriends {
+                let green = UIColor(red: 37/255, green: 189/255, blue: 97/255, alpha: 1).cgColor
+                ring.colors = [green, green]
+            } else if viewed {
+                let gray = Design.muted.withAlphaComponent(0.35).cgColor
+                ring.colors = [gray, gray]
+            } else {
+                ring.colors = [
+                    UIColor(red: 189/255, green: 0, blue: 232/255, alpha: 1).cgColor,
+                    UIColor(red: 1, green: 0, blue: 106/255, alpha: 1).cgColor,
+                    UIColor(red: 1, green: 168/255, blue: 0, alpha: 1).cgColor,
+                    UIColor(red: 1, green: 213/255, blue: 65/255, alpha: 1).cgColor,
+                    UIColor(red: 189/255, green: 0, blue: 232/255, alpha: 1).cgColor
+                ]
+            }
+            ring.frame = CGRect(x: 0, y: 0, width: size, height: size)
+            ring.cornerRadius = size / 2
+            layer.addSublayer(ring)
+            let gap = UIView(frame: CGRect(x: 2.3, y: 2.3, width: size - 4.6, height: size - 4.6))
+            gap.backgroundColor = Design.background
+            gap.layer.cornerRadius = (size - 4.6) / 2
+            gap.isUserInteractionEnabled = false
+            addSubview(gap)
+        }
+        let photo = PhotoView(person.text("avatar"))
+        photo.layer.cornerRadius = size / 2 - inset
+        addSubview(photo)
+        photo.pin(to: self, insets: UIEdgeInsets(top: inset, left: inset, bottom: inset, right: inset))
         if person.text("avatar").isEmpty { let initial=Design.label(String(person.text("name","G").prefix(1)),size:size/2,weight:.semibold,color:Design.violet);initial.textAlignment = .center;photo.addSubview(initial);initial.pin(to:photo) }
         if online { let dot=UIView();dot.backgroundColor = .systemGreen;dot.layer.cornerRadius=6;dot.layer.borderColor=Design.background.cgColor;dot.layer.borderWidth=2;addSubview(dot);dot.translatesAutoresizingMaskIntoConstraints=false;NSLayoutConstraint.activate([dot.widthAnchor.constraint(equalToConstant:13),dot.heightAnchor.constraint(equalToConstant:13),dot.trailingAnchor.constraint(equalTo:trailingAnchor),dot.bottomAnchor.constraint(equalTo:bottomAnchor)]) }
     }

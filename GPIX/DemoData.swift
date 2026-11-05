@@ -19,10 +19,11 @@ enum DemoReducer {
         case "gridOrder":me["gridOrder"]=p.strings("ids")
         case "pinPost":me["pinnedPosts"]=toggle(Entity(me).strings("pinnedPosts"),id,payload["enabled"] as? Bool ?? true)
         case "post":var post=payload;post["id"]=UUID().uuidString;post["author"]=uid;post["created"]=now;post["expires"]=p.text("kind")=="story" ? now+86400:0;post["likes"]=[] as [String];post["comments"]=[] as [[String:Any]];posts.insert(post,at:0)
-        case "like","save","see","archivePost","editPost","postOptions","deletePost","comment","pollVote":
+        case "like","repost","save","see","archivePost","editPost","postOptions","deletePost","comment","pollVote":
             guard let index=posts.firstIndex(where:{Entity($0).id==id}) else { throw GPIXFailure.message("Post non disponibile") };var post=posts[index];let item=Entity(post)
             switch action {
             case "like":post["likes"]=toggle(item.strings("likes"),uid,payload["enabled"] as? Bool ?? true)
+            case "repost":post["reposts"]=toggle(item.strings("reposts"),uid,payload["enabled"] as? Bool ?? true)
             case "save":post["saved"]=p.flag("enabled")
             case "see":if item.text("author") != uid { post["viewers"]=toggle(item.strings("viewers"),uid,true) };post["seenByMe"]=true
             case "archivePost":post["archived"]=p.flag("enabled")
@@ -52,7 +53,15 @@ enum DemoReducer {
             }
         case "react","read","editMessage","deleteMessage":
             for i in threads.indices { var messages=Entity(threads[i]).list("messages").map(\.values);guard let j=messages.firstIndex(where:{Entity($0).id==id}) else { continue };let m=Entity(messages[j]);switch action {
-                case "react":var reactions=m.object("reactions").values;reactions[uid]=p.text("emoji");messages[j]["reactions"]=reactions;notification("messageReaction",target:id,actor:uid)
+                case "react":
+                    var reactions = m.object("reactions").values
+                    let emoji = p.text("emoji")
+                    if emoji.isEmpty { reactions.removeValue(forKey: uid) }
+                    else {
+                        reactions[uid] = emoji
+                        notification("messageReaction", target: id, actor: uid)
+                    }
+                    messages[j]["reactions"] = reactions
                 case "read":messages[j]["readBy"]=toggle(m.strings("readBy"),uid,true)
                 case "editMessage":messages[j]["text"]=p.text("text");messages[j]["edited"]=now
                 default:messages.remove(at:j)
