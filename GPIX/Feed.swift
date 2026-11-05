@@ -127,8 +127,10 @@ import AVKit
             let ratio=max(0.65,min(1.5,post.object("style").number("aspect",1)));carousel.heightAnchor.constraint(equalTo:carousel.widthAnchor,multiplier:1/ratio).isActive=true
             let photos=Design.stack(.horizontal);carousel.addSubview(photos);photos.pin(to:carousel);photos.heightAnchor.constraint(equalTo:carousel.frameLayoutGuide.heightAnchor).isActive=true
             for ref in post.media {
-                let photo=PhotoView(ref);photo.widthAnchor.constraint(equalTo:carousel.frameLayoutGuide.widthAnchor).isActive=true
-                photo.onTap { [weak parent] in parent?.sheet(MediaViewer(reference:ref),full:true) };photos.addArrangedSubview(photo)
+                let photo = PhotoView(ref)
+                photos.addArrangedSubview(photo)
+                photo.widthAnchor.constraint(equalTo: carousel.frameLayoutGuide.widthAnchor).isActive = true
+                photo.onTap { [weak parent] in parent?.sheet(MediaViewer(reference: ref), full: true) }
                 let doubleTap=UITapGestureRecognizer(target:self,action:#selector(doubleLike));doubleTap.numberOfTapsRequired=2;photo.addGestureRecognizer(doubleTap)
                 for gesture in photo.gestureRecognizers ?? [] where gesture !== doubleTap { gesture.require(toFail:doubleTap) }
             }
