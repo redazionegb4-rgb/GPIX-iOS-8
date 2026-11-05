@@ -54,7 +54,8 @@ import AVKit
     override func stateChanged() {
         guard isViewLoaded else { return }
         let next=session.posts.filter { p in p.text("kind")=="post" && !p.flag("archived") && !session.state.strings("blocks").contains(p.text("author")) && !session.preferences.strings("muted").contains(p.text("author")) && (!followingOnly || p.text("author")==session.userID || session.following(p.text("author"))) }
-        let hashes=Dictionary(uniqueKeysWithValues:next.map { ($0.id,String(describing:$0.values)) })
+        let hashes = Dictionary(next.map { ($0.id, String(describing: $0.values)) },
+                                uniquingKeysWith: { _, latest in latest })
         let changed=next.enumerated().compactMap { fingerprints[$0.element.id] != hashes[$0.element.id] ? IndexPath(row:$0.offset,section:0):nil }
         let sameIDs=rows.map(\.id)==next.map(\.id);rows=next;fingerprints=hashes
         let stories=String(describing:session.posts.filter { $0.text("kind")=="story" }.map(\.values))+String(describing:session.users.map(\.values))

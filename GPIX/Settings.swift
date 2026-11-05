@@ -33,7 +33,7 @@ import UIKit
         row("Assistenza",icon:"questionmark.circle") { [weak self] in self?.push(HelpController()) }
         row("Gestione account",icon:"person.crop.circle.badge.gearshape") { [weak self] in self?.push(SecurityController(mode:"account")) }
         row("Esci",icon:"rectangle.portrait.and.arrow.right") { [weak self] in self?.menu("Uscire da GPIX?",items:[("Esci",true,{ self?.run { await self?.session.logout() } })]) }
-        let footer=Design.label("GPIX · 3.0.0 (57)",size:11,color:Design.muted);footer.textAlignment = .center;add(footer,inset:24);scroll.setContentOffset(offset,animated:false)
+        let footer=Design.label("GPIX · 3.0.0 (58)",size:11,color:Design.muted);footer.textAlignment = .center;add(footer,inset:24);scroll.setContentOffset(offset,animated:false)
     }
     private func toggle(_ title:String,icon:String,value:Bool,changed:@escaping(Bool)->Void) { let control=UISwitch();control.onTintColor=Design.violet;control.isOn=value;control.addAction(UIAction { [weak control] _ in changed(control?.isOn ?? false) },for:.valueChanged);row(title,icon:icon,accessory:control) }
 }

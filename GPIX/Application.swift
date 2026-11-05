@@ -3,25 +3,28 @@ import UIKit
 @main @MainActor final class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
     private var observer: NSObjectProtocol?
-    private var showingHome = false
+    private var showingHome: Bool?
     func application(_ application:UIApplication,didFinishLaunchingWithOptions launchOptions:[UIApplication.LaunchOptionsKey:Any]? = nil) -> Bool {
         let nav=UINavigationBarAppearance();nav.configureWithOpaqueBackground();nav.backgroundColor=Design.background;nav.shadowColor = .clear;nav.titleTextAttributes=[.font:Design.font(18,.bold),.foregroundColor:Design.ink]
         UINavigationBar.appearance().standardAppearance=nav;UINavigationBar.appearance().scrollEdgeAppearance=nav;UINavigationBar.appearance().tintColor=Design.ink
         let w=UIWindow(frame:UIScreen.main.bounds);window=w;let launch=UIViewController();launch.view.backgroundColor=Design.background
         let logo=UIImageView(image:UIImage(named:"GpixLogo"));logo.contentMode = .scaleAspectFit;launch.view.addSubview(logo);logo.translatesAutoresizingMaskIntoConstraints=false;NSLayoutConstraint.activate([logo.centerXAnchor.constraint(equalTo:launch.view.centerXAnchor),logo.centerYAnchor.constraint(equalTo:launch.view.centerYAnchor),logo.widthAnchor.constraint(equalToConstant:150),logo.heightAnchor.constraint(equalToConstant:100)])
         w.rootViewController=launch;w.makeKeyAndVisible();applyAppearance()
+        routeIfNeeded()
         observer=NotificationCenter.default.addObserver(forName:Session.changed,object:nil,queue:.main) { [weak self] _ in Task { @MainActor in self?.routeIfNeeded() } }
-        Task { do { try await Session.shared.sync() } catch { }; self.route(force:true);Session.shared.startPolling() }
+        Task { do { try await Session.shared.sync() } catch { }; self.routeIfNeeded();Session.shared.startPolling() }
         return true
     }
     func applicationDidBecomeActive(_ application:UIApplication) { Task { await Session.shared.presence(true) } }
     func applicationWillResignActive(_ application:UIApplication) { Task { await Session.shared.presence(false) } }
     func applyAppearance() { let mode=UserDefaults.standard.string(forKey:"gpix.appearance") ?? "system";window?.overrideUserInterfaceStyle=mode == "dark" ? .dark:mode == "light" ? .light:.unspecified }
-    private func routeIfNeeded() { route(force:false) }
-    private func route(force:Bool) {
-        let home=Session.shared.signedIn;guard force || showingHome != home else { return };showingHome=home
-        let controller:UIViewController=home ? HomeController():UINavigationController(rootViewController:WelcomeController())
-        guard let window=window else { return };UIView.transition(with:window,duration:UIAccessibility.isReduceMotionEnabled ? 0:0.3,options:.transitionCrossDissolve) { window.rootViewController=controller }
+    private func routeIfNeeded() {
+        let home = Session.shared.signedIn
+        guard let window = window, showingHome != home else { return }
+        showingHome = home
+        window.rootViewController = home
+            ? HomeController()
+            : UINavigationController(rootViewController: WelcomeController())
     }
 }
 @MainActor final class WelcomeController: StackScreen {
@@ -80,7 +83,6 @@ import UIKit
         super.viewDidLoad();view.backgroundColor=Design.background
         let roots:[UIViewController]=[FeedController(),ReelsController(),InboxController(),SearchController(),ProfileController(id:Session.shared.userID)]
         controllers=roots.map { let nav=UINavigationController(rootViewController:$0);nav.delegate=self;return nav }
-        for nav in controllers { addChild(nav);view.addSubview(nav.view);nav.view.pin(to:view);nav.didMove(toParent:self);nav.view.isHidden=true }
         bar.backgroundColor=Design.background.withAlphaComponent(0.97);bar.layer.cornerRadius=40;bar.layer.borderWidth=0.6;bar.layer.borderColor=Design.line.cgColor;bar.layer.shadowColor=UIColor.black.cgColor;bar.layer.shadowOpacity=0.08;bar.layer.shadowRadius=28;bar.layer.shadowOffset=CGSize(width:0,height:5)
         view.addSubview(bar);bar.translatesAutoresizingMaskIntoConstraints=false;width=bar.widthAnchor.constraint(equalTo:view.widthAnchor,constant:-40);height=bar.heightAnchor.constraint(equalToConstant:64)
         NSLayoutConstraint.activate([width,height,bar.centerXAnchor.constraint(equalTo:view.centerXAnchor),bar.bottomAnchor.constraint(equalTo:view.safeAreaLayoutGuide.bottomAnchor,constant:-10)])
@@ -92,12 +94,22 @@ import UIKit
         if Session.shared.me.values["emailVerified"] != nil && !Session.shared.me.flag("emailVerified") && !Session.shared.isDemo { DispatchQueue.main.async { self.present(UINavigationController(rootViewController:SecurityController(mode:"verify")),animated:true) } }
     }
     private func select(_ index:Int) {
-        if selected == index,controllers.indices.contains(index),!controllers[index].view.isHidden { controllers[index].popToRootViewController(animated:true) }
-        selected=index
+        guard controllers.indices.contains(index) else { return }
+        let nav = controllers[index]
+        if selected == index && nav.parent === self {
+            nav.popToRootViewController(animated: true)
+        }
+        selected = index
+        if nav.parent == nil {
+            addChild(nav)
+            view.insertSubview(nav.view, belowSubview: bar)
+            nav.view.pin(to: view)
+            nav.didMove(toParent: self)
+        }
         previousScroll = nil
         scrollTravel = 0
         if index == 0 { (controllers[0].viewControllers.first as? FeedController)?.scrollToTop() }
-        for (i,nav) in controllers.enumerated() { nav.view.isHidden=i != index }
+        for (i,nav) in controllers.enumerated() { nav.viewIfLoaded?.isHidden = i != index }
         for (i,button) in buttons.arrangedSubviews.enumerated() { button.backgroundColor=i == index ? Design.soft:.clear;button.layer.cornerRadius=25;if i<4,let b=button as? UIButton { let normal=["home","reel","send","search"][i];b.setImage(Glyph.image(normal+(i==index && i<3 ? ".fill":""),size:25),for:.normal) } }
         bar.isHidden=controllers[index].viewControllers.count>1;compact(false)
     }
