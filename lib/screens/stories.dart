@@ -689,8 +689,10 @@ class _StoryViewerState extends State<StoryViewer>
                         ),
                         decoration: InputDecoration(
                           hintText: 'Invia messaggio…',
+                          filled: true,
+                          fillColor: const Color(0xff242424),
                           hintStyle: const TextStyle(
-                            color: Colors.white,
+                            color: Color(0xffcccccc),
                             fontSize: 14,
                           ),
                           contentPadding: const EdgeInsets.symmetric(

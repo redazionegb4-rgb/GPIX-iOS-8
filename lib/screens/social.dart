@@ -281,70 +281,77 @@ class _FeedState extends State<Feed> {
         .toList();
     return Scaffold(
       appBar: AppBar(
-        bottom: refreshing
-            ? const PreferredSize(
-                preferredSize: Size.fromHeight(2),
-                child: LinearProgressIndicator(
+        centerTitle: true,
+        title: const Text(
+          'GPIX',
+          style: TextStyle(
+            color: auraBlue,
+            fontSize: 24,
+            fontWeight: FontWeight.w900,
+            letterSpacing: -.7,
+          ),
+        ),
+        bottom: PreferredSize(
+          preferredSize: Size.fromHeight(refreshing ? 55 : 52),
+          child: Column(
+            children: [
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 290),
+                  child: Container(
+                    key: const ValueKey('feed-filter-title'),
+                    margin: const EdgeInsets.only(bottom: 4),
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: subdued(c),
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Row(
+                      children: [
+                        for (final option in ['Per te', 'Seguiti'])
+                          Expanded(
+                            child: Semantics(
+                              selected: filter == option,
+                              child: TextButton(
+                                style: TextButton.styleFrom(
+                                  minimumSize: const Size(0, 44),
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  backgroundColor: filter == option
+                                      ? surface(c)
+                                      : Colors.transparent,
+                                  foregroundColor: filter == option
+                                      ? accent(c)
+                                      : secondaryText(c),
+                                  shape: const StadiumBorder(),
+                                ),
+                                onPressed: () {
+                                  if (filter != option)
+                                    setState(() => filter = option);
+                                },
+                                child: Text(
+                                  option,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              if (refreshing)
+                const LinearProgressIndicator(
                   key: ValueKey('home-refresh-indicator'),
                   minHeight: 3,
                 ),
-              )
-            : null,
-        title: InkWell(
-          key: const ValueKey('feed-filter-title'),
-          borderRadius: BorderRadius.circular(12),
-          onTap: () => sheet(
-            c,
-            Column(
-              children: ['Per te', 'Seguiti']
-                  .map(
-                    (x) => ActionRow(
-                      x == 'Per te'
-                          ? CupertinoIcons.sparkles
-                          : CupertinoIcons.person_2,
-                      x,
-                      () {
-                        setState(() => filter = x);
-                        Navigator.pop(c);
-                      },
-                    ),
-                  )
-                  .toList(),
-            ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'GPIX',
-                  style: TextStyle(
-                    color: auraBlue,
-                    fontSize: 30,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -1.15,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                const GIcon(CupertinoIcons.chevron_down, size: 13),
-                if (filter != 'Per te')
-                  Flexible(
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 7),
-                      child: Text(
-                        filter,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: accent(c), fontSize: 12),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+            ],
           ),
         ),
-        centerTitle: false,
         actions: [
           IconButton(
             tooltip: 'Attività',
@@ -3129,6 +3136,7 @@ class _EditProfileState extends State<EditProfile> {
     final s = GpixScope.of(c);
     return Scaffold(
       appBar: AppBar(
+        centerTitle: true,
         title: pageTitle('Modifica profilo'),
         actions: [
           TextButton(
@@ -3162,7 +3170,8 @@ class _EditProfileState extends State<EditProfile> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.only(bottom: 30),
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 30),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         children: [
           const SizedBox(height: 22),
           Center(
@@ -3190,145 +3199,109 @@ class _EditProfileState extends State<EditProfile> {
             }),
             child: const Text('Modifica immagine del profilo'),
           ),
-          ListTile(
-            leading: const GIcon(CupertinoIcons.link),
-            title: const Text('Link del profilo'),
-            trailing: const GIcon(CupertinoIcons.chevron_right, size: 17),
-            onTap: () => open(c, const ProfileLinks()),
-          ),
-          ListTile(
-            leading: const GIcon(CupertinoIcons.square_grid_2x2),
-            title: const Text('Riordina griglia'),
-            trailing: const GIcon(CupertinoIcons.chevron_right, size: 17),
-            onTap: () => open(c, const GridOrder()),
-          ),
-          const SizedBox(height: 16),
-          Divider(height: 1, color: Theme.of(c).dividerColor),
-          for (final e in {
-            'name': 'Nome',
-            'username': 'Nome utente',
-            'pronouns': 'Pronomi',
-            'bio': 'Biografia',
-          }.entries)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: 96,
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 20, right: 10),
-                      child: Text(
-                        e.value,
-                        style: const TextStyle(fontSize: 15),
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: TextField(
-                      key: ValueKey('edit-profile-${e.key}'),
-                      controller: fields[e.key],
-                      minLines: 1,
-                      maxLines: e.key == 'bio'
-                          ? 5
-                          : e.key == 'website'
-                          ? 2
-                          : 1,
-                      maxLength: e.key == 'bio'
-                          ? 150
-                          : e.key == 'username'
-                          ? 30
-                          : e.key == 'pronouns'
-                          ? 40
-                          : e.key == 'website'
-                          ? 200
-                          : 60,
-                      keyboardType: e.key == 'website'
-                          ? TextInputType.url
-                          : TextInputType.text,
-                      textCapitalization: ['name', 'bio'].contains(e.key)
-                          ? TextCapitalization.sentences
-                          : TextCapitalization.none,
-                      style: const TextStyle(fontSize: 15, height: 1.4),
-                      decoration: InputDecoration(
-                        hintText: e.key == 'website'
-                            ? 'Aggiungi link https://'
-                            : e.value,
-                        hintStyle: const TextStyle(color: muted),
-                        counterText: '',
-                        contentPadding: const EdgeInsets.symmetric(
-                          vertical: 20,
-                        ),
-                        enabledBorder: UnderlineInputBorder(
-                          borderSide: BorderSide(
-                            color: Theme.of(c).dividerColor,
-                            width: .6,
-                          ),
-                        ),
-                        focusedBorder: const UnderlineInputBorder(
-                          borderSide: BorderSide(color: violet, width: 1),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-            title: Row(
+          const SizedBox(height: 8),
+          AuraPanel(
+            radius: 18,
+            child: Column(
               children: [
-                const SizedBox(
-                  width: 96,
-                  child: Text('Genere', style: TextStyle(fontSize: 15)),
+                ListTile(
+                  leading: const GIcon(CupertinoIcons.link),
+                  title: const Text('Link del profilo'),
+                  trailing: const GIcon(CupertinoIcons.chevron_right, size: 17),
+                  onTap: () => open(c, const ProfileLinks()),
                 ),
-                Expanded(
-                  child: Text(
-                    fields['gender']!.text.isEmpty
-                        ? 'Non specificato'
-                        : fields['gender']!.text,
-                    style: const TextStyle(fontSize: 15),
-                  ),
+                ListTile(
+                  leading: const GIcon(CupertinoIcons.square_grid_2x2),
+                  title: const Text('Riordina griglia'),
+                  trailing: const GIcon(CupertinoIcons.chevron_right, size: 17),
+                  onTap: () => open(c, const GridOrder()),
                 ),
               ],
             ),
-            trailing: const GIcon(
-              CupertinoIcons.chevron_right,
-              size: 17,
-              color: muted,
+          ),
+          const SizedBox(height: 22),
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 10),
+            child: Text(
+              'Informazioni del profilo',
+              style: Theme.of(c).textTheme.titleSmall,
             ),
-            onTap: () => sheet(
-              c,
-              Builder(
-                builder: (menu) => Column(
-                  children: [
-                    for (final gender in [
-                      'Uomo',
-                      'Donna',
-                      'Non binario',
-                      'Preferisco non specificarlo',
-                    ])
-                      ListTile(
-                        title: Text(gender),
-                        trailing: fields['gender']!.text == gender
-                            ? const GIcon(
-                                CupertinoIcons.check_mark,
-                                color: violet,
-                              )
-                            : null,
-                        onTap: () {
-                          setState(() => fields['gender']!.text = gender);
-                          Navigator.pop(menu);
-                        },
-                      ),
-                  ],
+          ),
+          for (final field in const [
+            (key: 'name', label: 'Nome', max: 60),
+            (key: 'username', label: 'Nome utente', max: 30),
+            (key: 'pronouns', label: 'Pronomi', max: 40),
+            (key: 'bio', label: 'Biografia', max: 150),
+          ])
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: TextField(
+                key: ValueKey('edit-profile-${field.key}'),
+                controller: fields[field.key],
+                minLines: field.key == 'bio' ? 2 : 1,
+                maxLines: field.key == 'bio' ? 5 : 1,
+                maxLength: field.max,
+                textCapitalization: ['name', 'bio'].contains(field.key)
+                    ? TextCapitalization.sentences
+                    : TextCapitalization.none,
+                style: const TextStyle(fontSize: 15, height: 1.4),
+                decoration: InputDecoration(
+                  labelText: field.label,
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
+                  counterText: '',
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 15,
+                  ),
+                ),
+              ),
+            ),
+          AuraPanel(
+            radius: 18,
+            child: ListTile(
+              title: const Text('Genere'),
+              subtitle: Text(
+                fields['gender']!.text.isEmpty
+                    ? 'Non specificato'
+                    : fields['gender']!.text,
+              ),
+              trailing: const GIcon(
+                CupertinoIcons.chevron_right,
+                size: 17,
+                color: muted,
+              ),
+              onTap: () => sheet(
+                c,
+                Builder(
+                  builder: (menu) => Column(
+                    children: [
+                      for (final gender in [
+                        'Uomo',
+                        'Donna',
+                        'Non binario',
+                        'Preferisco non specificarlo',
+                      ])
+                        ListTile(
+                          title: Text(gender),
+                          trailing: fields['gender']!.text == gender
+                              ? const GIcon(
+                                  CupertinoIcons.check_mark,
+                                  color: violet,
+                                )
+                              : null,
+                          onTap: () {
+                            setState(() => fields['gender']!.text = gender);
+                            Navigator.pop(menu);
+                          },
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
           const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: EdgeInsets.symmetric(horizontal: 4, vertical: 12),
             child: Text(
               'Il genere non viene mostrato nel profilo pubblico.',
               style: TextStyle(color: muted, fontSize: 12),

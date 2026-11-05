@@ -197,9 +197,9 @@ BoxDecoration auraPanelDecoration(
     ),
     boxShadow: [
       BoxShadow(
-        color: dark ? const Color(0x4d000000) : const Color(0x20000000),
-        blurRadius: 19,
-        offset: const Offset(0, 7),
+        color: dark ? const Color(0x4d000000) : const Color(0x14000000),
+        blurRadius: 15,
+        offset: const Offset(0, 4),
       ),
     ],
   );

@@ -66,13 +66,9 @@ void main() {
             image.dispose();
           });
         }
-        await t.tap(find.byKey(const ValueKey('feed-filter-title')));
-        await t.pumpAndSettle();
         await t.tap(find.text('Seguiti'));
         await t.pumpAndSettle();
         expect(find.text('Seguiti'), findsOneWidget);
-        await t.tap(find.byKey(const ValueKey('feed-filter-title')));
-        await t.pumpAndSettle();
         await t.tap(find.text('Per te'));
         await t.pumpAndSettle();
         await t.tap(find.byTooltip('Messaggi').last);
