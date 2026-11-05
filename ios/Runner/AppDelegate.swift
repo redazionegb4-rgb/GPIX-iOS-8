@@ -122,12 +122,12 @@ private final class InstantPrivacyBridge: NSObject {
     if secure { channel.invokeMethod("captured", arguments: nil) }
   }
   @objc private func sceneWillDeactivate() {
-    updateCover(forceHide: true)
+    applyCover(forceHide: true)
   }
   @objc private func updateCover() {
-    updateCover(forceHide: false)
+    applyCover(forceHide: false)
   }
-  private func updateCover(forceHide: Bool) {
+  private func applyCover(forceHide: Bool) {
     let scene = controller?.viewIfLoaded?.window?.windowScene
     let hide = secure && (forceHide || UIScreen.main.isCaptured || scene?.activationState != .foregroundActive)
     if hide, cover == nil, let view = controller?.view {
