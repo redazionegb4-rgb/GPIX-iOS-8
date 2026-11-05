@@ -321,7 +321,7 @@ class _LiveRoomState extends State<LiveRoom> with WidgetsBindingObserver {
         if (!didPop) finish();
       },
       child: Scaffold(
-        backgroundColor: const Color(0xff17243c),
+        backgroundColor: Colors.black,
         body: SafeArea(
           child: Stack(
             children: [

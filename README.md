@@ -1,8 +1,8 @@
-# GPIX Aura Glass · 2.24.0 build 47
+# GPIX Aura Glass · 2.24.0 build 48
 
 Progetto Flutter di GPIX per iOS e Android. Include il codice Dart, gli asset, i progetti nativi e i test.
 
-Aura Glass usa superfici azzurro ghiaccio, bordi luminosi e accenti blu e lilla. Il Feed ha il marchio GPIX nell’intestazione, con accesso ad Attività, Messaggi e ai filtri Per te e Seguiti. La barra fluttuante raccoglie Home, Cerca, Crea, Reel e Profilo. Il tema chiaro è predefinito per le nuove installazioni. Le preferenze di aspetto già salvate continuano a essere applicate.
+Aura Glass abbina il Feed Livelli alle Storie e alla barra Incastro. Il Feed mostra l’autore sopra la foto e le azioni in una capsula separata. Le Storie hanno miniature quadrate arrotondate. La barra flottante ha un incavo centrale e il pulsante Crea rialzato. Il tema condiviso usa bianco puro in chiaro e nero puro in scuro, con superfici neutre e accenti blu. Le preferenze di aspetto salvate continuano a essere applicate.
 
 ## Verifica locale
 
@@ -22,4 +22,4 @@ Su una macchina configurata con Android SDK, esegui `bash build-android.sh` dall
 
 ## iOS e Xcode Cloud
 
-Apri `GPIX.xcworkspace` e seleziona lo schema Runner. Usa il Team e il bundle ID esistenti. Per Xcode Cloud, aggiorna il repository con il contenuto della cartella GPIX e mantieni i punti di ingresso `ci_scripts` e `ios/ci_scripts`. Il bootstrap prepara Flutter 3.38.9 e CocoaPods. Per TestFlight, usa 47 come prossimo numero di build Cloud, oppure un numero superiore se 47 è già stato caricato su App Store Connect. Per la build locale serve macOS con Xcode e CocoaPods.
+Apri `GPIX.xcworkspace` e seleziona lo schema Runner. Usa il Team e il bundle ID esistenti. Per Xcode Cloud, aggiorna il repository con il contenuto della cartella GPIX e mantieni i punti di ingresso `ci_scripts` e `ios/ci_scripts`. Il bootstrap prepara Flutter 3.38.9 e CocoaPods. Per TestFlight, usa 48 come prossimo numero di build Cloud, oppure un numero superiore se 48 è già stato caricato su App Store Connect. Per la build locale serve macOS con Xcode e CocoaPods.

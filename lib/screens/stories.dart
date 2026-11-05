@@ -403,7 +403,7 @@ class _StoryViewerState extends State<StoryViewer>
         segments = ids.where((id) => s.post(id).str('author') == uid).toList(),
         segment = segments.indexOf(p.str('id'));
     return Scaffold(
-      backgroundColor: const Color(0xff090e12),
+      backgroundColor: Colors.black,
       body: SafeArea(
         child: Column(
           children: [
@@ -1019,7 +1019,7 @@ class _ComposerState extends State<Composer> {
         }),
       );
     return Scaffold(
-      backgroundColor: story ? const Color(0xff17243c) : Colors.transparent,
+      backgroundColor: story ? Colors.black : Colors.transparent,
       appBar: story
           ? null
           : AppBar(

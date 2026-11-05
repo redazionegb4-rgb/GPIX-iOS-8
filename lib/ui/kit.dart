@@ -11,9 +11,9 @@ import '../core/store.dart';
 const violet = Color(0xff6d28d9),
     auraBlue = Color(0xff2563eb),
     ink = Color(0xff101828),
-    muted = Color(0xff596782),
-    soft = Color(0xffeaf1ff),
-    line = Color(0xffdce7fb),
+    muted = Color(0xff767676),
+    soft = Color(0xfff3f3f4),
+    line = Color(0xffe5e5e7),
     danger = Color(0xffe33958);
 
 const auraAction = LinearGradient(
@@ -27,13 +27,13 @@ ThemeData gpixTheme(Brightness brightness) {
   final fontFamily = defaultTargetPlatform == TargetPlatform.iOS
       ? null
       : 'Roboto';
-  final canvas = dark ? const Color(0xff17243c) : const Color(0xfff3f8ff);
+  final canvas = dark ? Colors.black : Colors.white;
   final scheme = ColorScheme.fromSeed(
     seedColor: auraBlue,
     brightness: brightness,
-    surface: dark ? const Color(0xff223250) : Colors.white,
-    onSurface: dark ? const Color(0xfff1f6ff) : ink,
-    onSurfaceVariant: dark ? const Color(0xffb9c9e5) : muted,
+    surface: dark ? const Color(0xff161616) : Colors.white,
+    onSurface: dark ? const Color(0xfffafafa) : ink,
+    onSurfaceVariant: dark ? const Color(0xffbdbdbd) : muted,
     primary: dark ? const Color(0xffa9c7ff) : const Color(0xff1d54c5),
     onPrimary: dark ? ink : Colors.white,
     primaryContainer: dark ? const Color(0xff334c79) : const Color(0xffd5e7ff),
@@ -41,8 +41,16 @@ ThemeData gpixTheme(Brightness brightness) {
         ? const Color(0xffe6efff)
         : const Color(0xff113879),
     secondary: dark ? const Color(0xffc4b5fd) : violet,
-    surfaceContainerHighest: dark ? const Color(0xff2b3c60) : soft,
-    outlineVariant: dark ? const Color(0xff485b81) : line,
+    surfaceContainerLowest: canvas,
+    surfaceContainerLow: dark
+        ? const Color(0xff101010)
+        : const Color(0xfffafafa),
+    surfaceContainer: dark ? const Color(0xff161616) : const Color(0xfff7f7f7),
+    surfaceContainerHigh: dark
+        ? const Color(0xff1b1b1b)
+        : const Color(0xfff5f5f5),
+    surfaceContainerHighest: dark ? const Color(0xff212121) : soft,
+    outlineVariant: dark ? const Color(0xff3b3b3b) : line,
   );
   final rounded = RoundedRectangleBorder(
     borderRadius: BorderRadius.circular(16),
@@ -95,7 +103,7 @@ ThemeData gpixTheme(Brightness brightness) {
     cardTheme: CardThemeData(
       color: scheme.surface,
       surfaceTintColor: Colors.transparent,
-      shadowColor: const Color(0x339686d9),
+      shadowColor: const Color(0x22000000),
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
     ),
@@ -150,6 +158,7 @@ Color foreground(BuildContext c) => Theme.of(c).colorScheme.onSurface;
 Color subdued(BuildContext c) =>
     Theme.of(c).colorScheme.surfaceContainerHighest;
 Color accent(BuildContext c) => Theme.of(c).colorScheme.primary;
+Color secondaryText(BuildContext c) => Theme.of(c).colorScheme.onSurfaceVariant;
 
 class AuraBackdrop extends StatelessWidget {
   const AuraBackdrop({super.key, required this.child});
@@ -157,27 +166,14 @@ class AuraBackdrop extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: dark
-              ? const [Color(0xff243960), Color(0xff19263f), Color(0xff252d51)]
-              : const [Color(0xffeaf7ff), Color(0xfff3f8ff), Color(0xfff2edff)],
-        ),
-      ),
-      child: child,
-    );
-  }
+  Widget build(BuildContext context) =>
+      ColoredBox(color: Theme.of(context).canvasColor, child: child);
 }
 
 LinearGradient crystalGradient(BuildContext c, {bool translucent = false}) {
   final dark = Theme.of(c).brightness == Brightness.dark;
-  final top = dark ? const Color(0xff304369) : Colors.white;
-  final bottom = dark ? const Color(0xff243354) : const Color(0xffeaf0ff);
+  final top = dark ? const Color(0xff333333) : Colors.white;
+  final bottom = dark ? const Color(0xff181818) : const Color(0xffeeeeef);
   return LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
@@ -201,7 +197,7 @@ BoxDecoration auraPanelDecoration(
     ),
     boxShadow: [
       BoxShadow(
-        color: dark ? const Color(0x340a152c) : const Color(0x279080d9),
+        color: dark ? const Color(0x4d000000) : const Color(0x20000000),
         blurRadius: 19,
         offset: const Offset(0, 7),
       ),
@@ -608,7 +604,7 @@ class MediaView extends StatelessWidget {
 class Avatar extends StatelessWidget {
   final String user;
   final double size;
-  final bool ring, viewed;
+  final bool ring, viewed, roundedSquare;
   final String? image;
   const Avatar(
     this.user, {
@@ -616,23 +612,26 @@ class Avatar extends StatelessWidget {
     this.size = 42,
     this.ring = false,
     this.viewed = false,
+    this.roundedSquare = false,
     this.image,
   });
   @override
   Widget build(BuildContext c) {
     final s = GpixScope.of(c);
-    final picture = ClipOval(
-      child: SizedBox.square(
-        dimension: size,
-        child: MediaView(image ?? s.user(user).str('avatar')),
-      ),
+    final imageView = SizedBox.square(
+      dimension: size,
+      child: MediaView(image ?? s.user(user).str('avatar')),
     );
+    final picture = roundedSquare
+        ? ClipRRect(borderRadius: BorderRadius.circular(14), child: imageView)
+        : ClipOval(child: imageView);
     if (!ring) return picture;
     return Container(
       padding: const EdgeInsets.all(2.3),
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: viewed || s.closeStory(user)
+        shape: roundedSquare ? BoxShape.rectangle : BoxShape.circle,
+        borderRadius: roundedSquare ? BorderRadius.circular(19) : null,
+        gradient: roundedSquare || viewed || s.closeStory(user)
             ? null
             : const SweepGradient(
                 colors: [
@@ -647,11 +646,17 @@ class Avatar extends StatelessWidget {
             ? const Color(0xff25bd61)
             : viewed
             ? foreground(c).withValues(alpha: .15)
+            : roundedSquare
+            ? auraBlue
             : null,
       ),
       child: Container(
         padding: const EdgeInsets.all(2.8),
-        decoration: BoxDecoration(shape: BoxShape.circle, color: surface(c)),
+        decoration: BoxDecoration(
+          shape: roundedSquare ? BoxShape.rectangle : BoxShape.circle,
+          borderRadius: roundedSquare ? BorderRadius.circular(17) : null,
+          color: Theme.of(c).canvasColor,
+        ),
         child: picture,
       ),
     );

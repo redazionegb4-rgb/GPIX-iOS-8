@@ -68,7 +68,7 @@ class IncomingCall extends StatelessWidget {
           child: SafeArea(
             child: Material(
               elevation: 10,
-              color: const Color(0xff263b62),
+              color: const Color(0xff202020),
               borderRadius: BorderRadius.circular(20),
               child: Padding(
                 padding: const EdgeInsets.all(14),
@@ -463,7 +463,7 @@ class _CallScreenState extends State<CallScreen> {
         if (!didPop) hangup();
       },
       child: Scaffold(
-        backgroundColor: const Color(0xff243960),
+        backgroundColor: Colors.black,
         body: SafeArea(
           child: Stack(
             children: [

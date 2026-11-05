@@ -79,78 +79,82 @@ class _HomeShellState extends State<HomeShell> {
             width: compact
                 ? (MediaQuery.sizeOf(c).width - 68).clamp(258.0, 480.0)
                 : (MediaQuery.sizeOf(c).width - 24).clamp(258.0, 520.0),
-            height: compact ? 58 : 68,
-            child: AuraPanel(
-              radius: 24,
-              frosted: true,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                child: Row(
-                  children: [
-                    nav(
-                      CupertinoIcons.house,
-                      CupertinoIcons.house_fill,
-                      0,
-                      'Home',
-                    ),
-                    nav(
-                      CupertinoIcons.search,
-                      CupertinoIcons.search,
-                      1,
-                      'Cerca',
-                    ),
-                    Expanded(
-                      child: Center(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: auraAction,
-                            borderRadius: BorderRadius.circular(15),
-                            border: Border.all(color: const Color(0x55ffffff)),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Color(0x555f4be8),
-                                blurRadius: 12,
-                                offset: Offset(0, 4),
-                              ),
-                            ],
+            height: compact ? 64 : 74,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  top: 14,
+                  child: PhysicalShape(
+                    color: Colors.transparent,
+                    elevation: 7,
+                    shadowColor: Colors.black38,
+                    clipBehavior: Clip.antiAlias,
+                    clipper: const _IncastroDockClipper(),
+                    child: AuraPanel(
+                      radius: 26,
+                      frosted: true,
+                      child: Row(
+                        children: [
+                          nav(
+                            CupertinoIcons.house,
+                            CupertinoIcons.house_fill,
+                            0,
+                            'Home',
                           ),
-                          child: IconButton(
-                            tooltip: 'Crea',
-                            constraints: const BoxConstraints.tightFor(
-                              width: 48,
-                              height: 48,
-                            ),
-                            style: IconButton.styleFrom(
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                            ),
-                            onPressed: () => createMenu(c),
-                            icon: const GIcon(
-                              CupertinoIcons.plus,
-                              size: 26,
-                              color: Colors.white,
-                            ),
+                          nav(
+                            CupertinoIcons.search,
+                            CupertinoIcons.search,
+                            1,
+                            'Cerca',
                           ),
-                        ),
+                          const SizedBox(width: 54),
+                          nav(
+                            CupertinoIcons.play_rectangle,
+                            CupertinoIcons.play_rectangle_fill,
+                            2,
+                            'Reel',
+                          ),
+                          nav(
+                            CupertinoIcons.person,
+                            CupertinoIcons.person_fill,
+                            3,
+                            'Profilo',
+                          ),
+                        ],
                       ),
                     ),
-                    nav(
-                      CupertinoIcons.play_rectangle,
-                      CupertinoIcons.play_rectangle_fill,
-                      2,
-                      'Reel',
-                    ),
-                    nav(
-                      CupertinoIcons.person,
-                      CupertinoIcons.person_fill,
-                      3,
-                      'Profilo',
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+                Align(
+                  alignment: Alignment.topCenter,
+                  child: DecoratedBox(
+                    decoration: const BoxDecoration(
+                      color: auraBlue,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color(0x662563eb),
+                          blurRadius: 10,
+                          offset: Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: IconButton(
+                      tooltip: 'Crea',
+                      constraints: const BoxConstraints.tightFor(
+                        width: 48,
+                        height: 48,
+                      ),
+                      onPressed: () => createMenu(c),
+                      icon: const GIcon(
+                        CupertinoIcons.plus,
+                        size: 26,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -167,9 +171,7 @@ class _HomeShellState extends State<HomeShell> {
           child: IconButton(
             tooltip: label,
             style: IconButton.styleFrom(
-              backgroundColor: selected
-                  ? Theme.of(context).colorScheme.primaryContainer
-                  : Colors.transparent,
+              backgroundColor: Colors.transparent,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(15),
               ),
@@ -193,6 +195,26 @@ class _HomeShellState extends State<HomeShell> {
       ),
     );
   }
+}
+
+class _IncastroDockClipper extends CustomClipper<Path> {
+  const _IncastroDockClipper();
+
+  @override
+  Path getClip(Size size) {
+    final dock = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(26)),
+      );
+    final notch = Path()
+      ..addOval(
+        Rect.fromCircle(center: Offset(size.width / 2, 10), radius: 28),
+      );
+    return Path.combine(PathOperation.difference, dock, notch);
+  }
+
+  @override
+  bool shouldReclip(_IncastroDockClipper oldClipper) => false;
 }
 
 class Feed extends StatefulWidget {
@@ -298,6 +320,7 @@ class _FeedState extends State<Feed> {
                 const Text(
                   'GPIX',
                   style: TextStyle(
+                    color: auraBlue,
                     fontSize: 30,
                     fontWeight: FontWeight.w900,
                     letterSpacing: -1.15,
@@ -472,15 +495,6 @@ class _StoryTrayState extends State<StoryTray> {
           height:
               124 +
               (MediaQuery.textScalerOf(c).scale(12) - 12).clamp(0.0, 32.0),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                const Color(0xffc4b5fd).withValues(alpha: .24),
-                const Color(0xff67e8f9).withValues(alpha: .24),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(26),
-          ),
           margin: const EdgeInsets.fromLTRB(10, 4, 10, 6),
           child: ListView.separated(
             key: const ValueKey('stories-strip'),
@@ -511,6 +525,7 @@ class _StoryTrayState extends State<StoryTray> {
                         children: [
                           Avatar(
                             uid,
+                            roundedSquare: true,
                             size: ((MediaQuery.sizeOf(c).width - 52) / 4 - 13)
                                 .clamp(54.0, 72.0),
                             ring: stories.isNotEmpty || i == 0,
@@ -534,7 +549,7 @@ class _StoryTrayState extends State<StoryTray> {
                                   width: 30,
                                   height: 30,
                                   decoration: BoxDecoration(
-                                    gradient: auraAction,
+                                    color: auraBlue,
                                     shape: BoxShape.circle,
                                     border: Border.all(
                                       color: surface(c),
@@ -556,7 +571,10 @@ class _StoryTrayState extends State<StoryTray> {
                         i == 0 ? 'La tua storia' : s.user(uid).str('username'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 11.5, color: muted),
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: secondaryText(c),
+                        ),
                       ),
                     ],
                   ),
@@ -614,8 +632,53 @@ class _PostCardState extends State<PostCard>
         u = s.user(uid),
         media = s.media(p),
         liked = p.ids('likes').contains(s.myId);
-    return AuraPanel(
-      margin: const EdgeInsets.fromLTRB(12, 5, 12, 11),
+    final menu = IconButton(
+      tooltip: 'Opzioni del post',
+      icon: const GIcon(CupertinoIcons.ellipsis, size: 22),
+      onPressed: () => postMenu(c, p),
+    );
+    final author = AuraPanel(
+      radius: 27,
+      frosted: media.isNotEmpty,
+      child: InkWell(
+        onTap: () => open(c, Profile(user: uid)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 5, 12, 5),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Avatar(uid, size: 34),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      u.str('username'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      relative(p['created']),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 11, color: secondaryText(c)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 5, 12, 13),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -635,87 +698,18 @@ class _PostCardState extends State<PostCard>
                 ],
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 11, 8, 10),
-            child: Row(
+          if (media.isEmpty)
+            Row(
               children: [
-                InkWell(
-                  onTap: () => open(c, Profile(user: uid)),
-                  child: Avatar(uid, size: 37),
-                ),
-                const SizedBox(width: 10),
                 Expanded(
-                  child: InkWell(
-                    onTap: () => open(c, Profile(user: uid)),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          u.str('username'),
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        if (p.str('location').isEmpty &&
-                            uid != s.myId &&
-                            !s.follows(uid)) ...[
-                          const SizedBox(height: 2),
-                          const Text(
-                            'Suggeriti per te',
-                            style: TextStyle(fontSize: 11.5),
-                          ),
-                        ],
-                        if (p.str('location').isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            p.str('location'),
-                            style: const TextStyle(fontSize: 10.5),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
+                  child: Align(alignment: Alignment.centerLeft, child: author),
                 ),
-                if (uid != s.myId && !s.follows(uid))
-                  Padding(
-                    padding: const EdgeInsets.only(left: 6, right: 3),
-                    child: TextButton(
-                      key: ValueKey('feed-follow-$uid-${widget.id}'),
-                      onPressed: () => perform(
-                        c,
-                        () => s.act('follow', {'user': uid, 'enabled': true}),
-                      ),
-                      style: TextButton.styleFrom(
-                        backgroundColor: subdued(c),
-                        foregroundColor: foreground(c),
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        minimumSize: const Size(68, 34),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(9),
-                        ),
-                      ),
-                      child: const Text(
-                        'Segui',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                IconButton(
-                  tooltip: 'Opzioni del post',
-                  icon: const GIcon(CupertinoIcons.ellipsis, size: 22),
-                  onPressed: () => postMenu(c, p),
-                ),
+                menu,
               ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 7),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
+            )
+          else
+            ClipRRect(
+              borderRadius: BorderRadius.circular(19),
               child: GestureDetector(
                 onDoubleTap: () => like(c, p, force: true),
                 child: AspectRatio(
@@ -726,21 +720,20 @@ class _PostCardState extends State<PostCard>
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      if (media.isNotEmpty)
-                        PageView.builder(
-                          key: PageStorageKey('media-${widget.id}'),
-                          itemCount: media.length,
-                          onPageChanged: (i) => setState(() => page = i),
-                          itemBuilder: (c, i) => InteractiveViewer(
-                            minScale: 1,
-                            maxScale: 3,
-                            child: MediaView(media[i]),
-                          ),
+                      PageView.builder(
+                        key: PageStorageKey('media-${widget.id}'),
+                        itemCount: media.length,
+                        onPageChanged: (i) => setState(() => page = i),
+                        itemBuilder: (c, i) => InteractiveViewer(
+                          minScale: 1,
+                          maxScale: 3,
+                          child: MediaView(media[i]),
                         ),
+                      ),
                       if (media.length > 1)
                         Positioned(
-                          top: 13,
-                          right: 13,
+                          bottom: 10,
+                          right: 10,
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 9,
@@ -759,6 +752,24 @@ class _PostCardState extends State<PostCard>
                             ),
                           ),
                         ),
+                      Positioned(
+                        top: 9,
+                        left: 9,
+                        right: 62,
+                        child: Align(
+                          alignment: Alignment.topLeft,
+                          child: author,
+                        ),
+                      ),
+                      Positioned(
+                        top: 7,
+                        right: 7,
+                        child: AuraPanel(
+                          radius: 24,
+                          frosted: true,
+                          child: menu,
+                        ),
+                      ),
                       IgnorePointer(
                         child: AnimatedBuilder(
                           animation: heart,
@@ -790,9 +801,9 @@ class _PostCardState extends State<PostCard>
                 ),
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 3, 4, 0),
+          AuraPanel(
+            margin: const EdgeInsets.fromLTRB(5, 7, 5, 8),
+            radius: 28,
             child: Stack(
               alignment: Alignment.center,
               children: [
@@ -882,6 +893,33 @@ class _PostCardState extends State<PostCard>
               ],
             ),
           ),
+          if (uid != s.myId && !s.follows(uid))
+            Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 6, right: 3),
+                child: TextButton(
+                  key: ValueKey('feed-follow-$uid-${widget.id}'),
+                  onPressed: () => perform(
+                    c,
+                    () => s.act('follow', {'user': uid, 'enabled': true}),
+                  ),
+                  style: TextButton.styleFrom(
+                    backgroundColor: subdued(c),
+                    foregroundColor: foreground(c),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    minimumSize: const Size(68, 34),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                  ),
+                  child: const Text(
+                    'Segui',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ),
           PostExtras(post: p),
           Padding(
             padding: const EdgeInsets.fromLTRB(15, 0, 15, 15),
@@ -922,15 +960,17 @@ class _PostCardState extends State<PostCard>
                       p.rows('comments').isEmpty
                           ? 'Aggiungi un commento…'
                           : 'Visualizza tutti i ${p.rows('comments').length} commenti',
-                      style: const TextStyle(fontSize: 12.5, color: muted),
+                      style: TextStyle(fontSize: 12.5, color: secondaryText(c)),
                     ),
                   ),
                 ],
-                const SizedBox(height: 7),
-                Text(
-                  relative(p['created']),
-                  style: const TextStyle(fontSize: 10.5, color: muted),
-                ),
+                if (p.str('location').isNotEmpty) ...[
+                  const SizedBox(height: 7),
+                  Text(
+                    p.str('location'),
+                    style: TextStyle(fontSize: 10.5, color: secondaryText(c)),
+                  ),
+                ],
               ],
             ),
           ),

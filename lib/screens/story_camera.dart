@@ -278,7 +278,7 @@ class _StoryCameraState extends State<StoryCamera> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    backgroundColor: const Color(0xff17243c),
+    backgroundColor: Colors.black,
     body: SafeArea(
       child: Column(
         children: [

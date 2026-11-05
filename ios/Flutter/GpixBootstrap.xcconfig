@@ -1,4 +1,4 @@
 // Defaults for opening the project without local Flutter. Cloud generates the real configuration.
 FLUTTER_BUILD_NAME = 2.24.0
-FLUTTER_BUILD_NUMBER = 47
+FLUTTER_BUILD_NUMBER = 48
 FLUTTER_TARGET = lib/main.dart

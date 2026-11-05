@@ -165,7 +165,7 @@ void main() {
     await t.pumpAndSettle();
     final small = t.getSize(bar);
     expect(small.width, lessThan(full.width));
-    expect(small.height, 58);
+    expect(small.height, 64);
     await t.dragFrom(const Offset(190, 350), const Offset(0, 130));
     await t.pumpAndSettle();
     expect(t.getSize(bar), full);
