@@ -3,23 +3,20 @@ import UIKit
 import Photos
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var gallery: PhotoGalleryBridge?
   private var instantPrivacy: InstantPrivacyBridge?
-  override func application(
-    _ application: UIApplication,
-    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
-  ) -> Bool {
-    GeneratedPluginRegistrant.register(with: self)
-    let launched = super.application(application, didFinishLaunchingWithOptions: launchOptions)
-    if let controller = window?.rootViewController as? FlutterViewController {
-      gallery = PhotoGalleryBridge(messenger: controller.binaryMessenger)
-      instantPrivacy = InstantPrivacyBridge(controller: controller)
-      if let registrar = registrar(forPlugin: "GPIXSecurePhoto") {
-        registrar.register(SecurePhotoFactory(), withId: "GPIX/secure-photo")
-      }
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    let registry = engineBridge.pluginRegistry
+    GeneratedPluginRegistrant.register(with: registry)
+
+    let messenger = engineBridge.applicationRegistrar.messenger()
+    gallery = PhotoGalleryBridge(messenger: messenger)
+    instantPrivacy = InstantPrivacyBridge(messenger: messenger)
+    if let registrar = registry.registrar(forPlugin: "GPIXSecurePhoto") {
+      registrar.register(SecurePhotoFactory(), withId: "GPIX/secure-photo")
     }
-    return launched
   }
 }
 
@@ -84,35 +81,49 @@ private final class PhotoGalleryBridge {
 // validate on each supported iOS release; fail closed if its canvas is unavailable.
 private final class InstantPrivacyBridge: NSObject {
   private let channel: FlutterMethodChannel
-  private weak var controller: FlutterViewController?
+  private var sceneWindow: UIWindow? {
+    UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .flatMap { $0.windows }
+      .first(where: { $0.isKeyWindow })
+  }
   private var secure = false
   private var cover: UIView?
-  init(controller: FlutterViewController) {
-    self.controller = controller
-    channel = FlutterMethodChannel(name: "GPIX/privacy", binaryMessenger: controller.binaryMessenger)
+  init(messenger: FlutterBinaryMessenger) {
+    channel = FlutterMethodChannel(name: "GPIX/privacy", binaryMessenger: messenger)
     super.init()
     channel.setMethodCallHandler { [weak self] call, result in
       guard let self = self else { return }
       guard call.method == "secure" else { result(FlutterMethodNotImplemented); return }
       self.secure = (call.arguments as? Bool) == true
       self.updateCover()
-      result(!self.secure || (!UIScreen.main.isCaptured && SecurePhotoSurface.available()))
+      let screen = self.sceneWindow?.windowScene?.screen
+      result(!self.secure || (screen?.isCaptured == false && SecurePhotoSurface.available()))
     }
     NotificationCenter.default.addObserver(self, selector: #selector(captureChanged), name: UIScreen.capturedDidChangeNotification, object: nil)
-    NotificationCenter.default.addObserver(self, selector: #selector(updateCover), name: UIApplication.willResignActiveNotification, object: nil)
-    NotificationCenter.default.addObserver(self, selector: #selector(updateCover), name: UIApplication.didBecomeActiveNotification, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(sceneWillDeactivate), name: UIScene.willDeactivateNotification, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(updateCover), name: UIScene.didActivateNotification, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(screenshot), name: UIApplication.userDidTakeScreenshotNotification, object: nil)
   }
   @objc private func captureChanged() {
     updateCover()
-    if secure && UIScreen.main.isCaptured { channel.invokeMethod("captured", arguments: nil) }
+    if secure && sceneWindow?.windowScene?.screen.isCaptured == true {
+      channel.invokeMethod("captured", arguments: nil)
+    }
   }
   @objc private func screenshot() {
     if secure { channel.invokeMethod("captured", arguments: nil) }
   }
+  @objc private func sceneWillDeactivate() {
+    updateCover(inactive: true)
+  }
   @objc private func updateCover() {
-    let hide = secure && (UIScreen.main.isCaptured || UIApplication.shared.applicationState != .active)
-    if hide, cover == nil, let view = controller?.view {
+    updateCover(inactive: sceneWindow?.windowScene?.activationState != .foregroundActive)
+  }
+  private func updateCover(inactive: Bool) {
+    let window = sceneWindow
+    let hide = secure && (inactive || window?.windowScene?.screen.isCaptured != false)
+    if hide, cover == nil, let view = window?.rootViewController?.view {
       let overlay = UIView(frame: view.bounds); overlay.backgroundColor = .black
       overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
       view.addSubview(overlay); cover = overlay
@@ -155,7 +166,7 @@ private final class SecurePhotoSurface: NSObject, FlutterPlatformView {
     canvas.addSubview(photo)
     if !UIScreen.main.isCaptured, UIApplication.shared.applicationState == .active, let data = data { photo.image = UIImage(data: data) }
     NotificationCenter.default.addObserver(self, selector: #selector(hide), name: UIScreen.capturedDidChangeNotification, object: nil)
-    NotificationCenter.default.addObserver(self, selector: #selector(hide), name: UIApplication.willResignActiveNotification, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(hide), name: UIScene.willDeactivateNotification, object: nil)
   }
   @objc private func hide() { photo.image = nil }
   func view() -> UIView { container }
