@@ -1,443 +1,90 @@
-import SwiftUI
+import UIKit
 import AVFoundation
-@MainActor
-struct StoryViewer:View{
-    @EnvironmentObject var store:GpixStore
-    @Environment(\.dismiss) var dismiss
-    let userID:String
-    var postIDs:[String]?=nil
-    @State private var index=0
-    @State private var progress=0.0
-    @State private var text=""
-    @State private var viewers=false
-    @State private var audio:AVPlayer?
-    let timer=Timer.publish(every:0.05,on:.main,in:.common).autoconnect()
-    var stories:[Row]{
-        postIDs.map{
-            $0.map{
-                store.post($0)
-            }
-            .filter{
-                !$0.isEmpty
-            }
-        }
-        ?? store.visibleStories(userID)
+
+@MainActor final class StoryViewer: Screen, UITextFieldDelegate, UIGestureRecognizerDelegate {
+    private let stories:[Entity]
+    private var index=0,timer:Timer?,elapsed:Double=0,holding=false
+    private var audio:AVPlayer?
+    private let image=PhotoView(frame:.zero),caption=Design.label("",size:25,weight:.bold,color:.white,lines:0),name=Design.label("",size:14,weight:.bold,color:.white),segments=Design.stack(.horizontal,spacing:4)
+    private let reply=Design.field("Rispondi alla storia…"),heart=UIButton(type:.system),link=UIButton(type:.system),views=UIButton(type:.system)
+    private var bars:[UIProgressView]=[]
+    init(stories: [Entity], startAt: Int = 0) {
+        self.stories = stories
+        self.index = stories.indices.contains(startAt) ? startAt : 0
+        super.init(nibName: nil, bundle: nil)
+        modalPresentationStyle = .fullScreen
     }
-    var story:Row{
-        stories.indices.contains(index) ? stories[index]:[:]
+    required init?(coder:NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func viewDidLoad() {
+        super.viewDidLoad();view.backgroundColor = .black;image.contentMode = .scaleAspectFit;image.backgroundColor = .black;image.clipsToBounds=true;image.layer.cornerRadius=18;view.addSubview(image);image.translatesAutoresizingMaskIntoConstraints=false
+        NSLayoutConstraint.activate([image.topAnchor.constraint(equalTo:view.safeAreaLayoutGuide.topAnchor),image.leadingAnchor.constraint(equalTo:view.leadingAnchor),image.trailingAnchor.constraint(equalTo:view.trailingAnchor),image.bottomAnchor.constraint(equalTo:view.keyboardLayoutGuide.topAnchor,constant:-82)])
+        segments.distribution = .fillEqually
+        for _ in stories { let bar=UIProgressView(progressViewStyle:.bar);bar.progressTintColor = .white;bar.trackTintColor=UIColor.white.withAlphaComponent(0.3);segments.addArrangedSubview(bar);bars.append(bar) }
+        let top=Design.stack(spacing:9,views:[segments,Design.stack(.horizontal,views:[name,UIView(),Design.icon("more",color:.white) { [weak self] in self?.options() },Design.icon("xmark",color:.white) { [weak self] in self?.dismiss(animated:true) }])]);view.addSubview(top);top.translatesAutoresizingMaskIntoConstraints=false;NSLayoutConstraint.activate([top.leadingAnchor.constraint(equalTo:view.leadingAnchor,constant:14),top.trailingAnchor.constraint(equalTo:view.trailingAnchor,constant:-14),top.topAnchor.constraint(equalTo:view.safeAreaLayoutGuide.topAnchor,constant:10)])
+        image.addSubview(caption);caption.textAlignment = .center;caption.translatesAutoresizingMaskIntoConstraints=false;NSLayoutConstraint.activate([caption.leadingAnchor.constraint(equalTo:image.leadingAnchor,constant:25),caption.trailingAnchor.constraint(equalTo:image.trailingAnchor,constant:-25),caption.centerYAnchor.constraint(equalTo:image.centerYAnchor)])
+        reply.delegate=self;reply.textColor = .white;reply.backgroundColor=UIColor.white.withAlphaComponent(0.08);reply.layer.cornerRadius=27;reply.layer.borderColor=UIColor.white.withAlphaComponent(0.4).cgColor;reply.layer.borderWidth=1;reply.attributedPlaceholder=NSAttributedString(string:"Rispondi alla storia…",attributes:[.foregroundColor:UIColor.white.withAlphaComponent(0.75)])
+        heart.setImage(UIImage(systemName:"heart",withConfiguration:UIImage.SymbolConfiguration(pointSize:26)),for:.normal);heart.tintColor = .white;heart.widthAnchor.constraint(equalToConstant:44).isActive=true;heart.addAction(UIAction { [weak self] _ in self?.like() },for:.touchUpInside);heart.addGestureRecognizer(UILongPressGestureRecognizer(target:self,action:#selector(reactions(_:))))
+        let footer=Design.stack(.horizontal,spacing:8,views:[reply,Design.icon("send",color:.white) { [weak self] in self?.sendReply() },heart]);footer.alignment = .center;view.addSubview(footer);footer.translatesAutoresizingMaskIntoConstraints=false;NSLayoutConstraint.activate([footer.leadingAnchor.constraint(equalTo:view.leadingAnchor,constant:14),footer.trailingAnchor.constraint(equalTo:view.trailingAnchor,constant:-10),footer.bottomAnchor.constraint(equalTo:view.keyboardLayoutGuide.topAnchor,constant:-14)])
+        views.setTitleColor(.white,for:.normal);views.titleLabel?.font=Design.font(13,.semibold);views.addAction(UIAction { [weak self] _ in guard let self=self,self.stories.indices.contains(self.index) else { return };self.sheet(StoryViewsController(id:self.stories[self.index].id)) },for:.touchUpInside);view.addSubview(views);views.translatesAutoresizingMaskIntoConstraints=false;NSLayoutConstraint.activate([views.leadingAnchor.constraint(equalTo:view.leadingAnchor,constant:24),views.bottomAnchor.constraint(equalTo:footer.topAnchor,constant:-12)])
+        link.setTitle("Apri collegamento ↗",for:.normal);link.backgroundColor=UIColor.black.withAlphaComponent(0.55);link.setTitleColor(.white,for:.normal);link.layer.cornerRadius=14;link.addAction(UIAction { [weak self] _ in guard let self=self else { return };let value=self.current.object("style").text("link");if let url=URL(string:value),url.scheme=="https" { UIApplication.shared.open(url) } },for:.touchUpInside);image.addSubview(link);link.translatesAutoresizingMaskIntoConstraints=false;NSLayoutConstraint.activate([link.centerXAnchor.constraint(equalTo:image.centerXAnchor),link.bottomAnchor.constraint(equalTo:image.bottomAnchor,constant:-25),link.widthAnchor.constraint(equalToConstant:220),link.heightAnchor.constraint(equalToConstant:44)])
+        image.isUserInteractionEnabled=true;let tap=UITapGestureRecognizer(target:self,action:#selector(tapped(_:)));tap.delegate=self;image.addGestureRecognizer(tap);let hold=UILongPressGestureRecognizer(target:self,action:#selector(hold(_:)));hold.minimumPressDuration=0.15;image.addGestureRecognizer(hold)
+        let forward=UISwipeGestureRecognizer(target:self,action:#selector(swiped(_:)));forward.direction = .left;image.addGestureRecognizer(forward);let back=UISwipeGestureRecognizer(target:self,action:#selector(swiped(_:)));back.direction = .right;image.addGestureRecognizer(back);let down=UISwipeGestureRecognizer(target:self,action:#selector(swiped(_:)));down.direction = .down;image.addGestureRecognizer(down)
+        load();timer=Timer.scheduledTimer(withTimeInterval:0.05,repeats:true) { [weak self] _ in Task { @MainActor in self?.tick() } }
     }
-    var body:some View{
-        ZStack{
-            Color.black.ignoresSafeArea()
-            if !story.s("media").isEmpty{
-                MediaView(reference:story.s("media"),fill:false)
-            }
-            else{
-                gpixGradient.ignoresSafeArea()
-                Text(story.s("text")).font(.gpix(size:34,weight:.bold)).multilineTextAlignment(.center).foregroundStyle(.white).padding(35)
-            }
-            HStack(spacing:0){
-                Color.clear.contentShape(Rectangle()).onTapGesture{
-                    previous()
-                }
-                Color.clear.contentShape(Rectangle()).onTapGesture{
-                    next()
-                }
-            }
-            .padding(.vertical,95)
-            VStack{
-                HStack(spacing:4){
-                    ForEach(Array(stories.enumerated()),id:\.offset){
-                        i,_ in GeometryReader{
-                            g in ZStack(alignment:.leading){
-                                Capsule().fill(.white.opacity(0.35))
-                                Capsule().fill(.white).frame(width:g.size.width*(i<index ? 1:i==index ? progress:0))
-                            }
-                        }
-                        .frame(height:3)
-                    }
-                }
-                HStack{
-                    AvatarView(person:store.person(userID),size:31)
-                    Text(store.person(userID).s("username")).bold()
-                    Text(ago(story.n("created"))).foregroundStyle(.white.opacity(0.7))
-                    Spacer()
-                    Button{
-                        dismiss()
-                    } label: {
-                        Image(systemName:"xmark").font(.gpix(size:22,weight:.regular))
-                    }
-                }
-                .font(.gpix(size:14,weight:.regular)).foregroundStyle(.white).padding(.top,12)
-                Spacer()
-                if !story.row("style").row("poll").isEmpty{
-                    let poll=story.row("style").row("poll")
-                    VStack{
-                        Text(poll.s("question")).bold()
-                        ForEach(Array(poll.ids("options").enumerated()),id:\.offset){
-                            i,title in Button(title){
-                                store.perform("pollVote",["id":story.id,"choice":i])
-                            }
-                            .padding(10).frame(maxWidth:.infinity).background(.white.opacity(0.9),in:Capsule()).foregroundStyle(.black)
-                        }
-                    }
-                    .padding(18).background(.ultraThinMaterial,in:RoundedRectangle(cornerRadius:20)).padding(.bottom,15)
-                }
-                if userID==store.myID{
-                    Button{
-                        viewers=true
-                    } label: {
-                        Label("\(story.ids("viewers").count) visualizzazioni",systemImage:"eye").foregroundStyle(.white)
-                    }
-                }
-                else{
-                    HStack{
-                        TextField("Rispondi alla storia…",text:$text).padding(12).background(.ultraThinMaterial,in:Capsule())
-                        Button{
-                            reply()
-                        } label: {
-                            GpixIcon(systemName:"paperplane")
-                        }
-                        Button{
-                            store.perform("like",["id":story.id,"enabled":!story.ids("likes").contains(store.myID)])
-                        } label: {
-                            Image(systemName:story.ids("likes").contains(store.myID) ? "heart.fill":"heart").foregroundStyle(story.ids("likes").contains(store.myID) ? .red:.white)
-                        }
-                    }
-                    .foregroundStyle(.white)
-                }
-            }
-            .padding(16)
-        }
-        .onReceive(timer){
-            _ in if !viewers && text.isEmpty{
-                progress+=0.05/7
-                if progress>=1{
-                    next()
-                }
-            }
-        }
-        .onChange(of:index){
-            _, _ in opened()
-        }
-        .onAppear{
-            opened()
-        }
-        .onDisappear{
-            audio?.pause()
-        }
-        .sheet(isPresented:$viewers){
-            NavigationStack{
-                PeopleListView(title:"Visualizzazioni",ids:story.ids("viewers"))
-            }
-        }
-        .gesture(DragGesture().onEnded{
-            v in if v.translation.height>80{
-                dismiss()
-            }
-            else if v.translation.width < -45{
-                next()
-            }
-            else if v.translation.width>45{
-                previous()
-            }
-        }
-        )
+    private var current:Entity { guard stories.indices.contains(index) else { return Entity() };let fresh=session.post(stories[index].id);return fresh.id.isEmpty ? stories[index]:fresh }
+    override func viewDidDisappear(_ animated:Bool) { super.viewDidDisappear(animated);timer?.invalidate();audio?.pause() }
+    private func load() {
+        guard stories.indices.contains(index) else { dismiss(animated:true);return };elapsed=0;audio?.pause();audio=nil;let p=current;image.load(p.media.first ?? "");name.text=session.person(p.text("author")).text("username")+" · "+Domain.ago(p.number("created"));caption.text=p.text("text");caption.font=Design.font(CGFloat(p.object("style").number("fontSize",25)),.bold)
+        link.isHidden=p.object("style").text("link").isEmpty;let own=p.text("author")==session.userID;views.isHidden = !own;views.setTitle("◉ \(p.strings("viewers").count) visualizzazioni",for:.normal);reply.isEnabled = !own
+        updateHeart();for (i,bar) in bars.enumerated() { bar.progress=i<index ? 1:0 }
+        let music=p.object("style").object("music");let audioRef=p.object("style").text("audio",music.text("audio",music.text("preview")));if !audioRef.isEmpty,let url=Domain.mediaURL(audioRef) { audio=AVPlayer(url:url);audio?.play() }
+        if !own { action("see", ["id":p.id]) }
     }
-    func next(){
-        audio?.pause()
-        if index+1<stories.count{
-            withAnimation(.easeInOut(duration:0.18)){
-                index+=1
-                progress=0
-            }
-        }
-        else{
-            dismiss()
-        }
+    private func tick() { guard !holding,!reply.isFirstResponder,presentedViewController==nil,view.window != nil else { audio?.pause();return };audio?.play();elapsed+=0.05;if bars.indices.contains(index) { bars[index].progress=Float(elapsed/6) };if elapsed>=6 { next(1) } }
+    private func updateHeart() { let liked=current.strings("likes").contains(session.userID);heart.setImage(UIImage(systemName:liked ? "heart.fill":"heart",withConfiguration:UIImage.SymbolConfiguration(pointSize:26)),for:.normal);heart.tintColor=liked ? Design.danger:.white }
+    override func stateChanged() { updateHeart() }
+    func gestureRecognizer(_ gestureRecognizer:UIGestureRecognizer,shouldReceive touch:UITouch)->Bool { var current=touch.view;while let view=current { if view is UIControl { return false };current=view.superview };return true }
+    @objc private func tapped(_ recognizer:UITapGestureRecognizer) { next(recognizer.location(in:image).x<image.bounds.width*0.3 ? -1:1) }
+    @objc private func swiped(_ gesture:UISwipeGestureRecognizer) { if gesture.direction == .down { dismiss(animated:true) } else { next(gesture.direction == .left ? 1:-1) } }
+    @objc private func hold(_ gesture:UILongPressGestureRecognizer) { holding=gesture.state == .began || gesture.state == .changed }
+    private func next(_ step:Int) { let target=index+step;if target<0 { elapsed=0;return };guard target<stories.count else { dismiss(animated:true);return };index=target;let transition=CATransition();transition.type = .push;transition.subtype=step>0 ? .fromRight:.fromLeft;transition.duration=UIAccessibility.isReduceMotionEnabled ? 0:0.22;image.layer.add(transition,forKey:"story");load() }
+    private func like() { action("like",["id":current.id,"enabled":!current.strings("likes").contains(session.userID)]);UIView.animate(withDuration:0.12,animations:{ self.heart.transform=CGAffineTransform(scaleX:1.25,y:1.25) }) { _ in UIView.animate(withDuration:0.18) { self.heart.transform = .identity } } }
+    @objc private func reactions(_ gesture:UILongPressGestureRecognizer) { guard gesture.state == .began else { return };let picker=ReactionPicker { [weak self] emoji in self?.sendReply(emoji) };present(picker,animated:true) }
+    private func sendReply(_ reaction:String?=nil) { let text=(reaction ?? reply.text ?? "").trimmingCharacters(in:.whitespacesAndNewlines);guard !text.isEmpty,current.text("author") != session.userID else { return };let p=current;run { let tid=try await self.session.startThread(p.text("author"));try await self.session.action("message",["id":tid,"kind":"story","story":p.id,"text":text]);self.reply.text="";self.reply.resignFirstResponder();self.reply.placeholder="Risposta inviata" } }
+    private func options() {
+        let p=current;var items:[(String,Bool,()->Void)]=[]
+        if p.text("author")==session.userID { items += [("Visualizzazioni",false,{ self.sheet(StoryViewsController(id:p.id)) }),("Aggiungi in evidenza",false,{ self.prompt("Titolo della raccolta") { self.action("highlight",["title":$0,"posts":[p.id]]) } }),("Elimina storia",true,{ self.run { try await self.session.action("deletePost",["id":p.id]);self.next(1) } })] }
+        let poll=p.object("style").object("poll");for (i,answer) in poll.strings("options").enumerated() { items.append((answer,false,{ self.action("pollVote",["id":p.id,"choice":i]) })) }
+        if items.isEmpty { items.append(("Segnala",true,{ self.prompt("Motivo della segnalazione") { self.action("report",["id":p.id,"reason":$0]) } })) };menu(poll.text("question").isEmpty ? nil:poll.text("question"),items:items)
     }
-    func previous(){
-        if index>0{
-            index-=1
-        }
-        progress=0
-    }
-    func opened(){
-        guard !story.id.isEmpty else{
-            return
-        }
-        progress=0
-        store.perform("see",["id":story.id])
-        let ref=story.row("style").s("audio")
-        if !ref.isEmpty{
-            audio?.pause()
-            audio=AVPlayer(url:mediaURL(ref))
-            audio?.play()
-        }
-    }
-    func reply(){
-        let value=text
-        text=""
-        Task{
-            do{
-                let tid=try await store.startThread(userID)
-                try await store.act("message",["id":tid,"kind":"story","story":story.id,"text":value])
-            }
-            catch{
-                store.error=error.localizedDescription
-            }
+}
+@MainActor final class StoryViewsController: StackScreen {
+    let id:String
+    init(id:String) { self.id=id;super.init(nibName:nil,bundle:nil) }
+    required init?(coder:NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func viewDidLoad() { super.viewDidLoad();title="Visualizzazioni";stateChanged() }
+    override func stateChanged() { clear();let p=session.post(id);for uid in p.strings("viewers") { let u=session.person(uid);row(u.text("name"),subtitle:p.strings("likes").contains(uid) ? "Ha messo mi piace alla tua storia":"",accessory:Avatar(u,size:44)) { [weak self] in self?.push(ProfileController(id:uid)) } };if p.strings("viewers").isEmpty { empty("Nessuna visualizzazione",symbol:"eye") } }
+}
+@MainActor final class NoteController: StackScreen {
+    let owner:String;let field=Design.field("Condividi un pensiero…")
+    private var audience="mutual"
+    init(owner:String) { self.owner=owner;super.init(nibName:nil,bundle:nil) }
+    required init?(coder:NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func viewDidLoad() {
+        super.viewDidLoad();let owner=self.owner;let own=owner==session.userID;let note=session.state.list("notes").first { $0.text("owner")==owner } ?? Entity();title=own ? "La tua nota":session.person(owner).text("name")
+        let avatar=Avatar(session.person(owner),size:90);let centered=Design.stack(views:[avatar]);centered.alignment = .center;add(centered,inset:24)
+        if own { field.text=note.text("text");add(field,inset:24);section("Massimo 60 caratteri · Visibile per 24 ore")
+            row("Condividi con",subtitle:"Amici che segui anche tu",icon:"person.2") { [weak self] in self?.menu("Pubblico",items:[("Amici che segui anche tu",false,{ self?.audience="mutual" }),("Amici più stretti",false,{ self?.audience="close" })]) }
+            add(Design.button("Condividi",primary:true) { [weak self] in guard let self=self,let value=self.field.text,!value.isEmpty,value.count<=60 else { self?.alert("Controlla la nota","Scrivi da 1 a 60 caratteri.");return };self.run { try await self.session.action("note",["text":value,"audience":self.audience]);self.dismiss(animated:true) } },inset:24)
+            if !note.text("text").isEmpty { add(Design.button("Elimina nota") { [weak self] in self?.run { try await self?.session.action("note",["delete":true]);self?.dismiss(animated:true) } },inset:24) }
+        } else {
+            let text=Design.label(note.text("text"),size:25,weight:.semibold,lines:0);text.textAlignment = .center;text.onTap { [weak self] in self?.action("noteReact",["user":owner,"created":note.number("created"),"enabled":true]) };add(text,inset:30);add(Design.button("Mi piace",primary:true,icon:"heart") { [weak self] in self?.action("noteReact",["user":owner,"created":note.number("created"),"enabled":true]) },inset:24)
+            field.placeholder="Rispondi alla nota…";add(field,inset:24);add(Design.button("Invia",primary:true) { [weak self] in guard let self=self,let text=self.field.text,!text.isEmpty else { return };self.run { let id=try await self.session.startThread(owner);try await self.session.action("message",["id":id,"text":"Risposta alla tua nota: "+text]);self.dismiss(animated:true) } },inset:24)
         }
     }
 }
-@MainActor
-struct StoryArchiveView:View{
-    @EnvironmentObject var store:GpixStore
-    @State private var selected:IdentifiedRow?
-    var stories:[Row]{
-        store.posts.filter{
-            $0.s("author")==store.myID && $0.s("kind")=="story"
-        }
-    }
-    var body:some View{
-        ScrollView{
-            LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:3),count:3),spacing:3){
-                ForEach(stories,id:\.id){
-                    story in Button{
-                        selected=IdentifiedRow(row:story)
-                    } label: {
-                        MediaView(reference:story.s("media"),fill:true).aspectRatio(0.7,contentMode:.fit).overlay(alignment:.bottomLeading){
-                            Text(Date(timeIntervalSince1970:story.n("created")).formatted(date:.abbreviated,time:.omitted)).font(.gpix(size:11,weight:.regular)).padding(6).background(.ultraThinMaterial,in:Capsule()).padding(4)
-                        }
-                    }
-                }
-            }
-        }
-        .navigationTitle("Archivio storie").fullScreenCover(item:$selected){
-            item in StoryViewer(userID:store.myID,postIDs:[item.id])
-        }
-    }
-}
-@MainActor
-struct HighlightEditor:View{
-    @EnvironmentObject var store:GpixStore
-    @Environment(\.dismiss) var dismiss
-    @State private var title=""
-    @State private var selected:Set<String>=[]
-    var body:some View{
-        List{
-            TextField("Titolo",text:$title)
-            ForEach(store.posts.filter{
-                $0.s("author")==store.myID && $0.s("kind")=="story"
-            }
-            ,id:\.id){
-                p in Button{
-                    if selected.contains(p.id){
-                        selected.remove(p.id)
-                    }
-                    else{
-                        selected.insert(p.id)
-                    }
-                } label: {
-                    HStack{
-                        MediaView(reference:p.s("media"),fill:true).frame(width:50,height:65)
-                        Text(p.s("text")).lineLimit(2)
-                        Spacer()
-                        Image(systemName:selected.contains(p.id) ? "checkmark.circle.fill":"circle")
-                    }
-                }
-            }
-        }
-        .navigationTitle("Nuova raccolta").toolbar{
-            Button("Crea"){
-                Task{
-                    do{
-                        try await store.act("highlight",["title":title,"posts":Array(selected)])
-                        dismiss()
-                    }
-                    catch{
-                        store.error=error.localizedDescription
-                    }
-                }
-            }
-            .disabled(title.isEmpty || selected.isEmpty)
-        }
-    }
-}
-@MainActor
-struct HighlightViewer:View{
-    let highlight:Row
-    var body:some View{
-        StoryViewer(userID:highlight.s("owner"),postIDs:highlight.ids("posts"))
-    }
-}
-@MainActor
-struct NoteStrip:View{
-    @EnvironmentObject var store:GpixStore
-    @State private var selected:IdentifiedRow?
-    @State private var composer=false
-    var notes:[Row]{
-        store.state.rows("notes").filter{
-            $0.n("expires")>Date().timeIntervalSince1970
-        }
-        .map{
-            var n=$0
-            n["id"]=n.s("owner")
-            return n
-        }
-    }
-    var body:some View{
-        ScrollView(.horizontal,showsIndicators:false){
-            HStack(alignment:.bottom,spacing:18){
-                noteCard(store.me,note:notes.first{
-                    $0.s("owner")==store.myID
-                }
-                )
-                ForEach(notes.filter{
-                    $0.s("owner") != store.myID
-                }
-                ,id:\.id){
-                    n in noteCard(store.person(n.s("owner")),note:n)
-                }
-            }
-            .padding(.top,6).padding(.bottom,8)
-        }
-        .sheet(isPresented:$composer){
-            NoteComposer()
-        }
-        .sheet(item:$selected){
-            item in NoteDetail(note:item.row)
-        }
-    }
-    func noteCard(_ person:Row,note:Row?)->some View {
-        VStack(spacing:7){
-            ZStack(alignment:.top){
-                AvatarView(person:person,size:69).padding(.top,44)
-                Text(note?.s("text") ?? "Nuovo giorno,\nnuova nota…").font(.gpix(size:12)).lineLimit(3).multilineTextAlignment(.center).padding(.horizontal,10).padding(.vertical,10).frame(width:98).background(Color(uiColor:.secondarySystemGroupedBackground),in:RoundedRectangle(cornerRadius:22)).overlay(alignment:.bottomLeading) { Circle().fill(Color(uiColor:.secondarySystemGroupedBackground)).frame(width:12,height:12).offset(x:15,y:4) }.shadow(color:.black.opacity(0.07),radius:8,y:3)
-            }
-            Text(person.id==store.myID ? "La tua nota":person.s("name")).font(.gpix(size:12,weight:.regular)).lineLimit(1).frame(width:95)
-        }
-        .foregroundStyle(gpixInk).contentShape(Rectangle()).gesture(
-        TapGesture(count:2).exclusively(before:TapGesture(count:1)).onEnded {
-            result in
-            switch result {
-                case .first:
-                if let note=note,person.id != store.myID {
-                    store.perform("noteReact",["user":person.id,"created":note.n("created"),"enabled":!note.b("likedByMe")])
-                }
-                case .second:
-                if person.id==store.myID && note==nil {
-                    composer=true
-                }
-                else if let note=note {
-                    selected=IdentifiedRow(row:note.merging(["id":person.id]){
-                        _,b in b
-                    }
-                    )
-                }
-            }
-        }
-        )
-    }
-}
-@MainActor
-struct NoteComposer:View{
-    @EnvironmentObject var store:GpixStore
-    @Environment(\.dismiss) var dismiss
-    @State private var text=""
-    @State private var audience="mutual"
-    @State private var busy=false
-    var body:some View{
-        NavigationStack{
-            VStack{
-                Spacer()
-                TextField("Condividi un pensiero…",text:$text,axis:.vertical).font(.gpix(size:20,weight:.regular)).multilineTextAlignment(.center).padding(18).frame(width:230).background(gpixSoft,in:RoundedRectangle(cornerRadius:28)).onChange(of:text){
-                    _, value in if value.count>60{
-                        text=String(value.prefix(60))
-                    }
-                }
-                Text("\(text.count)/60").font(.gpix(size:12,weight:.regular)).foregroundStyle(gpixMuted)
-                AvatarView(person:store.me,size:125)
-                Spacer()
-                Picker("Condividi con",selection:$audience){
-                    Text("Amici").tag("mutual")
-                    Text("Amici più stretti").tag("close")
-                }
-                .pickerStyle(.segmented)
-                PrimaryButton(title:busy ? "Condivisione…":"Condividi",disabled:text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty || busy){
-                    busy=true
-                    Task{
-                        defer{
-                            busy=false
-                        }
-                        do{
-                            try await store.act("note",["text":text,"audience":audience])
-                            dismiss()
-                        }
-                        catch{
-                            store.error=error.localizedDescription
-                        }
-                    }
-                }
-                Text("La nota scompare dopo 24 ore.").font(.gpix(size:12,weight:.regular)).foregroundStyle(gpixMuted)
-            }
-            .padding(24).navigationTitle("Nuova nota").navigationBarTitleDisplayMode(.inline).toolbar{
-                Button("Annulla"){
-                    dismiss()
-                }
-            }
-        }
-    }
-}
-@MainActor
-struct NoteDetail:View{
-    @EnvironmentObject var store:GpixStore
-    @Environment(\.dismiss) var dismiss
-    let note:Row
-    @State private var reply=""
-    @State private var new=false
-    var owner:String{
-        note.s("owner")
-    }
-    var body:some View{
-        NavigationStack{
-            VStack(spacing:23){
-                Capsule().fill(.secondary).frame(width:35,height:4)
-                AvatarView(person:store.person(owner),size:70)
-                Text(note.s("text")).font(.gpix(size:20,weight:.regular)).multilineTextAlignment(.center)
-                Text("Condivisa con gli amici · "+ago(note.n("created"))).font(.gpix(size:12,weight:.regular)).foregroundStyle(gpixMuted)
-                if owner==store.myID{
-                    PrimaryButton(title:"Lascia una nuova nota"){
-                        new=true
-                    }
-                    Button("Elimina nota",role:.destructive){
-                        store.perform("note",["delete":true])
-                        dismiss()
-                    }
-                }
-                else{
-                    Button{
-                        store.perform("noteReact",["user":owner,"created":note.n("created"),"enabled":!note.b("likedByMe")])
-                    } label: {
-                        Image(systemName:note.b("likedByMe") ? "heart.fill":"heart").font(.gpix(size:34,weight:.regular)).foregroundStyle(.pink)
-                    }
-                    TextField("Rispondi alla nota…",text:$reply).textFieldStyle(.roundedBorder)
-                    PrimaryButton(title:"Invia risposta",disabled:reply.isEmpty){
-                        Task{
-                            do{
-                                let tid=try await store.startThread(owner)
-                                try await store.act("message",["id":tid,"text":"Risposta alla tua nota: "+reply])
-                                dismiss()
-                            }
-                            catch{
-                                store.error=error.localizedDescription
-                            }
-                        }
-                    }
-                }
-            }
-            .padding(25).presentationDetents([.medium,.large]).sheet(isPresented:$new){
-                NoteComposer()
-            }
-        }
-    }
+@MainActor final class HighlightsController: StackScreen {
+    private var selected:Set<String>=[]
+    override func viewDidLoad() { super.viewDidLoad();title="Nuova storia in evidenza";render() }
+    private func render() { clear();for story in session.posts.filter({$0.text("author")==session.userID && $0.text("kind")=="story"}) { row(story.text("text","Storia"),subtitle:Date(timeIntervalSince1970:story.number("created")).formatted(date:.abbreviated,time:.omitted),icon:selected.contains(story.id) ? "checkmark.circle.fill":"circle") { [weak self] in if self?.selected.contains(story.id)==true { self?.selected.remove(story.id) } else { self?.selected.insert(story.id) };self?.render() } };add(Design.button("Crea raccolta",primary:true) { [weak self] in guard let self=self,!self.selected.isEmpty else { return };self.prompt("Nome della raccolta") { self.action("highlight",["title":$0,"posts":Array(self.selected)]) } },inset:20) }
 }

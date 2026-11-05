@@ -1,952 +1,180 @@
-import SwiftUI
 import UIKit
-@MainActor
-struct InstantBubble:View{
-    @EnvironmentObject var store:GpixStore
-    private var paused:Bool { store.preferences.n("instantsSnoozedUntil")>Date().timeIntervalSince1970 }
-    private var pile:[Row] { paused ? [] : store.demo ? store.state.row("demoInstants").rows("received") : store.state.rows("instantPile") }
-    var body: some View {
-        VStack(spacing:0) {
-            ZStack {
-                ForEach((0..<3).reversed(),id:\.self) { index in
-                    RoundedRectangle(cornerRadius:22)
-                        .fill(gpixSoft)
-                        .overlay(RoundedRectangle(cornerRadius:22).stroke(Color(uiColor:.systemBackground),lineWidth:3))
-                        .overlay {
-                            if pile.indices.contains(index) { InstantPilePreview(id:pile[index].id).clipShape(RoundedRectangle(cornerRadius:19)) }
-                            if index==0 { GpixIcon(systemName:paused ? "pause" : pile.isEmpty ? "camera" : "photo.on.rectangle",size:25).foregroundStyle(pile.isEmpty ? Color.primary : Color.white) }
-                        }
-                        .frame(width:82,height:88)
-                        .rotationEffect(.radians(Double(index)*0.12-0.07))
-                        .offset(x:CGFloat(index)*7,y:CGFloat(index)*(-5))
-                        .shadow(color:Color.black.opacity(0.15),radius:12,y:5)
-                }
-            }
-            .frame(width:104,height:98)
-            Text(paused ? "In pausa" : "Istantanee").font(.gpix(size:11,weight:.semibold))
-                .foregroundStyle(Color.primary).padding(.horizontal,11).padding(.vertical,6)
-                .background(Color(uiColor:.systemBackground),in:Capsule())
-        }
-        .frame(width:104,height:126)
-        .contextMenu {
-            Button(paused ? "Riprendi istantanee" : "Pausa per 24 ore",systemImage:paused ? "play" : "pause") { snooze() }
-            NavigationLink { InstantArchiveView() } label: { Label("Archivio privato",systemImage:"archivebox") }
-        }
-    }
-    private func snooze() {
-        Task {
-            do {
-                if store.demo {
-                    var prefs=store.preferences
-                    prefs["instantsSnoozedUntil"]=paused ? 0 : Date().timeIntervalSince1970+86400
-                    store.state["preferences"]=prefs
-                } else {
-                    _ = try await store.api("/instants/preferences",["paused":!paused])
-                    await store.sync()
-                }
-            } catch { store.error=error.localizedDescription }
-        }
-    }
 
-}
-@MainActor
-struct InstantPilePreview:View {
-    @EnvironmentObject var store:GpixStore
-    let id:String
-    @State private var image:UIImage?
-    var body:some View {
-        GeometryReader { geometry in
-            if let image=image {
-                Image(uiImage:image).resizable().scaledToFill().frame(width:geometry.size.width,height:geometry.size.height).clipped()
-            }
+@MainActor extension Session {
+    func instantList() async throws -> Entity { isDemo ? state.object("demoInstants") : try await api("/instants") }
+    func instantBytes(_ item:Entity,mode:String) async throws -> Data {
+        if isDemo {
+            let ref=item.text("media");let name=URL(string:ref)?.lastPathComponent ?? ref
+            if let url=Bundle.main.url(forResource:name,withExtension:nil,subdirectory:"Media") { return try Data(contentsOf:url) }
+            if let url=URL(string:ref),url.isFileURL { return try Data(contentsOf:url) }
+            throw GPIXFailure.message("Foto non disponibile")
         }
-        .task(id:id) {
-            if let data=try? await store.instantPhoto(id,archive:false,preview:true) { image=UIImage(data:data) }
-        }
+        return try await requestData("/instants/\(item.id)/\(mode)",payload:mode=="open" ? [:]:nil)
+    }
+    func instantArchive(cursor:String="") async throws -> Entity {
+        if isDemo { return Entity(["items":state.object("demoInstants").list("sent").map(\.values),"nextCursor":""]) }
+        var parts=URLComponents();parts.queryItems=[URLQueryItem(name:"cursor",value:cursor)]
+        return try await api("/instants/archive"+(parts.string ?? ""))
+    }
+    func sendInstant(media:String,caption:String,audience:String,key:String) async throws {
+        if isDemo { let item=Entity(["id":UUID().uuidString,"owner":userID,"media":media,"caption":caption,"created":Date().timeIntervalSince1970,"expires":Date().timeIntervalSince1970+86400,"viewsCount":0]);let i=state.object("demoInstants");state=state.updating(["demoInstants":i.updating(["sent":([item]+i.list("sent")).map(\.values),"active":([item]+i.list("active")).map(\.values)]).values]);changed();return }
+        _ = try await api("/instants/send",["media":media,"caption":caption,"audience":audience,"requestKey":key]);changed()
+    }
+    func deleteInstant(_ id:String) async throws {
+        if isDemo { let i=state.object("demoInstants");state=state.updating(["demoInstants":i.updating(["sent":i.list("sent").filter{$0.id != id}.map(\.values),"active":i.list("active").filter{$0.id != id}.map(\.values)]).values]);changed();return }
+        _ = try await api("/instants/\(id)/delete",[:]);changed()
     }
 }
-@MainActor
-struct InstantsView:View{
-    @EnvironmentObject var store:GpixStore
-    @State private var received:[Row]=[]
-    @State private var active:[Row]=[]
-    @State private var selected:IdentifiedRow?
-    @State private var camera=false
-    @State private var refreshing=false
-    @State private var afterViewer=false
-    @State private var filter="all"
-    @State private var ownSelected:IdentifiedRow?
-    private var owners:[String] {
-        var result:[String]=[]
-        for row in received { let owner=row.s("owner"); if !result.contains(owner) { result.append(owner) } }
-        return result
+@MainActor final class InstantsController: StackScreen {
+    private var snapshot=Entity(),filter=0
+    private var loading=false
+    override func viewDidLoad() {
+        super.viewDidLoad();title="Istantanee";navigationItem.rightBarButtonItem=UIBarButtonItem(customView:Design.icon("clock.arrow.circlepath") { [weak self] in self?.push(InstantArchiveController()) })
+        let refresh=UIRefreshControl();refresh.addAction(UIAction { [weak self,weak refresh] _ in self?.run { defer { refresh?.endRefreshing() };try await self?.load() } },for:.valueChanged);scroll.refreshControl=refresh;render();run { try await self.load() }
     }
-    var body:some View {
-        ScrollView {
-            VStack(alignment:.leading,spacing:0) {
-                Text("Nuovi momenti").font(.gpix(size:27,weight:.bold)).tracking(-0.6)
-                Text("Apri le card degli amici. Scatta e condividi le tue.").foregroundStyle(gpixMuted).padding(.top,8)
-                if store.demo { Text("Stai provando la demo").font(.gpix(size:12)).foregroundStyle(gpixMuted).padding(.top,10) }
-                createCard.padding(.top,22)
-                filters.padding(.top,20)
-                if filter != "mine" { friendsSection }
-                if filter != "new" { ownSection }
-                NavigationLink { InstantArchiveView() } label: {
-                    HStack(spacing:16) {
-                        Image(systemName:"archivebox").font(.gpix(size:28))
-                        VStack(alignment:.leading,spacing:4) {
-                            Text("Il tuo archivio").font(.gpix(size:16,weight:.bold))
-                            Text("Solo tuo. Rivedi, elimina o crea un riepilogo.").font(.gpix(size:12)).foregroundStyle(gpixMuted)
-                        }
-                        Spacer(minLength:0)
-                        Image(systemName:"chevron.right").font(.gpix(size:18))
-                    }.foregroundStyle(gpixInk).padding(.horizontal,18).padding(.vertical,20).background(gpixSoft,in:RoundedRectangle(cornerRadius:23))
-                }.padding(.top,28)
-            }.padding(.horizontal,18).padding(.top,12).padding(.bottom,40)
+    override func viewWillAppear(_ animated:Bool) { super.viewWillAppear(animated);run { try await self.load() } }
+    override func stateChanged() { run { try await self.load() } }
+    private func load() async throws { guard !loading else { return };loading=true;defer { loading=false };snapshot=try await session.instantList();render() }
+    private func render() {
+        let offset=scroll.contentOffset;clear()
+        add(Design.label("Nuovi momenti.",size:30,weight:.bold),inset:20)
+        add(Design.label("Uno scatto vero, da condividere adesso.\nLe istantanee scadono dopo 24 ore.",size:14,color:Design.muted,lines:2),inset:20)
+        let create=Design.stack(.horizontal,spacing:16,views:[Design.icon("camera",size:30,color:.white) { [weak self] in self?.sheet(InstantCameraController(),full:true) },Design.stack(spacing:6,views:[Design.label("Crea un’istantanea",size:18,weight:.bold,color:.white),Design.label("Scatta e condividi il tuo momento",size:12,color:UIColor.white.withAlphaComponent(0.8))]),UIView(),Design.icon("plus",color:.white) { [weak self] in self?.sheet(InstantCameraController(),full:true) }]);create.alignment = .center
+        let hero=Design.inset(create,UIEdgeInsets(top:22,left:14,bottom:22,right:14));hero.backgroundColor=Design.violet;hero.layer.cornerRadius=24;hero.onTap { [weak self] in self?.sheet(InstantCameraController(),full:true) };add(hero,inset:18)
+        let filters=UISegmentedControl(items:["Tutte","Nuove","Le mie"]);filters.selectedSegmentIndex=filter;filters.selectedSegmentTintColor=Design.violet;filters.setTitleTextAttributes([.foregroundColor:UIColor.white,.font:Design.font(13,.semibold)],for:.selected);filters.setTitleTextAttributes([.foregroundColor:Design.ink,.font:Design.font(13)],for:.normal);filters.addAction(UIAction { [weak self,weak filters] _ in self?.filter=filters?.selectedSegmentIndex ?? 0;self?.render() },for:.valueChanged);add(filters,inset:20)
+        var cards:[(Entity,[Entity],Bool)]=[]
+        if filter != 2 { let groups=Dictionary(grouping:snapshot.list("received"),by:{$0.text("owner")});for owner in groups.keys.sorted() { let items=groups[owner] ?? [];if let first=items.first { cards.append((first,items,false)) } } }
+        if filter != 1 { for item in snapshot.list("active") { cards.append((item,[item],true)) } }
+        if cards.isEmpty { empty(filter==2 ? "Il tuo prossimo istante":"Nessuna nuova istantanea",detail:"Puoi creare un’istantanea anche se non hai ancora amici.",symbol:"camera") }
+        for start in stride(from:0,to:cards.count,by:2) {
+            let row=Design.stack(.horizontal,spacing:12);row.distribution = .fillEqually
+            for index in start..<start+2 {
+                if index>=cards.count { row.addArrangedSubview(UIView());continue }
+                let tuple=cards[index];let card=InstantCard(item:tuple.0,own:tuple.2,count:tuple.1.count,session:session)
+                card.onTap { [weak self] in guard let self=self else { return };let deck=InstantDeck(items:tuple.1,archive:tuple.2);deck.onFinish={ [weak self] in self?.run { try await self?.load() } };self.present(deck,animated:true) };row.addArrangedSubview(card)
+            };add(row,inset:18)
         }
-        .navigationTitle("Istantanee").navigationBarTitleDisplayMode(.inline)
-        .refreshable { await load() }.task { await load() }
-        .sheet(isPresented:$camera,onDismiss:{ Task { await load() } }) { InstantCamera() }
-        .fullScreenCover(item:$selected,onDismiss:{
-            Task { await load() }
-            if afterViewer { afterViewer=false; Task { @MainActor in try? await Task.sleep(nanoseconds:300_000_000); camera=true } }
-        }) { item in InstantDeck(items:received,startID:item.id) { afterViewer=true; selected=nil } }
-        .fullScreenCover(item:$ownSelected,onDismiss:{ Task { await load() } }) { item in
-            ArchivePhotoView(item:item.row,onDelete:{ Task { try? await store.deleteInstant(item.id); await load() } })
-        }
-    }
-    private var createCard:some View {
-        Button { camera=true } label: {
-            HStack(spacing:15) {
-                GpixIcon(systemName:"camera",size:29).frame(width:54,height:54).background(Color.white.opacity(0.17),in:RoundedRectangle(cornerRadius:18))
-                VStack(alignment:.leading,spacing:5) {
-                    Text("Crea un’istantanea").font(.gpix(size:19,weight:.bold))
-                    Text("Scatta ora. Condividi il tuo momento.").font(.gpix(size:12)).foregroundStyle(Color.white.opacity(0.7))
-                }
-                Spacer(minLength:6)
-                Image(systemName:"plus").font(.gpix(size:25))
-            }.foregroundStyle(Color.white).padding(21)
-                .background(LinearGradient(colors:[Color(red:103.0/255,green:72.0/255,blue:246.0/255),Color(red:189.0/255,green:72.0/255,blue:199.0/255)],startPoint:.topLeading,endPoint:.bottomTrailing),in:RoundedRectangle(cornerRadius:26))
-        }.buttonStyle(GpixPressStyle())
-    }
-    private var filters:some View {
-        HStack(spacing:8) {
-            filterChip("all","Tutte")
-            filterChip("new","Da aprire")
-            filterChip("mine","Le tue")
-        }
-    }
-    private func filterChip(_ id:String,_ title:String)->some View {
-        Button { filter=id } label: {
-            HStack(spacing:6) { if filter==id { Image(systemName:"checkmark").font(.gpix(size:13,weight:.semibold)) }; Text(title).font(.gpix(size:14,weight:.medium)) }
-                .foregroundStyle(gpixInk).padding(.horizontal,14).padding(.vertical,9)
-                .background(filter==id ? gpixPurple.opacity(0.13) : Color.clear,in:RoundedRectangle(cornerRadius:9))
-                .overlay(RoundedRectangle(cornerRadius:9).stroke(gpixMuted.opacity(filter==id ? 0:0.35)))
-        }.buttonStyle(.plain)
-    }
-    private func sectionHeading(_ title:String,_ detail:String)->some View {
-        HStack { Text(title).font(.gpix(size:22,weight:.bold)); Spacer(); Text(detail).font(.gpix(size:12)).foregroundStyle(gpixMuted) }.padding(.top,25).padding(.bottom,14)
-    }
-    private var friendsSection:some View {
-        VStack(alignment:.leading,spacing:0) {
-            sectionHeading("Dai tuoi amici","\(received.count) nuove")
-            if owners.isEmpty {
-                VStack(spacing:12) {
-                    Image(systemName:"photo.on.rectangle").font(.gpix(size:35)).foregroundStyle(gpixMuted)
-                    Text("Nessuna nuova istantanea").font(.gpix(size:17,weight:.semibold))
-                    Text("Quando arrivano nuovi scatti, li trovi qui.\nIntanto puoi creare il tuo.").multilineTextAlignment(.center).foregroundStyle(gpixMuted)
-                }.padding(24).frame(maxWidth:.infinity).background(gpixSoft,in:RoundedRectangle(cornerRadius:24))
-            } else {
-                LazyVGrid(columns:[GridItem(.flexible(),spacing:12),GridItem(.flexible())],spacing:12) {
-                    ForEach(owners,id:\.self) { owner in friendCard(owner) }
-                }
-            }
-        }
-    }
-    private func friendCard(_ owner:String)->some View {
-        let rows=received.filter { $0.s("owner")==owner }
-        return Button { if let first=rows.first { selected=IdentifiedRow(row:first) } } label: {
-            CollectionInstantCard(item:rows.first ?? [:],count:rows.count,own:false)
-        }.buttonStyle(GpixPressStyle())
-    }
-    private var ownSection:some View {
-        VStack(alignment:.leading,spacing:0) {
-            sectionHeading("Le tue · 24 ore","\(active.count) attive")
-            if active.isEmpty {
-                HStack(spacing:16) {
-                    GpixIcon(systemName:"camera",size:31).foregroundStyle(gpixMuted)
-                    Text("Il prossimo istante è tuo.\nPuoi pubblicare anche senza amici.").foregroundStyle(gpixMuted)
-                }.padding(20).frame(maxWidth:.infinity,alignment:.leading).overlay(RoundedRectangle(cornerRadius:23).stroke(gpixMuted.opacity(0.25)))
-            } else {
-                LazyVGrid(columns:[GridItem(.flexible(),spacing:12),GridItem(.flexible())],spacing:12) {
-                    ForEach(active,id:\.id) { item in
-                        Button { ownSelected=IdentifiedRow(row:item) } label: { CollectionInstantCard(item:item,count:1,own:true) }.buttonStyle(GpixPressStyle())
-                    }
-                }
-            }
-        }
-    }
-    func load()async{
-        do{
-            let r=try await store.instantList()
-            received=r.rows("received")
-            active=r.rows("active")
-        }
-        catch{
-            store.error=error.localizedDescription
-        }
+        row("Archivio delle istantanee",subtitle:"I tuoi scatti e chi li ha visti",icon:"clock.arrow.circlepath") { [weak self] in self?.push(InstantArchiveController()) };scroll.setContentOffset(offset,animated:false)
     }
 }
-@MainActor
-struct InstantCard:View{
-    @EnvironmentObject var store:GpixStore
-    let item:Row
-    @State private var preview:Data?
-    private var cardWidth: CGFloat { min(290,max(220,UIScreen.main.bounds.width-86)) }
-    var body: some View {
-        VStack(alignment:.leading,spacing:0) {
-            previewPhoto
-            HStack(spacing:10) {
-                AvatarView(person:store.person(item.s("owner")),size:34)
-                VStack(alignment:.leading,spacing:3) {
-                    Text(store.person(item.s("owner")).s("username",item.s("username"))).font(.gpix(size:14,weight:.semibold)).lineLimit(1)
-                    Text("Tocca per aprire").font(.gpix(size:11)).foregroundStyle(Color.secondary)
-                }
-                Spacer(minLength:0)
-                GpixIcon(systemName:"arrow.up.right",size:13).foregroundStyle(Color.secondary)
-            }
-            .padding(13)
-        }
-        .foregroundStyle(Color.primary).frame(width:cardWidth)
-        .background(gpixSoft,in:RoundedRectangle(cornerRadius:25))
-        .clipShape(RoundedRectangle(cornerRadius:25))
-        .overlay(RoundedRectangle(cornerRadius:25).stroke(Color.primary.opacity(0.07)))
-        .shadow(color:Color.black.opacity(0.06),radius:12,y:5)
-        .task(id:item.id) { preview=try? await store.instantPhoto(item.id,archive:false,preview:true) }
+@MainActor final class InstantCard: UIView {
+    private var task:Task<Void,Never>?
+    init(item:Entity,own:Bool,count:Int,session:Session) {
+        super.init(frame:.zero);heightAnchor.constraint(equalTo:widthAnchor).isActive=true;layer.cornerRadius=24;clipsToBounds=true;backgroundColor=Design.soft
+        let photo=PhotoView(frame:.zero);addSubview(photo);photo.pin(to:self)
+        let shade=UIView();shade.backgroundColor=UIColor.black.withAlphaComponent(0.22);addSubview(shade);shade.pin(to:self)
+        let name=Design.label(own ? (item.text("caption").isEmpty ? "Il tuo istante":item.text("caption")):session.person(item.text("owner")).text("username",item.text("username")),size:14,weight:.bold,color:.white,lines:2)
+        let sub=Design.label(own ? "Scade tra \(max(1,Int(ceil((item.number("expires")-Date().timeIntervalSince1970)/3600)))) h":"Tocca per aprire",size:11,color:UIColor.white.withAlphaComponent(0.8))
+        let labels=Design.stack(spacing:4,views:[name,sub]);addSubview(labels);labels.translatesAutoresizingMaskIntoConstraints=false;NSLayoutConstraint.activate([labels.leadingAnchor.constraint(equalTo:leadingAnchor,constant:13),labels.trailingAnchor.constraint(equalTo:trailingAnchor,constant:-13),labels.bottomAnchor.constraint(equalTo:bottomAnchor,constant:-15)])
+        let badge=Design.label(own ? "La tua":"\(count) nuove",size:10,weight:.semibold,color:Design.ink);badge.backgroundColor = .white;badge.layer.cornerRadius=11;badge.clipsToBounds=true;badge.textAlignment = .center;addSubview(badge);badge.translatesAutoresizingMaskIntoConstraints=false;NSLayoutConstraint.activate([badge.leadingAnchor.constraint(equalTo:leadingAnchor,constant:12),badge.topAnchor.constraint(equalTo:topAnchor,constant:12),badge.widthAnchor.constraint(equalToConstant:65),badge.heightAnchor.constraint(equalToConstant:24)])
+        task=Task { [weak photo] in if let data=try? await session.instantBytes(item,mode:own ? "archive-photo":"preview"),!Task.isCancelled { photo?.image=UIImage(data:data) } }
     }
-    private var previewPhoto: some View {
-        ZStack(alignment:.bottomLeading) {
-            Color.black.opacity(0.92)
-            if let data=preview,let image=UIImage(data:data) {
-                Image(uiImage:image).resizable().scaledToFill().frame(width:cardWidth,height:290).blur(radius:20).clipped().opacity(0.55)
-                Image(uiImage:image).resizable().scaledToFit().frame(width:cardWidth,height:290)
-            } else {
-                ProgressView().tint(Color.white).frame(width:cardWidth,height:290)
-            }
-            LinearGradient(colors:[Color.clear,Color.black.opacity(0.55)],startPoint:.center,endPoint:.bottom)
-            if !item.s("caption").isEmpty {
-                Text(item.s("caption")).font(.gpix(size:14,weight:.medium)).foregroundStyle(Color.white).lineLimit(2).padding(16)
-            }
-        }
-        .frame(width:cardWidth,height:290).clipped()
-        .overlay(alignment:.topTrailing) {
-            GpixIcon(systemName:"lock.fill",size:11).foregroundStyle(Color.white).padding(9).background(Color.black.opacity(0.3),in:Circle()).padding(12)
-        }
-    }
-
+    required init?(coder:NSCoder) { fatalError("init(coder:) has not been implemented") }
+    deinit { task?.cancel() }
 }
-@MainActor
-struct InstantDeck:View{
-    @EnvironmentObject var store:GpixStore
-    @Environment(\.dismiss) var dismiss
-    let items:[Row],startID:String
-    let create: @MainActor () -> Void
-    @State private var index=0
-    @State private var bytes:Data?
-    @State private var opening=false
-    @State private var offset=CGSize.zero
-    @State private var reply=""
-    var current:Row{
-        items.indices.contains(index) ? items[index]:[:]
+@MainActor class PrivatePhotoController: Screen {
+    let photo=UIImageView(),cover=UIView()
+    private var privacyObservers:[NSObjectProtocol]=[]
+    private let initialData:Data?
+    init(data:Data?=nil) { initialData=data;super.init(nibName:nil,bundle:nil);modalPresentationStyle = .fullScreen }
+    required init?(coder:NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func viewDidLoad() {
+        super.viewDidLoad();view.backgroundColor = .black;photo.contentMode = .scaleAspectFit;view.addSubview(photo);photo.pin(to:view);if let data=initialData { photo.image=UIImage(data:data) }
+        cover.backgroundColor = .black;view.addSubview(cover);cover.pin(to:view);let label=Design.label("Contenuto protetto\n\nLa registrazione dello schermo è attiva.",size:23,weight:.bold,color:.white,lines:0);label.textAlignment = .center;cover.addSubview(label);label.translatesAutoresizingMaskIntoConstraints=false;NSLayoutConstraint.activate([label.centerYAnchor.constraint(equalTo:cover.centerYAnchor),label.leadingAnchor.constraint(equalTo:cover.leadingAnchor,constant:35),label.trailingAnchor.constraint(equalTo:cover.trailingAnchor,constant:-35)])
+        let close=Design.icon("xmark",color:.white) { [weak self] in self?.dismiss(animated:true) };view.addSubview(close);close.translatesAutoresizingMaskIntoConstraints=false;NSLayoutConstraint.activate([close.topAnchor.constraint(equalTo:view.safeAreaLayoutGuide.topAnchor,constant:8),close.leadingAnchor.constraint(equalTo:view.leadingAnchor,constant:12)])
+        for name in [UIScreen.capturedDidChangeNotification,UIApplication.willResignActiveNotification,UIApplication.didBecomeActiveNotification] { privacyObservers.append(NotificationCenter.default.addObserver(forName:name,object:nil,queue:.main) { [weak self] _ in Task { @MainActor in self?.updateProtection() } }) };updateProtection()
     }
-    var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            nextCard
-            VStack {
-                deckHeader
-                photoContent
-                reactionBar
-                replyBar
-            }
-            .foregroundStyle(Color.white)
-        }
-        .task {
-            index = items.firstIndex { $0.id == startID } ?? 0
-            await open()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
-            bytes = nil
-            dismiss()
-        }
-        .onDisappear { bytes = nil }
+    private func updateProtection() { cover.isHidden = !(view.window?.screen ?? UIScreen.main).isCaptured && UIApplication.shared.applicationState == .active;view.bringSubviewToFront(cover);if let button=view.subviews.compactMap({$0 as? UIButton}).first { view.bringSubviewToFront(button) } }
+    deinit { for observer in privacyObservers { NotificationCenter.default.removeObserver(observer) } }
+}
+@MainActor final class InstantDeck: PrivatePhotoController {
+    private let items:[Entity],archive:Bool
+    private var index=0,loading=false
+    private var currentTask:Task<Void,Never>?
+    private let caption=Design.label("",size:17,weight:.semibold,color:.white,lines:3),progress=UIPageControl(),owner=Design.label("",size:15,weight:.bold,color:.white)
+    private var loaded:[String:UIImage]=[:]
+    var onFinish:(()->Void)?
+    init(items:[Entity],archive:Bool,index:Int=0) { self.items=items;self.archive=archive;self.index=index;super.init() }
+    required init?(coder:NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func viewDidLoad() {
+        super.viewDidLoad();let footer=Design.stack(spacing:12,views:[caption,progress]);progress.numberOfPages=items.count;caption.textAlignment = .center
+        if !archive { footer.addArrangedSubview(Design.button("Rispondi",icon:"bubble.right") { [weak self] in self?.feedback() }) }
+        else { footer.addArrangedSubview(Design.button("Visualizzazioni",icon:"eye") { [weak self] in guard let self=self,self.items.indices.contains(self.index) else { return };self.sheet(InstantViewersController(id:self.items[self.index].id)) }) }
+        view.addSubview(footer);footer.translatesAutoresizingMaskIntoConstraints=false;NSLayoutConstraint.activate([footer.leadingAnchor.constraint(equalTo:view.leadingAnchor,constant:24),footer.trailingAnchor.constraint(equalTo:view.trailingAnchor,constant:-24),footer.bottomAnchor.constraint(equalTo:view.safeAreaLayoutGuide.bottomAnchor,constant:-18)])
+        view.addSubview(owner);owner.translatesAutoresizingMaskIntoConstraints=false;NSLayoutConstraint.activate([owner.topAnchor.constraint(equalTo:view.safeAreaLayoutGuide.topAnchor,constant:25),owner.centerXAnchor.constraint(equalTo:view.centerXAnchor)])
+        let tap=ClosureTap { [weak self] in self?.advance(1) };photo.isUserInteractionEnabled=true;photo.addGestureRecognizer(tap)
+        let left=MessageSwipe { [weak self] in self?.advance(1) };left.direction = .left;photo.addGestureRecognizer(left)
+        let right=MessageSwipe { [weak self] in self?.advance(-1) };photo.addGestureRecognizer(right);load()
     }
-    @ViewBuilder private var nextCard: some View {
-        if index + 1 < items.count {
-            InstantCard(item: items[index + 1])
-                .scaleEffect(1.1)
-                .rotationEffect(.degrees(5))
-                .opacity(0.7)
-        }
+    override func viewDidDisappear(_ animated:Bool) { super.viewDidDisappear(animated);currentTask?.cancel();photo.image=nil;loaded.removeAll();onFinish?() }
+    private func load() {
+        guard items.indices.contains(index) else { finish();return };loading=true;let item=items[index];progress.currentPage=index;owner.text=session.person(item.text("owner")).text("username");caption.text=item.text("caption");photo.image=nil
+        if let cached=loaded[item.id] { photo.image=cached;loading=false;return }
+        currentTask=Task { [weak self] in guard let self=self else { return };do { let data=try await self.session.instantBytes(item,mode:self.archive ? "archive-photo":"open");guard !Task.isCancelled else { return };let image=UIImage(data:data);self.photo.image=image;if self.archive,let image=image { self.loaded[item.id]=image };self.loading=false;if self.session.isDemo && !self.archive { let list=self.session.state.object("demoInstants");self.session.state=self.session.state.updating(["demoInstants":list.updating(["received":list.list("received").filter{$0.id != item.id}.map(\.values)]).values]) } } catch { self.loading=false;self.alert("Istantanea non disponibile",error.localizedDescription) } }
     }
-    private var deckHeader: some View {
-        HStack {
-            Text(store.person(current.s("owner")).s("username", current.s("username"))).bold()
-            Spacer()
-            Button { dismiss() } label: { Image(systemName: "xmark") }
-        }
-        .foregroundStyle(Color.white)
-        .padding()
+    private func advance(_ direction:Int) {
+        guard !loading else { return };if direction<0 && !archive { return };let target=index+direction
+        guard items.indices.contains(target) else { finish();return }
+        index=target
+        var transform=CATransform3DIdentity;transform.m34 = -1/850;let angle:CGFloat=direction>0 ? -.pi/2:.pi/2
+        guard !UIAccessibility.isReduceMotionEnabled else { load();return }
+        UIView.animate(withDuration:0.16,animations:{ self.photo.layer.transform=CATransform3DRotate(transform,angle,0,1,0);self.photo.alpha=0.15 }) { _ in self.photo.layer.transform=CATransform3DRotate(transform,-angle,0,1,0);self.load();UIView.animate(withDuration:0.23,delay:0,options:.curveEaseOut) { self.photo.layer.transform=CATransform3DIdentity;self.photo.alpha=1 } }
     }
-    @ViewBuilder private var photoContent: some View {
-        if opening {
-            ProgressView().tint(Color.white).frame(maxHeight: .infinity)
-        } else {
-            draggablePhoto
+    private func finish() { dismiss(animated:true) }
+    private func feedback() { guard items.indices.contains(index) else { return };let item=items[index];menu("Rispondi all’istantanea",items:[("❤️",false,{ self.sendFeedback(item,text:"❤️",kind:"reaction") }),("Scrivi un messaggio",false,{ self.prompt("Risposta") { self.sendFeedback(item,text:$0,kind:"reply") } }),("Rispondi con uno scatto",false,{ self.sheet(InstantCameraController(replyTo:item.id),full:true) })]) }
+    private func sendFeedback(_ item:Entity,text:String,kind:String) { guard !text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else { return };run { if !self.session.isDemo { _ = try await self.session.api("/instants/\(item.id)/feedback",["text":text,"kind":kind,"requestKey":UUID().uuidString]) };self.alert("Inviato","La risposta è nella conversazione.") } }
+}
+@MainActor final class InstantArchiveController: StackScreen {
+    private var items:[Entity]=[],cursor="",loading=false,selection:Set<String>=[]
+    override func viewDidLoad() { super.viewDidLoad();title="Archivio istantanee";navigationItem.rightBarButtonItem=UIBarButtonItem(title:"Seleziona",style:.plain,target:self,action:#selector(selectMode));run { try await self.load(reset:true) } }
+    override func viewWillAppear(_ animated:Bool) { super.viewWillAppear(animated);if !items.isEmpty { run { try await self.load(reset:true) } } }
+    private var selecting=false
+    @objc private func selectMode() { selecting.toggle();selection=[];navigationItem.rightBarButtonItem?.title=selecting ? "Annulla":"Seleziona";render() }
+    private func load(reset:Bool) async throws { guard !loading else { return };loading=true;defer { loading=false };let page=try await session.instantArchive(cursor:reset ? "":cursor);items=reset ? page.list("items"):items+page.list("items");cursor=page.text("nextCursor");render() }
+    private func render() {
+        let offset=scroll.contentOffset;clear();add(Design.label("I tuoi istanti,\nnel tempo.",size:29,weight:.bold,lines:2),inset:20);add(Design.label("Solo tu puoi vedere questo archivio.\nApri uno scatto per vedere chi l’ha visualizzato.",size:13,color:Design.muted,lines:2),inset:20)
+        if selecting { add(Design.button("Crea una storia riepilogo · \(selection.count)",primary:true) { [weak self] in self?.recap() },inset:18) }
+        if items.isEmpty { empty("Ogni istante conta",detail:"Le istantanee che crei saranno conservate qui.",symbol:"clock.arrow.circlepath") }
+        let formatter=DateFormatter();formatter.locale=Locale(identifier:"it_IT");formatter.dateFormat="MMMM yyyy"
+        var currentMonth=""
+        for start in stride(from:0,to:items.count,by:3) {
+            let month=formatter.string(from:Date(timeIntervalSince1970:items[start].number("created")))
+            if month != currentMonth { section(month.capitalized);currentMonth=month }
+            let row=Design.stack(.horizontal,spacing:3);row.distribution = .fillEqually
+            for index in start..<start+3 {
+                let tile=UIView();tile.backgroundColor=Design.soft;tile.clipsToBounds=true;tile.layer.cornerRadius=10;tile.heightAnchor.constraint(equalTo:tile.widthAnchor,multiplier:1.35).isActive=true;row.addArrangedSubview(tile)
+                guard index<items.count else { tile.backgroundColor = .clear;continue };let item=items[index];let photo=PhotoView(frame:.zero);tile.addSubview(photo);photo.pin(to:tile)
+                let date=Date(timeIntervalSince1970:item.number("created"));let day=Calendar.current.component(.day,from:date)
+                let badge=Design.label("\(day)\n\(date.formatted(.dateTime.month(.abbreviated)))",size:12,weight:.bold,color:.white,lines:2);badge.textAlignment = .center;badge.backgroundColor=UIColor.black.withAlphaComponent(0.3);badge.layer.cornerRadius=9;badge.clipsToBounds=true;tile.addSubview(badge);badge.translatesAutoresizingMaskIntoConstraints=false
+                let views=Design.label((selection.contains(item.id) ? "✓ ":"")+"◉ \(Int(item.number("viewsCount")))",size:11,weight:.semibold,color:.white);views.backgroundColor=UIColor.black.withAlphaComponent(0.45);views.textAlignment = .center;tile.addSubview(views);views.translatesAutoresizingMaskIntoConstraints=false
+                NSLayoutConstraint.activate([badge.topAnchor.constraint(equalTo:tile.topAnchor,constant:8),badge.leadingAnchor.constraint(equalTo:tile.leadingAnchor,constant:7),badge.widthAnchor.constraint(equalToConstant:40),badge.heightAnchor.constraint(equalToConstant:38),views.bottomAnchor.constraint(equalTo:tile.bottomAnchor),views.leadingAnchor.constraint(equalTo:tile.leadingAnchor),views.trailingAnchor.constraint(equalTo:tile.trailingAnchor),views.heightAnchor.constraint(equalToConstant:26)])
+                tile.onTap { [weak self] in guard let self=self else { return };if self.selecting { if self.selection.contains(item.id) { self.selection.remove(item.id) } else if self.selection.count<9 { self.selection.insert(item.id) };self.render() } else { self.present(InstantDeck(items:self.items,index:index),animated:true) } }
+                tile.addGestureRecognizer(MessageLongPress { [weak self] in self?.menu("Istantanea",items:[("Visualizzazioni",false,{ self?.sheet(InstantViewersController(id:item.id)) }),("Elimina",true,{ self?.run { try await self?.session.deleteInstant(item.id);try await self?.load(reset:true) } })],source:tile) })
+                Task { [weak photo] in if let bytes=try? await Session.shared.instantBytes(item,mode:"archive-photo") { photo?.image=UIImage(data:bytes) } }
+            };add(row,inset:4)
         }
+        if !cursor.isEmpty { add(Design.button("Carica altri istanti") { [weak self] in self?.run { try await self?.load(reset:false) } },inset:18) };scroll.setContentOffset(offset,animated:false)
     }
-    private var draggablePhoto: some View {
-        ProtectedPhoto(data: bytes, onNext: { next() }, showClose: false)
-            .clipShape(RoundedRectangle(cornerRadius: 24))
-            .rotation3DEffect(.degrees(Double(offset.height / 18)), axis: (x: 1, y: 0, z: 0))
-            .rotationEffect(.degrees(Double(offset.width / 35)))
-            .offset(offset)
-            .gesture(cardGesture)
-    }
-    private var cardGesture: some Gesture {
-        DragGesture(minimumDistance: 15)
-            .onChanged { offset = $0.translation }
-            .onEnded { value in finishDrag(value.translation) }
-    }
-    private func finishDrag(_ translation: CGSize) {
-        if abs(translation.height) > 80 || abs(translation.width) > 70 {
-            withAnimation(.easeIn(duration: 0.22)) {
-                offset = CGSize(width: translation.width * 3, height: translation.height < 0 ? -900 : 900)
-            }
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 230_000_000)
-                next()
-            }
-        } else {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { offset = .zero }
-        }
-    }
-    private var reactionBar: some View {
-        HStack {
-            ForEach(["❤️", "😂", "😍", "🔥"], id: \.self) { emoji in
-                Button(emoji) { feedback(emoji, reaction: true) }.font(.gpix(size:22,weight:.regular))
-            }
-            Spacer()
-            Text("\(index + 1)/\(items.count)").font(.gpix(size:12,weight:.regular))
-        }
-        .padding(.horizontal, 20)
-    }
-    private var replyBar: some View {
-        HStack {
-            TextField("Rispondi…", text: $reply).textFieldStyle(.roundedBorder)
-            Button("Invia") {
-                feedback(reply, reaction: false)
-                reply = ""
-            }
-            .disabled(reply.isEmpty)
-        }
-        .padding(16)
-    }
-    func open()async{
-        bytes=nil
-        opening=true
-        defer{
-            opening=false
-        }
-        guard !UIScreen.main.isCaptured,store.foreground else{
-            return
-        }
-        do{
-            bytes=try await store.instantPhoto(current.id,archive:false)
-        }
-        catch{
-            store.error=error.localizedDescription
-            next()
-        }
-    }
-    func next(){
-        bytes=nil
-        if index+1<items.count{
-            index+=1
-            offset = .zero
-            Task{
-                await open()
-            }
-        }
-        else{
-            create()
-        }
-    }
-    func feedback(_ text:String,reaction:Bool){
-        Task{
-            do{
-                _ = try await store.instantFeedback(current.id,text:text,reaction:reaction)
-            }
-            catch{
-                store.error=error.localizedDescription
-            }
+    private func recap() {
+        guard !selection.isEmpty else { alert("Scegli gli scatti","Seleziona da 1 a 9 istantanee.");return };run {
+            guard !self.session.isDemo else { self.alert("Riepilogo demo","Il riepilogo sarà creato dal server con il tuo account.");return }
+            let key=UUID().uuidString;let media=try await self.session.api("/instants/recap",["ids":Array(self.selection),"requestKey":key]);try await self.session.action("post",["kind":"story","media":media.text("media"),"text":"","idempotencyKey":key]);self.selecting=false;self.selection=[];self.render();self.alert("Storia pubblicata","Il riepilogo è nella tua storia.")
         }
     }
 }
-@MainActor
-struct ProtectedPhoto:View{
-    let data:Data?
-    let onNext: @MainActor () -> Void
-    var showClose=true
-    @Environment(\.scenePhase) private var phase
-    @Environment(\.dismiss) var dismiss
-    @State private var captured=UIScreen.main.isCaptured
-    @State private var screenshot=false
-    var body:some View{
-        ZStack{
-            Color.black.ignoresSafeArea()
-            if phase == .active && !captured && !screenshot,let data=data,let image=UIImage(data:data){
-                Image(uiImage:image).resizable().scaledToFit().onTapGesture { onNext() }
-            }
-            else{
-                VStack(spacing:20){
-                    GpixIcon(systemName:"rectangle.slash",size:60)
-                    Text("Contenuto protetto").font(.gpix(size:22,weight:.bold))
-                    Text("Interrompi la registrazione o duplicazione dello schermo per continuare.").multilineTextAlignment(.center)
-                }
-                .foregroundStyle(.white).padding(35)
-            }
-            if showClose{
-                VStack{
-                    HStack{
-                        Button{
-                            dismiss()
-                        } label: {
-                            Image(systemName:"xmark").font(.gpix(size:22,weight:.regular)).foregroundStyle(.white).padding()
-                        }
-                        Spacer()
-                    }
-                    Spacer()
-                }
-            }
-        }
-        .privacySensitive().onReceive(NotificationCenter.default.publisher(for:UIScreen.capturedDidChangeNotification)){
-            _ in captured=UIScreen.main.isCaptured
-        }
-        .onReceive(NotificationCenter.default.publisher(for:UIApplication.userDidTakeScreenshotNotification)){
-            _ in screenshot=true
-        }
-    }
+@MainActor extension InstantDeck {
+    convenience init(items:[Entity],index:Int) { self.init(items:items,archive:true,index:index) }
 }
-@MainActor
-struct InstantCamera:View{
-    @EnvironmentObject var store:GpixStore
-    @Environment(\.dismiss) var dismiss
-    @State private var camera=false
-    @State private var image:UIImage?
-    @State private var caption=""
-    @State private var audience="friends"
-    @State private var busy=false
-    var body:some View{
-        NavigationStack{
-            VStack(spacing:20){
-                if let image=image{
-                    Image(uiImage:image).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius:22))
-                }
-                else{
-                    EmptyViewCard(icon:"camera",title:"Scatta il tuo momento",subtitle:"Una foto nuova, disponibile per 24 ore.")
-                }
-                Button{
-                    camera=true
-                } label: {
-                    Label(image==nil ? "Apri fotocamera":"Scatta di nuovo",systemImage:"camera")
-                }
-                TextField("Aggiungi un pensiero…",text:$caption).textFieldStyle(.roundedBorder).onChange(of:caption){
-                    _, value in caption=String(value.prefix(120))
-                }
-                Picker("Condividi con",selection:$audience){
-                    Text("Amici").tag("friends")
-                    Text("Amici più stretti").tag("close")
-                }
-                .pickerStyle(.segmented)
-                PrimaryButton(title:busy ? "Condivisione…":"Condividi istantanea",disabled:image==nil || busy){
-                    send()
-                }
-                Text("Puoi crearla anche senza amici. Scade dopo 24 ore e rimane nel tuo archivio privato.").font(.gpix(size:12,weight:.regular)).foregroundStyle(gpixMuted)
-            }
-            .padding(22).navigationTitle("Nuova istantanea").toolbar{
-                Button("Annulla"){
-                    dismiss()
-                }
-            }
-            .sheet(isPresented:$camera){
-                CameraPicker(video:false){
-                    img,_ in image=img
-                    camera=false
-                }
-            }
-        }
-    }
-    func send(){
-        guard let data=image?.jpegData(compressionQuality:0.9)else{
-            return
-        }
-        busy=true
-        Task{
-            defer{
-                busy=false
-            }
-            do{
-                let m=try await store.upload(data,mime:"image/jpeg")
-                try await store.sendInstant(media:m.s("id"),caption:caption,audience:audience)
-                dismiss()
-            }
-            catch{
-                store.error=error.localizedDescription
-            }
-        }
-    }
-}
-@MainActor
-struct InstantArchiveView:View{
-    @EnvironmentObject var store:GpixStore
-    @State private var items:[Row]=[]
-    @State private var cursor=""
-    @State private var selected:IdentifiedRow?
-    @State private var selection:Set<String>=[]
-    @State private var selecting=false
-    @State private var activeOnly=false
-    @State private var create=false
-    @State private var recapID=""
-    @State private var recapImages:[UIImage]=[]
-    @State private var showRecap=false
-    var rows:[Row]{
-        items.filter{
-            !activeOnly || $0.n("expires")>Date().timeIntervalSince1970
-        }
-    }
-    var months:[String]{
-        var result:[String]=[]
-        for item in rows{
-            let key=month(item)
-            if !result.contains(key){
-                result.append(key)
-            }
-        }
-        return result
-    }
-    private func archiveMonth(_ key: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(key).font(.gpix(size:17,weight:.semibold))
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: 3), spacing: 3) {
-                ForEach(rows.filter { month($0) == key }, id: \.id) { item in
-                    archiveCell(item)
-                }
-            }
-        }
-    }
-    private func archiveCell(_ item: Row) -> some View {
-        Button { selectArchiveItem(item) } label: {
-            ArchiveThumb(item: item, selected: selection.contains(item.id))
-        }
-        .contextMenu { archiveActions(item) }
-    }
-    @ViewBuilder private func archiveActions(_ item: Row) -> some View {
-        Button("Elimina", systemImage: "trash", role: .destructive) { remove(item.id) }
-        if item.n("expires") > Date().timeIntervalSince1970 {
-            Button("Condividi con gli amici", systemImage: "person.2") { audience(item.id, "friends") }
-            Button("Solo amici più stretti", systemImage: "star") { audience(item.id, "close") }
-        }
-    }
-    private func selectArchiveItem(_ item: Row) {
-        if !selecting { selected = IdentifiedRow(row: item); return }
-        if selection.contains(item.id) { selection.remove(item.id) }
-        else if selection.count < 9 { selection.insert(item.id) }
-    }
-    var body:some View{
-        ScrollView{
-            VStack(alignment:.leading,spacing:20){
-                Label("Solo tu puoi vedere le tue istantanee archiviate, conservate fino a un anno.",systemImage:"lock").font(.gpix(size:12,weight:.regular)).foregroundStyle(gpixMuted).padding(13).frame(maxWidth:.infinity,alignment:.leading).background(Color.secondary.opacity(0.07),in:RoundedRectangle(cornerRadius:17))
-                HStack(spacing:10){
-                    Button("Tutte"){
-                        activeOnly=false
-                    }
-                    .buttonStyle(RequestButton(primary:!activeOnly))
-                    Button("Ultime 24 ore"){
-                        activeOnly=true
-                    }
-                    .buttonStyle(RequestButton(primary:activeOnly))
-                    Spacer()
-                    Button(selecting ? "Fine":"Seleziona"){
-                        selecting.toggle()
-                        selection=[]
-                    }
-                    .font(.gpix(size:12,weight:.bold))
-                }
-                if rows.isEmpty{
-                    EmptyViewCard(icon:"square.grid.2x2",title:"Ancora nessuna istantanea qui",subtitle:"I tuoi momenti saranno raccolti qui, solo per te.")
-                }
-                ForEach(months, id: \.self) { key in
-                    archiveMonth(key)
-                }
-                if !cursor.isEmpty{
-                    Button("Carica precedenti"){
-                        Task{
-                            await load(more:true)
-                        }
-                    }
-                }
-                PrimaryButton(title:selecting ? "Crea riepilogo · \(selection.count)/9":"Crea istantanea",disabled:selecting && selection.isEmpty){
-                    if selecting{
-                        recap()
-                    }
-                    else{
-                        create=true
-                    }
-                }
-            }
-            .padding(16)
-        }
-        .navigationTitle("Le tue istantanee").navigationBarTitleDisplayMode(.inline).refreshable{
-            await load()
-        }
-        .task{
-            await load()
-        }
-        .sheet(isPresented:$create,onDismiss:{
-            Task{
-                await load()
-            }
-        }
-        ){
-            InstantCamera()
-        }
-        .fullScreenCover(item:$selected){
-            item in ArchivePhotoView(item:item.row,onDelete:{
-                remove(item.id)
-            }
-            )
-        }
-        .sheet(isPresented:$showRecap){
-            NavigationStack{
-                VStack{
-                    if let image=recapImages.first{
-                        Image(uiImage:image).resizable().scaledToFit()
-                    }
-                    Text("Il riepilogo verrà pubblicato come storia.").font(.gpix(size:12,weight:.regular))
-                    PrimaryButton(title:"Condividi riepilogo"){
-                        Task{
-                            do{
-                                let m=try await store.api("/instants/recap",["ids":Array(selection),"requestKey":recapID])
-                                try await store.act("post",["kind":"story","media":m.s("media"),"text":"","idempotencyKey":recapID])
-                                showRecap=false
-                                selection=[]
-                                selecting=false
-                            }
-                            catch{
-                                store.error=error.localizedDescription
-                            }
-                        }
-                    }
-                }
-                .padding(20).navigationTitle("Riepilogo").toolbar{
-                    Button("Annulla"){
-                        showRecap=false
-                    }
-                }
-            }
-        }
-    }
-    func month(_ item:Row)->String{
-        let f=DateFormatter()
-        f.locale=Locale(identifier:"it_IT")
-        f.dateFormat="MMMM yyyy"
-        return f.string(from:Date(timeIntervalSince1970:item.n("created"))).capitalized
-    }
-    func load(more:Bool=false)async{
-        do{
-            let r=try await store.instantArchive(cursor:more ? cursor:"")
-            if more{
-                items+=r.rows("items")
-            }
-            else{
-                items=r.rows("items")
-            }
-            cursor=r.s("nextCursor")
-        }
-        catch{
-            store.error=error.localizedDescription
-        }
-    }
-    func remove(_ id:String){
-        Task{
-            do{
-                try await store.deleteInstant(id)
-                await load()
-            }
-            catch{
-                store.error=error.localizedDescription
-            }
-        }
-    }
-    func audience(_ id:String,_ audience:String){
-        Task{
-            do{
-                _ = try await store.api("/instants/\(id)/audience",["audience":audience])
-            }
-            catch{
-                store.error=error.localizedDescription
-            }
-        }
-    }
-    func recap(){
-        recapID=UUID().uuidString
-        Task{
-            var images:[UIImage]=[]
-            for id in selection{
-                if let data=try? await store.instantPhoto(id,archive:true),let image=UIImage(data:data){
-                    images.append(image)
-                }
-            }
-            guard !images.isEmpty else{
-                return
-            }
-            let size=CGSize(width:540,height:960)
-            let result=UIGraphicsImageRenderer(size:size).image{
-                _ in UIColor.black.setFill()
-                UIRectFill(CGRect(origin:.zero,size:size))
-                let cols=images.count==1 ? 1:images.count<=4 ? 2:3,rows=Int(ceil(Double(images.count)/Double(cols)))
-                for (i,image) in images.enumerated(){
-                    let rect=CGRect(x:CGFloat(i%cols)*size.width/CGFloat(cols)+3,y:CGFloat(i/cols)*size.height/CGFloat(rows)+3,width:size.width/CGFloat(cols)-6,height:size.height/CGFloat(rows)-6)
-                    image.draw(in:rect)
-                }
-            }
-            recapImages=[result]
-            showRecap=true
-        }
-    }
-}
-@MainActor
-struct ArchiveThumb:View{
-    @EnvironmentObject var store:GpixStore
-    let item:Row
-    var selected=false
-    @State private var image:UIImage?
-    var body:some View{
-        GeometryReader{
-            g in ZStack(alignment:.bottomLeading){
-                Color.secondary.opacity(0.1)
-                if let image=image{
-                    Image(uiImage:image).resizable().scaledToFill().frame(width:g.size.width,height:g.size.height).clipped()
-                }
-                LinearGradient(colors:[.clear,.black.opacity(0.5)],startPoint:.center,endPoint:.bottom)
-                VStack{
-                    HStack{
-                        Text(Date(timeIntervalSince1970:item.n("created")).formatted(.dateTime.day())).font(.gpix(size:12,weight:.bold))
-                        Spacer()
-                        if selected{
-                            Image(systemName:"checkmark.circle.fill").foregroundStyle(gpixPurple)
-                        }
-                    }
-                    Spacer()
-                    Label("\(Int(item.n("viewsCount")))",systemImage:"eye").font(.gpix(size:10,weight:.semibold)).frame(maxWidth:.infinity,alignment:.leading)
-                }
-                .foregroundStyle(.white).padding(8)
-            }
-        }
-        .aspectRatio(1,contentMode:.fit).clipped().task{
-            if let data=try? await store.instantPhoto(item.id,archive:true){
-                image=UIImage(data:data)
-            }
-        }
-    }
-}
-@MainActor
-struct ArchivePhotoView:View{
-    @EnvironmentObject var store:GpixStore
-    @Environment(\.dismiss) var dismiss
-    let item:Row
-    let onDelete: @MainActor () -> Void
-    @State private var data:Data?
-    @State private var viewers=false
-    var body:some View{
-        ZStack(alignment:.bottom){
-            ProtectedPhoto(data:data,onNext:{
-                dismiss()
-            }
-            )
-            HStack{
-                Button{
-                    viewers=true
-                } label: {
-                    Label("\(Int(item.n("viewsCount"))) visualizzazioni",systemImage:"eye")
-                }
-                Spacer()
-                Button(role:.destructive){
-                    onDelete()
-                    dismiss()
-                } label: {
-                    Image(systemName:"trash")
-                }
-            }
-            .foregroundStyle(.white).padding(25)
-        }
-        .task{
-            do{
-                data=try await store.instantPhoto(item.id,archive:true)
-            }
-            catch{
-                store.error=error.localizedDescription
-            }
-        }
-        .sheet(isPresented:$viewers){
-            InstantViewers(id:item.id)
-        }
-    }
-}
-@MainActor
-struct InstantViewers:View{
-    @EnvironmentObject var store:GpixStore
-    let id:String
-    @State private var items:[Row]=[]
-    @State private var offset=0
-    @State private var total=0
-    @State private var more=false
-    var body:some View{
-        NavigationStack{
-            List{
-                Text("\(total) visualizzazioni").font(.gpix(size:17,weight:.semibold))
-                ForEach(Array(items.enumerated()),id:\.offset){
-                    _,p in PersonLine(person:["id":p.s("user"),"name":p.s("name"),"username":p.s("username"),"avatar":p.s("avatar")],subtitle:ago(p.n("opened"))+" fa")
-                }
-                if more{
-                    Button("Carica altre"){
-                        Task{
-                            await load()
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Visualizzazioni").task{
-                await load()
-            }
-        }
-    }
-    func load()async{
-        do{
-            if store.demo{
-                items=[]
-                return
-            }
-            let r=try await store.api("/instants/\(id)/viewers?offset=\(offset)")
-            items+=r.rows("items")
-            total=Int(r.n("total"))
-            more=r["nextOffset"] is NSNumber
-            offset=Int(r.n("nextOffset"))
-        }
-        catch{
-            store.error=error.localizedDescription
-        }
-    }
-}
-extension GpixStore{
-    func instantList()async throws->Row{
-        if demo{
-            return state.row("demoInstants")
-        }
-        return try await api("/instants")
-    }
-    func instantArchive(cursor:String)async throws->Row{
-        if demo{
-            return ["items":state.row("demoInstants").rows("sent"),"nextCursor":""]
-        }
-        let encoded=cursor.addingPercentEncoding(withAllowedCharacters:.urlQueryAllowed) ?? ""
-        return try await api("/instants/archive?cursor="+encoded)
-    }
-    func instantPhoto(_ id:String,archive:Bool,preview:Bool=false)async throws->Data{
-        if demo{
-            let r=state.row("demoInstants")
-            let item=(r.rows("received")+r.rows("sent")).first{
-                $0.id==id
-            }
-            ?? [:]
-            let ref=item.s("media","post1.jpg")
-            if let image=localImage(ref),let data=image.jpegData(compressionQuality:0.8){
-                if !archive && !preview{
-                    var next=r
-                    next["received"]=r.rows("received").filter{
-                        $0.id != id
-                    }
-                    state["demoInstants"]=next
-                    persistDemo()
-                }
-                return data
-            }
-            throw GError(message:"Foto non disponibile")
-        }
-        return try await bytes("/instants/\(id)/"+(archive ? "archive-photo":preview ? "preview":"open"),payload:archive || preview ? nil:[:])
-    }
-    func sendInstant(media:String,caption:String,audience:String)async throws{
-        if demo{
-            var r=state.row("demoInstants"),sent=r.rows("sent")
-            let item:Row=["id":UUID().uuidString,"owner":myID,"media":media,"caption":caption,"created":Date().timeIntervalSince1970,"expires":Date().timeIntervalSince1970+86400,"viewsCount":0]
-            sent.insert(item,at:0)
-            r["sent"]=sent
-            r["active"]=sent.filter{
-                $0.n("expires")>Date().timeIntervalSince1970
-            }
-            state["demoInstants"]=r
-            return
-        }
-        _ = try await api("/instants/send",["media":media,"caption":caption,"audience":audience,"requestKey":UUID().uuidString])
-    }
-    func instantFeedback(_ id:String,text:String,reaction:Bool)async throws->Row{
-        if demo{
-            return [:]
-        }
-        return try await api("/instants/\(id)/feedback",["text":text,"kind":reaction ? "reaction":"reply","requestKey":UUID().uuidString])
-    }
-    func deleteInstant(_ id:String)async throws{
-        if demo{
-            var r=state.row("demoInstants")
-            r["sent"]=r.rows("sent").filter{
-                $0.id != id
-            }
-            state["demoInstants"]=r
-            return
-        }
-        _ = try await api("/instants/\(id)/delete",[:])
-    }
-}
-
-@MainActor
-struct CollectionInstantCard:View {
-    @EnvironmentObject var store:GpixStore
-    let item:Row
-    let count:Int
-    let own:Bool
-    @State private var image:UIImage?
-    private var remaining:String {
-        let seconds=max(0,item.n("expires")-Date().timeIntervalSince1970)
-        return seconds>=3600 ? "\(Int(ceil(seconds/3600))) h":"\(Int(ceil(seconds/60))) min"
-    }
-    var body:some View {
-        GeometryReader { geometry in
-            ZStack(alignment:.bottomLeading) {
-                gpixSoft
-                if let image=image { Image(uiImage:image).resizable().scaledToFill().frame(width:geometry.size.width,height:geometry.size.height).clipped() }
-                LinearGradient(colors:[Color.black.opacity(own ? 0:0.26),Color.clear,Color.black.opacity(0.87)],startPoint:.top,endPoint:.bottom)
-                if !own { Image(systemName:"viewfinder").font(.gpix(size:35)).foregroundStyle(Color.white).frame(maxWidth:.infinity,maxHeight:.infinity) }
-                VStack(alignment:.leading,spacing:4) {
-                    Text(own ? item.s("caption").isEmpty ? "Il tuo istante":item.s("caption") : item.s("username",store.person(item.s("owner")).s("username"))).font(.gpix(size:16,weight:.bold)).lineLimit(own ? 2:1)
-                    if !own { Text("Tocca per aprire").font(.gpix(size:11)).foregroundStyle(Color.white.opacity(0.7)) }
-                }.foregroundStyle(Color.white).padding(.horizontal,13).padding(.bottom,15)
-            }.overlay(alignment:.topLeading) {
-                Text(own ? "Scade tra \(remaining)":"\(count) \(count==1 ? "nuova":"nuove")").font(.gpix(size:11,weight:own ? .regular:.bold))
-                    .foregroundStyle(own ? Color.white:Color.black).padding(.horizontal,8).padding(.vertical,5).background(own ? Color.black.opacity(0.54):Color.white,in:RoundedRectangle(cornerRadius:12)).padding(12)
-            }
-            .frame(width:geometry.size.width,height:geometry.size.height).clipped().clipShape(RoundedRectangle(cornerRadius:25))
-        }.aspectRatio(1,contentMode:.fit)
-        .task(id:item.id) { if let data=try? await store.instantPhoto(item.id,archive:own,preview:!own) { image=UIImage(data:data) } }
+@MainActor final class InstantViewersController: StackScreen {
+    let id:String;private var offset=0,items:[Entity]=[],more=true
+    init(id:String) { self.id=id;super.init(nibName:nil,bundle:nil) }
+    required init?(coder:NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func viewDidLoad() { super.viewDidLoad();title="Visualizzazioni";run { try await self.load() } }
+    private func load() async throws {
+        let r:Entity
+        if session.isDemo { r=Entity(["items":session.users.prefix(2).map { $0.updating(["user":$0.id,"opened":Date().timeIntervalSince1970]).values },"total":2]) }
+        else { r=try await session.api("/instants/\(id)/viewers?offset=\(offset)") };items += r.list("items");more=r.values["nextOffset"] is NSNumber;offset=Int(r.number("nextOffset"));title="\(Int(r.number("total"))) visualizzazioni";clear()
+        for user in items { row(user.text("name"),subtitle:"Vista "+Domain.ago(user.number("opened")),accessory:Avatar(user,size:42)) { [weak self] in if !user.text("user").isEmpty { self?.push(ProfileController(id:user.text("user"))) } } }
+        if items.isEmpty { empty("Nessuna visualizzazione",detail:"Qui vedrai chi ha aperto questa istantanea.",symbol:"eye") };if more { add(Design.button("Mostra altre") { [weak self] in self?.run { try await self?.load() } },inset:18) }
     }
 }

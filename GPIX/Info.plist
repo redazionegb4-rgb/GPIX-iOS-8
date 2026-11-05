@@ -37,9 +37,9 @@
 		<false/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>Scatta foto, istantanee e video e partecipa alle videochiamate su GPIX.</string>
+	<string>Scatta foto, storie e istantanee e partecipa alle videochiamate.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Registra messaggi vocali, video e partecipa alle chiamate.</string>
+	<string>Registra vocali, video e partecipa alle chiamate e alle dirette.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Salva le tue foto sul dispositivo.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

@@ -1,7 +1,1 @@
-GPIX iPhone — build 54
-
-Apri GPIX.xcodeproj (icona blu).
-Schema: GPIX.
-Non creare workspace. Non aprire Runner.
-Per GitHub carica il contenuto di questa cartella nello stesso repository iOS.
-Android non cambia.
+Apri GPIX.xcodeproj e seleziona lo schema GPIX. Bundle ID: app.gpix.gpix. Consulta LEGGIMI.md.
