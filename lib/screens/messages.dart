@@ -44,7 +44,7 @@ class _InboxState extends State<Inbox> {
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
-        leading: const SizedBox(width: 48),
+        automaticallyImplyLeading: true,
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -135,71 +135,74 @@ class _InboxState extends State<Inbox> {
                   'Inizia a scrivere a qualcuno della community.',
                 ),
               for (final t in threads)
-                InkWell(
-                  onTap: () => open(c, Chat(id: t.str('id'))),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 13,
-                    ),
-                    child: Row(
-                      children: [
-                        if (t.str('owner').isNotEmpty)
-                          groupAvatar()
-                        else
-                          GestureDetector(
-                            onTap: () => s.stories(s.other(t)).isNotEmpty
-                                ? open(c, StoryViewer(user: s.other(t)))
-                                : open(c, Profile(user: s.other(t))),
-                            child: ChatPresenceAvatar(
-                              s.other(t),
-                              size: 64,
-                              ring: s.hasUnseenStories(s.other(t)),
+                AuraPanel(
+                  margin: const EdgeInsets.fromLTRB(12, 3, 12, 7),
+                  child: InkWell(
+                    onTap: () => open(c, Chat(id: t.str('id'))),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 13,
+                      ),
+                      child: Row(
+                        children: [
+                          if (t.str('owner').isNotEmpty)
+                            groupAvatar()
+                          else
+                            GestureDetector(
+                              onTap: () => s.stories(s.other(t)).isNotEmpty
+                                  ? open(c, StoryViewer(user: s.other(t)))
+                                  : open(c, Profile(user: s.other(t))),
+                              child: ChatPresenceAvatar(
+                                s.other(t),
+                                size: 64,
+                                ring: s.hasUnseenStories(s.other(t)),
+                              ),
+                            ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  s.threadName(t),
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: s.chatHasUnread(t)
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  inboxPreview(s, t),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: s.chatHasUnread(t)
+                                        ? foreground(c)
+                                        : muted,
+                                    fontWeight: s.chatHasUnread(t)
+                                        ? FontWeight.w600
+                                        : FontWeight.w400,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                s.threadName(t),
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: s.chatHasUnread(t)
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                ),
+                          const SizedBox(width: 12),
+                          if (s.chatHasUnread(t))
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: violet,
+                                shape: BoxShape.circle,
                               ),
-                              const SizedBox(height: 6),
-                              Text(
-                                inboxPreview(s, t),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: s.chatHasUnread(t)
-                                      ? foreground(c)
-                                      : muted,
-                                  fontWeight: s.chatHasUnread(t)
-                                      ? FontWeight.w600
-                                      : FontWeight.w400,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        if (s.chatHasUnread(t))
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: const BoxDecoration(
-                              color: violet,
-                              shape: BoxShape.circle,
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -1250,7 +1253,7 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
                 clipBehavior: Clip.antiAlias,
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
                 decoration: BoxDecoration(
-                  color: subdued(c),
+                  gradient: crystalGradient(c),
                   border: Border.all(color: Theme.of(c).dividerColor),
                   borderRadius: BorderRadius.circular(29),
                 ),
@@ -1637,15 +1640,10 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
                                   own &&
                                       m.str('kind') != 'sticker' &&
                                       !emojiOnly
-                                  ? const LinearGradient(
-                                      colors: [
-                                        Color(0xff7444d2),
-                                        Color(0xff4f39b5),
-                                      ],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    )
-                                  : null,
+                                  ? auraAction
+                                  : m.str('kind') == 'sticker' || emojiOnly
+                                  ? null
+                                  : crystalGradient(c),
                               borderRadius: BorderRadius.only(
                                 topLeft: const Radius.circular(20),
                                 topRight: const Radius.circular(20),

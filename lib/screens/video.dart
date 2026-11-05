@@ -291,7 +291,7 @@ class _ReelsState extends State<Reels> {
   Widget build(BuildContext c) {
     final s = GpixScope.of(c), reels = s.reels;
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xff17243c),
       body: SafeArea(
         child: Stack(
           children: [

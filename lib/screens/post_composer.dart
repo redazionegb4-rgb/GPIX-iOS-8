@@ -502,7 +502,7 @@ class _PostComposerState extends State<PostComposer> {
 
   List<double> get matrix => postMatrix(filter, brightness);
 
-  static const blue = Color(0xff4d5cff);
+  static const blue = auraBlue;
   Widget preview({bool finalStep = false}) {
     if (files.isEmpty)
       return const Center(
@@ -617,12 +617,9 @@ class _PostComposerState extends State<PostComposer> {
       );
   @override
   Widget build(BuildContext c) {
-    final dark = step < 2;
     return Scaffold(
-      backgroundColor: dark ? const Color(0xff0b0f15) : surface(c),
       appBar: AppBar(
-        backgroundColor: dark ? const Color(0xff0b0f15) : surface(c),
-        foregroundColor: dark ? Colors.white : foreground(c),
+        foregroundColor: foreground(c),
         centerTitle: true,
         leading: IconButton(
           tooltip: step == 0 ? 'Annulla' : 'Indietro',
@@ -638,7 +635,7 @@ class _PostComposerState extends State<PostComposer> {
                 },
           icon: GIcon(
             step == 0 ? CupertinoIcons.xmark : CupertinoIcons.chevron_left,
-            color: dark ? Colors.white : foreground(c),
+            color: foreground(c),
           ),
         ),
         title: Text(
@@ -652,12 +649,9 @@ class _PostComposerState extends State<PostComposer> {
             icon: GIcon(
               CupertinoIcons.doc_text,
               size: 18,
-              color: dark ? Colors.white : foreground(c),
+              color: foreground(c),
             ),
-            label: Text(
-              'Bozza',
-              style: TextStyle(color: dark ? Colors.white : foreground(c)),
-            ),
+            label: Text('Bozza', style: TextStyle(color: foreground(c))),
           ),
           if (step == 0)
             Padding(
@@ -670,9 +664,8 @@ class _PostComposerState extends State<PostComposer> {
                         positionPreview();
                       },
                 style: TextButton.styleFrom(
-                  backgroundColor: Colors.white10,
-                  foregroundColor: const Color(0xff9ebaff),
-                  disabledForegroundColor: Colors.white30,
+                  backgroundColor: subdued(c),
+                  foregroundColor: accent(c),
                 ),
                 child: const Text(
                   'Avanti',
@@ -686,25 +679,7 @@ class _PostComposerState extends State<PostComposer> {
           ? SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-                child: SizedBox(
-                  height: 50,
-                  child: FilledButton(
-                    onPressed: busy ? null : publish,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: blue,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(13),
-                      ),
-                    ),
-                    child: Text(
-                      busy ? 'Pubblico…' : 'Condividi',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                      ),
-                    ),
-                  ),
-                ),
+                child: PrimaryButton('Condividi', busy: busy, onTap: publish),
               ),
             )
           : null,
@@ -763,12 +738,12 @@ class _PostComposerState extends State<PostComposer> {
             children: [
               TextButton(
                 onPressed: () => pick(),
-                child: const Row(
+                child: Row(
                   children: [
                     Text(
                       'Recenti',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: foreground(c),
                         fontSize: 17,
                         fontWeight: FontWeight.w700,
                       ),
@@ -776,7 +751,7 @@ class _PostComposerState extends State<PostComposer> {
                     SizedBox(width: 6),
                     GIcon(
                       CupertinoIcons.chevron_down,
-                      color: Colors.white,
+                      color: foreground(c),
                       size: 15,
                     ),
                   ],
@@ -792,12 +767,12 @@ class _PostComposerState extends State<PostComposer> {
                   }
                 }),
                 style: TextButton.styleFrom(
-                  backgroundColor: multiple ? blue : Colors.white10,
-                  foregroundColor: Colors.white,
+                  backgroundColor: multiple ? blue : subdued(c),
+                  foregroundColor: multiple ? Colors.white : foreground(c),
                 ),
-                icon: const GIcon(
+                icon: GIcon(
                   CupertinoIcons.square_on_square,
-                  color: Colors.white,
+                  color: multiple ? Colors.white : foreground(c),
                   size: 19,
                 ),
                 label: Text(multiple ? 'Multipla' : 'Seleziona'),
@@ -807,12 +782,7 @@ class _PostComposerState extends State<PostComposer> {
         ),
         Expanded(
           child: loadingGallery
-              ? const Center(
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2,
-                  ),
-                )
+              ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
               : recent.isEmpty
               ? fallbackGallery(c)
               : GridView.builder(
@@ -828,12 +798,12 @@ class _PostComposerState extends State<PostComposer> {
                     if (i == 0)
                       return InkWell(
                         onTap: () => pick(camera: true),
-                        child: const ColoredBox(
-                          color: Color(0xff24262b),
+                        child: ColoredBox(
+                          color: subdued(c),
                           child: Center(
                             child: GIcon(
                               CupertinoIcons.camera_fill,
-                              color: Colors.white,
+                              color: accent(c),
                               size: 30,
                             ),
                           ),
@@ -920,7 +890,7 @@ class _PostComposerState extends State<PostComposer> {
         child: Text(
           'Consenti l’accesso alle foto per vedere qui la griglia dei recenti.',
           textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.white54, fontSize: 12),
+          style: TextStyle(color: muted, fontSize: 12),
         ),
       ),
     ],
@@ -943,7 +913,7 @@ class _PostComposerState extends State<PostComposer> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xff1c1f24),
+      backgroundColor: surface(context),
       builder: (c) => StatefulBuilder(
         builder: (c, update) => Padding(
           padding: EdgeInsets.fromLTRB(
@@ -961,7 +931,6 @@ class _PostComposerState extends State<PostComposer> {
                     child: Text(
                       'Testo sulla foto',
                       style: TextStyle(
-                        color: Colors.white,
                         fontSize: 19,
                         fontWeight: FontWeight.w700,
                       ),
@@ -978,19 +947,12 @@ class _PostComposerState extends State<PostComposer> {
                 autofocus: true,
                 maxLength: 160,
                 maxLines: 3,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  hintText: 'Scrivi qualcosa…',
-                  hintStyle: TextStyle(color: Colors.white54),
-                ),
+                decoration: const InputDecoration(hintText: 'Scrivi qualcosa…'),
                 onChanged: (value) => setState(() => overlayText = value),
               ),
               Row(
                 children: [
-                  const Text(
-                    'Dimensione',
-                    style: TextStyle(color: Colors.white70),
-                  ),
+                  const Text('Dimensione'),
                   Expanded(
                     child: Slider(
                       value: textSize,
@@ -1013,10 +975,7 @@ class _PostComposerState extends State<PostComposer> {
                       );
                       update(() {});
                     },
-                    icon: const Icon(
-                      Icons.format_align_center,
-                      color: Colors.white,
-                    ),
+                    icon: const Icon(Icons.format_align_center),
                   ),
                 ],
               ),
@@ -1075,12 +1034,12 @@ class _PostComposerState extends State<PostComposer> {
               child: TextButton.icon(
                 onPressed: chooseAudio,
                 style: TextButton.styleFrom(
-                  backgroundColor: Colors.white10,
-                  foregroundColor: Colors.white,
+                  backgroundColor: subdued(c),
+                  foregroundColor: foreground(c),
                 ),
-                icon: const GIcon(
+                icon: GIcon(
                   CupertinoIcons.music_note_2,
-                  color: Colors.white,
+                  color: accent(c),
                   size: 20,
                 ),
                 label: Text(
@@ -1097,18 +1056,20 @@ class _PostComposerState extends State<PostComposer> {
                   audioName = '';
                   music = null;
                 }),
-                icon: const GIcon(
-                  CupertinoIcons.xmark,
-                  color: Colors.white,
-                  size: 17,
-                ),
+                icon: const GIcon(CupertinoIcons.xmark, size: 17),
               ),
           ],
         ),
       ),
       Expanded(
         child: Center(
-          child: AspectRatio(aspectRatio: aspect, child: preview()),
+          child: AspectRatio(
+            aspectRatio: aspect,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: preview(),
+            ),
+          ),
         ),
       ),
       const SizedBox(height: 14),
@@ -1243,12 +1204,12 @@ class _PostComposerState extends State<PostComposer> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            GIcon(icon, color: Colors.white, size: 25),
+            GIcon(icon, color: accent(context), size: 25),
             const SizedBox(height: 8),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 11, color: Colors.white),
+              style: TextStyle(fontSize: 11, color: foreground(context)),
             ),
           ],
         ),
@@ -1263,7 +1224,7 @@ class _PostComposerState extends State<PostComposer> {
     await showModalBottomSheet<void>(
       context: c,
       isScrollControlled: true,
-      backgroundColor: const Color(0xff1c1f24),
+      backgroundColor: surface(context),
       builder: (c) => StatefulBuilder(
         builder: (c, update) => SafeArea(
           child: SizedBox(
@@ -1275,7 +1236,7 @@ class _PostComposerState extends State<PostComposer> {
                   width: 36,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.white30,
+                    color: Theme.of(c).dividerColor,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -1295,7 +1256,6 @@ class _PostComposerState extends State<PostComposer> {
                           filters ? 'Filtri' : 'Modifica',
                           textAlign: TextAlign.center,
                           style: const TextStyle(
-                            color: Colors.white,
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
                           ),
@@ -1333,8 +1293,10 @@ class _PostComposerState extends State<PostComposer> {
                                     name,
                                     style: TextStyle(
                                       color: filter == name
-                                          ? Colors.white
-                                          : Colors.white60,
+                                          ? accent(c)
+                                          : Theme.of(
+                                              c,
+                                            ).colorScheme.onSurfaceVariant,
                                       fontWeight: filter == name
                                           ? FontWeight.w700
                                           : FontWeight.w400,
@@ -1349,7 +1311,7 @@ class _PostComposerState extends State<PostComposer> {
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
                                         color: filter == name
-                                            ? Colors.white
+                                            ? accent(c)
                                             : Colors.transparent,
                                         width: 2,
                                       ),
@@ -1377,8 +1339,10 @@ class _PostComposerState extends State<PostComposer> {
                                     photoAdjustments[i],
                                     style: TextStyle(
                                       color: selected == photoAdjustments[i]
-                                          ? Colors.white
-                                          : Colors.white60,
+                                          ? accent(c)
+                                          : Theme.of(
+                                              c,
+                                            ).colorScheme.onSurfaceVariant,
                                       fontSize: 12,
                                     ),
                                   ),
@@ -1391,7 +1355,7 @@ class _PostComposerState extends State<PostComposer> {
                                       border: Border.all(
                                         color: selected == photoAdjustments[i]
                                             ? blue
-                                            : Colors.white24,
+                                            : Theme.of(c).dividerColor,
                                       ),
                                     ),
                                     child: Icon(
@@ -1409,7 +1373,6 @@ class _PostComposerState extends State<PostComposer> {
                                         Icons.blur_linear,
                                         Icons.details_outlined,
                                       ][i],
-                                      color: Colors.white,
                                       size: 32,
                                     ),
                                   ),

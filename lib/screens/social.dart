@@ -62,86 +62,95 @@ class _HomeShellState extends State<HomeShell> {
             const Explore(),
             Reels(active: tab == 2),
             Profile(user: s.myId, root: true),
-            const Inbox(),
           ],
         ),
       ),
       bottomNavigationBar: SafeArea(
         top: false,
-        minimum: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+        minimum: const EdgeInsets.fromLTRB(12, 0, 12, 10),
         child: Center(
           heightFactor: 1,
           child: AnimatedContainer(
-            key: const ValueKey('floating-navigation'),
+            key: ValueKey('floating-navigation'),
             duration: MediaQuery.disableAnimationsOf(c)
                 ? Duration.zero
                 : const Duration(milliseconds: 240),
             curve: Curves.easeOutCubic,
             width: compact
-                ? (MediaQuery.sizeOf(c).width - 96).clamp(260.0, 600.0)
-                : MediaQuery.sizeOf(c).width - 40,
-            height: compact ? 54 : 64,
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
-            decoration: BoxDecoration(
-              gradient: crystalGradient(c, translucent: true),
-              borderRadius: BorderRadius.circular(40),
-              border: Border.all(
-                color: Theme.of(c).colorScheme.outlineVariant,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: ink.withValues(alpha: .15),
-                  blurRadius: 24,
-                  offset: const Offset(0, 5),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                nav(CupertinoIcons.house, CupertinoIcons.house_fill, 0, 'Home'),
-                nav(
-                  CupertinoIcons.play_rectangle,
-                  CupertinoIcons.play_rectangle_fill,
-                  2,
-                  'Reel',
-                ),
-                nav(
-                  CupertinoIcons.paperplane,
-                  CupertinoIcons.paperplane_fill,
-                  4,
-                  'Messaggi',
-                ),
-                nav(CupertinoIcons.search, CupertinoIcons.search, 1, 'Cerca'),
-                Expanded(
-                  child: Semantics(
-                    label: 'Profilo',
-                    selected: tab == 3,
-                    child: InkWell(
-                      onTap: () => setState(() {
-                        tab = 3;
-                        compact = false;
-                        scrollTravel = 0;
-                      }),
-                      borderRadius: BorderRadius.circular(30),
+                ? (MediaQuery.sizeOf(c).width - 68).clamp(258.0, 480.0)
+                : (MediaQuery.sizeOf(c).width - 24).clamp(258.0, 520.0),
+            height: compact ? 58 : 68,
+            child: AuraPanel(
+              radius: 24,
+              frosted: true,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                child: Row(
+                  children: [
+                    nav(
+                      CupertinoIcons.house,
+                      CupertinoIcons.house_fill,
+                      0,
+                      'Home',
+                    ),
+                    nav(
+                      CupertinoIcons.search,
+                      CupertinoIcons.search,
+                      1,
+                      'Cerca',
+                    ),
+                    Expanded(
                       child: Center(
-                        child: Container(
-                          padding: const EdgeInsets.all(3),
+                        child: DecoratedBox(
                           decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: tab == 3
-                                  ? accent(c)
-                                  : Colors.transparent,
-                              width: 1.5,
+                            gradient: auraAction,
+                            borderRadius: BorderRadius.circular(15),
+                            border: Border.all(color: const Color(0x55ffffff)),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x555f4be8),
+                                blurRadius: 12,
+                                offset: Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: IconButton(
+                            tooltip: 'Crea',
+                            constraints: const BoxConstraints.tightFor(
+                              width: 48,
+                              height: 48,
+                            ),
+                            style: IconButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                            ),
+                            onPressed: () => createMenu(c),
+                            icon: const GIcon(
+                              CupertinoIcons.plus,
+                              size: 26,
+                              color: Colors.white,
                             ),
                           ),
-                          child: Avatar(s.myId, size: compact ? 25 : 28),
                         ),
                       ),
                     ),
-                  ),
+                    nav(
+                      CupertinoIcons.play_rectangle,
+                      CupertinoIcons.play_rectangle_fill,
+                      2,
+                      'Reel',
+                    ),
+                    nav(
+                      CupertinoIcons.person,
+                      CupertinoIcons.person_fill,
+                      3,
+                      'Profilo',
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -149,55 +158,41 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
-  Widget nav(IconData a, IconData b, int i, String label) => Expanded(
-    child: IconButton(
-      tooltip: label,
-      style: IconButton.styleFrom(
-        backgroundColor: tab == i
-            ? Theme.of(context).colorScheme.primaryContainer
-            : Colors.transparent,
-        shape: const StadiumBorder(),
-        minimumSize: const Size(50, 46),
-      ),
-      onPressed: () {
-        setState(() {
-          compact = false;
-          scrollTravel = 0;
-        });
-        if (i == 0) {
-          if (tab != 0) setState(() => tab = 0);
-          feedKey.currentState?.toTop();
-        } else {
-          setState(() => tab = i);
-        }
-      },
-      icon: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          GIcon(
-            tab == i ? b : a,
-            size: compact ? 24 : 27,
-            color: tab == i ? accent(context) : foreground(context),
-          ),
-          if (i == 4 &&
-              GpixScope.of(
-                context,
-              ).threads.any((t) => GpixScope.of(context).chatHasUnread(t)))
-            const Positioned(
-              right: -3,
-              bottom: -2,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Colors.red,
-                  shape: BoxShape.circle,
-                ),
-                child: SizedBox(width: 7, height: 7),
+  Widget nav(IconData icon, IconData activeIcon, int index, String label) {
+    final selected = tab == index;
+    return Expanded(
+      child: Center(
+        child: Semantics(
+          selected: selected,
+          child: IconButton(
+            tooltip: label,
+            style: IconButton.styleFrom(
+              backgroundColor: selected
+                  ? Theme.of(context).colorScheme.primaryContainer
+                  : Colors.transparent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
               ),
+              minimumSize: const Size(48, 48),
             ),
-        ],
+            onPressed: () {
+              setState(() {
+                tab = index;
+                compact = false;
+                scrollTravel = 0;
+              });
+              if (index == 0) feedKey.currentState?.toTop();
+            },
+            icon: GIcon(
+              selected ? activeIcon : icon,
+              size: compact ? 23 : 25,
+              color: selected ? accent(context) : foreground(context),
+            ),
+          ),
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class Feed extends StatefulWidget {
@@ -274,6 +269,8 @@ class _FeedState extends State<Feed> {
               )
             : null,
         title: InkWell(
+          key: const ValueKey('feed-filter-title'),
+          borderRadius: BorderRadius.circular(12),
           onTap: () => sheet(
             c,
             Column(
@@ -293,36 +290,45 @@ class _FeedState extends State<Feed> {
                   .toList(),
             ),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                filter,
-                key: const ValueKey('feed-filter-title'),
-                style: const TextStyle(
-                  fontSize: 23,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -.5,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'GPIX',
+                  style: TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -1.15,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 5),
-              const GIcon(CupertinoIcons.chevron_down, size: 13),
-            ],
+                const SizedBox(width: 6),
+                const GIcon(CupertinoIcons.chevron_down, size: 13),
+                if (filter != 'Per te')
+                  Flexible(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 7),
+                      child: Text(
+                        filter,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: accent(c), fontSize: 12),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
-        leading: IconButton(
-          tooltip: 'Crea',
-          onPressed: () => createMenu(c),
-          icon: const GIcon(CupertinoIcons.plus, size: 30),
-        ),
-        centerTitle: true,
+        centerTitle: false,
         actions: [
           IconButton(
             tooltip: 'Attività',
             icon: Stack(
               clipBehavior: Clip.none,
               children: [
-                const GIcon(CupertinoIcons.heart, size: 26),
+                const GIcon(CupertinoIcons.bell, size: 24),
                 if (s.hasActivity)
                   const Positioned(
                     top: -2,
@@ -338,6 +344,14 @@ class _FeedState extends State<Feed> {
               ],
             ),
             onPressed: () => open(c, const Activity()),
+          ),
+          IconButton(
+            tooltip: 'Messaggi',
+            onPressed: () => open(c, const Inbox()),
+            icon: Badge(
+              isLabelVisible: s.threads.any(s.chatHasUnread),
+              child: const GIcon(CupertinoIcons.chat_bubble, size: 24),
+            ),
           ),
           const SizedBox(width: 7),
         ],
@@ -455,14 +469,26 @@ class _StoryTrayState extends State<StoryTray> {
             ),
           ),
         Container(
-          height: 142,
+          height:
+              124 +
+              (MediaQuery.textScalerOf(c).scale(12) - 12).clamp(0.0, 32.0),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                const Color(0xffc4b5fd).withValues(alpha: .24),
+                const Color(0xff67e8f9).withValues(alpha: .24),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(26),
+          ),
+          margin: const EdgeInsets.fromLTRB(10, 4, 10, 6),
           child: ListView.separated(
             key: const ValueKey('stories-strip'),
             controller: scroll,
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+            padding: const EdgeInsets.fromLTRB(6, 10, 6, 5),
             scrollDirection: Axis.horizontal,
             itemCount: users.length + 1,
-            separatorBuilder: (_, i) => const SizedBox(width: 13),
+            separatorBuilder: (_, i) => const SizedBox(width: 6),
             itemBuilder: (c, i) {
               final uid = i == 0 ? s.myId : users[i - 1].str('id');
               final stories = s.stories(uid);
@@ -474,7 +500,10 @@ class _StoryTrayState extends State<StoryTray> {
                     ? () => open(c, const Composer(kind: 'story'))
                     : null,
                 child: SizedBox(
-                  width: 94,
+                  width: ((MediaQuery.sizeOf(c).width - 52) / 4).clamp(
+                    65.0,
+                    88.0,
+                  ),
                   child: Column(
                     children: [
                       Stack(
@@ -482,13 +511,16 @@ class _StoryTrayState extends State<StoryTray> {
                         children: [
                           Avatar(
                             uid,
-                            size: 84,
-                            ring: stories.isNotEmpty,
-                            viewed: stories.every(
-                              (p) =>
-                                  (p.flag('seenByMe') ||
-                                  p.ids('viewers').contains(s.myId)),
-                            ),
+                            size: ((MediaQuery.sizeOf(c).width - 52) / 4 - 13)
+                                .clamp(54.0, 72.0),
+                            ring: stories.isNotEmpty || i == 0,
+                            viewed:
+                                i != 0 &&
+                                stories.every(
+                                  (p) =>
+                                      (p.flag('seenByMe') ||
+                                      p.ids('viewers').contains(s.myId)),
+                                ),
                           ),
                           if (i == 0)
                             Positioned(
@@ -502,17 +534,17 @@ class _StoryTrayState extends State<StoryTray> {
                                   width: 30,
                                   height: 30,
                                   decoration: BoxDecoration(
-                                    color: foreground(c),
+                                    gradient: auraAction,
                                     shape: BoxShape.circle,
                                     border: Border.all(
                                       color: surface(c),
                                       width: 2.5,
                                     ),
                                   ),
-                                  child: GIcon(
+                                  child: const GIcon(
                                     CupertinoIcons.plus,
-                                    size: 19,
-                                    color: surface(c),
+                                    size: 17,
+                                    color: Colors.white,
                                   ),
                                 ),
                               ),
@@ -582,311 +614,328 @@ class _PostCardState extends State<PostCard>
         u = s.user(uid),
         media = s.media(p),
         liked = p.ids('likes').contains(s.myId);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (p.ids('reposts').isNotEmpty)
+    return AuraPanel(
+      margin: const EdgeInsets.fromLTRB(12, 5, 12, 11),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (p.ids('reposts').isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(17, 10, 17, 0),
+              child: Row(
+                children: [
+                  const GIcon(CupertinoIcons.repeat, size: 14, color: muted),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Ripubblicato da ${p.ids('reposts').map((id) => id == s.myId ? 'te' : s.user(id).str('username')).take(3).join(', ')}',
+                      style: const TextStyle(color: muted, fontSize: 11),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(17, 10, 17, 0),
+            padding: const EdgeInsets.fromLTRB(12, 11, 8, 10),
             child: Row(
               children: [
-                const GIcon(CupertinoIcons.repeat, size: 14, color: muted),
-                const SizedBox(width: 6),
+                InkWell(
+                  onTap: () => open(c, Profile(user: uid)),
+                  child: Avatar(uid, size: 37),
+                ),
+                const SizedBox(width: 10),
                 Expanded(
-                  child: Text(
-                    'Ripubblicato da ${p.ids('reposts').map((id) => id == s.myId ? 'te' : s.user(id).str('username')).take(3).join(', ')}',
-                    style: const TextStyle(color: muted, fontSize: 11),
+                  child: InkWell(
+                    onTap: () => open(c, Profile(user: uid)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          u.str('username'),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        if (p.str('location').isEmpty &&
+                            uid != s.myId &&
+                            !s.follows(uid)) ...[
+                          const SizedBox(height: 2),
+                          const Text(
+                            'Suggeriti per te',
+                            style: TextStyle(fontSize: 11.5),
+                          ),
+                        ],
+                        if (p.str('location').isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            p.str('location'),
+                            style: const TextStyle(fontSize: 10.5),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
+                ),
+                if (uid != s.myId && !s.follows(uid))
+                  Padding(
+                    padding: const EdgeInsets.only(left: 6, right: 3),
+                    child: TextButton(
+                      key: ValueKey('feed-follow-$uid-${widget.id}'),
+                      onPressed: () => perform(
+                        c,
+                        () => s.act('follow', {'user': uid, 'enabled': true}),
+                      ),
+                      style: TextButton.styleFrom(
+                        backgroundColor: subdued(c),
+                        foregroundColor: foreground(c),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        minimumSize: const Size(68, 34),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                      ),
+                      child: const Text(
+                        'Segui',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                IconButton(
+                  tooltip: 'Opzioni del post',
+                  icon: const GIcon(CupertinoIcons.ellipsis, size: 22),
+                  onPressed: () => postMenu(c, p),
                 ),
               ],
             ),
           ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 11, 8, 10),
-          child: Row(
-            children: [
-              InkWell(
-                onTap: () => open(c, Profile(user: uid)),
-                child: Avatar(uid, size: 37),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: InkWell(
-                  onTap: () => open(c, Profile(user: uid)),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 7),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: GestureDetector(
+                onDoubleTap: () => like(c, p, force: true),
+                child: AspectRatio(
+                  aspectRatio: p
+                      .obj('style')
+                      .number('aspect', 1)
+                      .clamp(.75, 1.91),
+                  child: Stack(
+                    fit: StackFit.expand,
                     children: [
-                      Text(
-                        u.str('username'),
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
+                      if (media.isNotEmpty)
+                        PageView.builder(
+                          key: PageStorageKey('media-${widget.id}'),
+                          itemCount: media.length,
+                          onPageChanged: (i) => setState(() => page = i),
+                          itemBuilder: (c, i) => InteractiveViewer(
+                            minScale: 1,
+                            maxScale: 3,
+                            child: MediaView(media[i]),
+                          ),
+                        ),
+                      if (media.length > 1)
+                        Positioned(
+                          top: 13,
+                          right: 13,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black54,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              '${page + 1}/${media.length}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                        ),
+                      IgnorePointer(
+                        child: AnimatedBuilder(
+                          animation: heart,
+                          builder: (c, _) => Opacity(
+                            opacity: heart.value == 0
+                                ? 0
+                                : (1 - heart.value).clamp(0, 1),
+                            child: Transform.scale(
+                              scale: .8 + heart.value * .45,
+                              child: const Center(
+                                child: GIcon(
+                                  CupertinoIcons.heart_fill,
+                                  size: 95,
+                                  color: Colors.white,
+                                  shadows: [
+                                    Shadow(
+                                      blurRadius: 12,
+                                      color: Colors.black26,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                      if (p.str('location').isEmpty &&
-                          uid != s.myId &&
-                          !s.follows(uid)) ...[
-                        const SizedBox(height: 2),
-                        const Text(
-                          'Suggeriti per te',
-                          style: TextStyle(fontSize: 11.5),
-                        ),
-                      ],
-                      if (p.str('location').isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          p.str('location'),
-                          style: const TextStyle(fontSize: 10.5),
-                        ),
-                      ],
                     ],
                   ),
                 ),
               ),
-              if (uid != s.myId && !s.follows(uid))
-                Padding(
-                  padding: const EdgeInsets.only(left: 6, right: 3),
-                  child: TextButton(
-                    key: ValueKey('feed-follow-$uid-${widget.id}'),
-                    onPressed: () => perform(
-                      c,
-                      () => s.act('follow', {'user': uid, 'enabled': true}),
-                    ),
-                    style: TextButton.styleFrom(
-                      backgroundColor: subdued(c),
-                      foregroundColor: foreground(c),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      minimumSize: const Size(68, 34),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(9),
-                      ),
-                    ),
-                    child: const Text(
-                      'Segui',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              IconButton(
-                tooltip: 'Opzioni del post',
-                icon: const GIcon(CupertinoIcons.ellipsis, size: 22),
-                onPressed: () => postMenu(c, p),
-              ),
-            ],
+            ),
           ),
-        ),
-        GestureDetector(
-          onDoubleTap: () => like(c, p, force: true),
-          child: AspectRatio(
-            aspectRatio: p.obj('style').number('aspect', 1).clamp(.75, 1.91),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 3, 4, 0),
             child: Stack(
-              fit: StackFit.expand,
+              alignment: Alignment.center,
               children: [
-                if (media.isNotEmpty)
-                  PageView.builder(
-                    key: PageStorageKey('media-${widget.id}'),
-                    itemCount: media.length,
-                    onPageChanged: (i) => setState(() => page = i),
-                    itemBuilder: (c, i) => InteractiveViewer(
-                      minScale: 1,
-                      maxScale: 3,
-                      child: MediaView(media[i]),
+                Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Mi piace',
+                      onPressed: () => like(c, p),
+                      icon: GIcon(
+                        liked
+                            ? CupertinoIcons.heart_fill
+                            : CupertinoIcons.heart,
+                        color: liked ? danger : foreground(c),
+                        size: 27,
+                      ),
                     ),
-                  ),
-                if (media.length > 1)
-                  Positioned(
-                    top: 13,
-                    right: 13,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        '${page + 1}/${media.length}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
+                    IconButton(
+                      tooltip: 'Commenti',
+                      onPressed: () => comments(c, widget.id),
+                      icon: const GIcon(CupertinoIcons.chat_bubble, size: 25),
+                    ),
+                    if (p.str('kind') != 'story' &&
+                        !s.user(p.str('author')).flag('private') &&
+                        p.str('audience') != 'close')
+                      IconButton(
+                        tooltip: p.ids('reposts').contains(s.myId)
+                            ? 'Annulla ripubblicazione'
+                            : 'Ripubblica',
+                        onPressed: () => perform(
+                          c,
+                          () => s.act('repost', {
+                            'id': p['id'],
+                            'enabled': !p.ids('reposts').contains(s.myId),
+                          }),
+                        ),
+                        icon: GIcon(
+                          CupertinoIcons.repeat,
+                          color: p.ids('reposts').contains(s.myId)
+                              ? Colors.green
+                              : foreground(c),
+                          size: 25,
                         ),
                       ),
+                    IconButton(
+                      tooltip: 'Condividi',
+                      onPressed: () => sharePost(c, p),
+                      icon: const GIcon(CupertinoIcons.paperplane, size: 25),
                     ),
-                  ),
-                IgnorePointer(
-                  child: AnimatedBuilder(
-                    animation: heart,
-                    builder: (c, _) => Opacity(
-                      opacity: heart.value == 0
-                          ? 0
-                          : (1 - heart.value).clamp(0, 1),
-                      child: Transform.scale(
-                        scale: .8 + heart.value * .45,
-                        child: const Center(
-                          child: GIcon(
-                            CupertinoIcons.heart_fill,
-                            size: 95,
-                            color: Colors.white,
-                            shadows: [
-                              Shadow(blurRadius: 12, color: Colors.black26),
-                            ],
+                    const Spacer(),
+                    IconButton(
+                      tooltip: 'Salva',
+                      onPressed: () => perform(
+                        c,
+                        () => s.act('save', {
+                          'id': widget.id,
+                          'enabled': !p.flag('saved'),
+                        }),
+                      ),
+                      icon: GIcon(
+                        p.flag('saved')
+                            ? CupertinoIcons.bookmark_fill
+                            : CupertinoIcons.bookmark,
+                        size: 25,
+                        color: p.flag('saved') ? accent(c) : foreground(c),
+                      ),
+                    ),
+                  ],
+                ),
+                if (media.length > 1)
+                  IgnorePointer(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: List.generate(
+                        media.length,
+                        (i) => Container(
+                          width: 4.5,
+                          height: 4.5,
+                          margin: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: i == page ? violet : line,
                           ),
                         ),
                       ),
                     ),
                   ),
+              ],
+            ),
+          ),
+          PostExtras(post: p),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(15, 0, 15, 15),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (!p.flag('hideLikes'))
+                  GestureDetector(
+                    onTap: () => people(c, p.ids('likes'), 'Mi piace'),
+                    child: Text(
+                      '${p.ids('likes').length} Mi piace',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ),
+                if (p.str('text').isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: '${u.str('username')} ',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        TextSpan(text: p.str('text')),
+                      ],
+                    ),
+                    style: const TextStyle(fontSize: 13, height: 1.4),
+                  ),
+                ],
+                if (!p.flag('commentsOff')) ...[
+                  const SizedBox(height: 7),
+                  InkWell(
+                    onTap: () => comments(c, widget.id),
+                    child: Text(
+                      p.rows('comments').isEmpty
+                          ? 'Aggiungi un commento…'
+                          : 'Visualizza tutti i ${p.rows('comments').length} commenti',
+                      style: const TextStyle(fontSize: 12.5, color: muted),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 7),
+                Text(
+                  relative(p['created']),
+                  style: const TextStyle(fontSize: 10.5, color: muted),
                 ),
               ],
             ),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 3, 8, 0),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Row(
-                children: [
-                  IconButton(
-                    tooltip: 'Mi piace',
-                    onPressed: () => like(c, p),
-                    icon: GIcon(
-                      liked ? CupertinoIcons.heart_fill : CupertinoIcons.heart,
-                      color: liked ? danger : ink,
-                      size: 27,
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Commenti',
-                    onPressed: () => comments(c, widget.id),
-                    icon: const GIcon(CupertinoIcons.chat_bubble, size: 25),
-                  ),
-                  if (p.str('kind') != 'story' &&
-                      !s.user(p.str('author')).flag('private') &&
-                      p.str('audience') != 'close')
-                    IconButton(
-                      tooltip: p.ids('reposts').contains(s.myId)
-                          ? 'Annulla ripubblicazione'
-                          : 'Ripubblica',
-                      onPressed: () => perform(
-                        c,
-                        () => s.act('repost', {
-                          'id': p['id'],
-                          'enabled': !p.ids('reposts').contains(s.myId),
-                        }),
-                      ),
-                      icon: GIcon(
-                        CupertinoIcons.repeat,
-                        color: p.ids('reposts').contains(s.myId)
-                            ? Colors.green
-                            : ink,
-                        size: 25,
-                      ),
-                    ),
-                  IconButton(
-                    tooltip: 'Condividi',
-                    onPressed: () => sharePost(c, p),
-                    icon: const GIcon(CupertinoIcons.paperplane, size: 25),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    tooltip: 'Salva',
-                    onPressed: () => perform(
-                      c,
-                      () => s.act('save', {
-                        'id': widget.id,
-                        'enabled': !p.flag('saved'),
-                      }),
-                    ),
-                    icon: GIcon(
-                      p.flag('saved')
-                          ? CupertinoIcons.bookmark_fill
-                          : CupertinoIcons.bookmark,
-                      size: 25,
-                    ),
-                  ),
-                ],
-              ),
-              if (media.length > 1)
-                IgnorePointer(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: List.generate(
-                      media.length,
-                      (i) => Container(
-                        width: 4.5,
-                        height: 4.5,
-                        margin: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: i == page ? violet : line,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        PostExtras(post: p),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(15, 0, 15, 15),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (!p.flag('hideLikes'))
-                GestureDetector(
-                  onTap: () => people(c, p.ids('likes'), 'Mi piace'),
-                  child: Text(
-                    '${p.ids('likes').length} Mi piace',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12.5,
-                    ),
-                  ),
-                ),
-              if (p.str('text').isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(
-                        text: '${u.str('username')} ',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      TextSpan(text: p.str('text')),
-                    ],
-                  ),
-                  style: const TextStyle(fontSize: 13, height: 1.4),
-                ),
-              ],
-              if (!p.flag('commentsOff')) ...[
-                const SizedBox(height: 7),
-                InkWell(
-                  onTap: () => comments(c, widget.id),
-                  child: Text(
-                    p.rows('comments').isEmpty
-                        ? 'Aggiungi un commento…'
-                        : 'Visualizza tutti i ${p.rows('comments').length} commenti',
-                    style: const TextStyle(fontSize: 12.5, color: muted),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 7),
-              Text(
-                relative(p['created']),
-                style: const TextStyle(fontSize: 10.5, color: muted),
-              ),
-            ],
-          ),
-        ),
-        const Divider(height: 1, thickness: .4),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -1850,6 +1899,7 @@ class _ExploreState extends State<Explore> {
         )
         .toList();
     return Material(
+      type: MaterialType.transparency,
       child: SafeArea(
         child: CustomScrollView(
           key: const PageStorageKey('explore'),
@@ -1870,11 +1920,11 @@ class _ExploreState extends State<Explore> {
                       color: muted,
                     ),
                     filled: true,
-                    fillColor: soft,
+                    fillColor: subdued(c),
                     isDense: true,
                     contentPadding: const EdgeInsets.all(13),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(18),
                       borderSide: BorderSide.none,
                     ),
                   ),
@@ -1954,29 +2004,32 @@ class _ExploreState extends State<Explore> {
                     s.rememberSearch(query);
                     open(c, PostPage(id: posts[i].str('id')));
                   },
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      MediaView(posts[i].str('media')),
-                      if (s.media(posts[i]).length > 1)
-                        const Positioned(
-                          top: 9,
-                          right: 9,
-                          child: GIcon(
-                            CupertinoIcons.square_stack_fill,
-                            color: Colors.white,
-                            size: 17,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        MediaView(posts[i].str('media')),
+                        if (s.media(posts[i]).length > 1)
+                          const Positioned(
+                            top: 9,
+                            right: 9,
+                            child: GIcon(
+                              CupertinoIcons.square_stack_fill,
+                              color: Colors.white,
+                              size: 17,
+                            ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
                 childCount: posts.length,
               ),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 3,
-                mainAxisSpacing: 2,
-                crossAxisSpacing: 2,
+                mainAxisSpacing: 5,
+                crossAxisSpacing: 5,
                 childAspectRatio: .78,
               ),
             ),
@@ -2174,148 +2227,159 @@ class _ProfileState extends State<Profile> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 20, 14),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 94,
-                        height: 106,
-                        child: Stack(
-                          alignment: Alignment.bottomCenter,
-                          clipBehavior: Clip.none,
-                          children: [
-                            InkWell(
-                              onTap: () => s.stories(widget.user).isNotEmpty
-                                  ? open(c, StoryViewer(user: widget.user))
-                                  : own
-                                  ? open(c, const EditProfile())
-                                  : null,
-                              child: Avatar(
-                                widget.user,
-                                size: 80,
-                                ring: s.hasUnseenStories(widget.user),
-                              ),
-                            ),
-                            if (own)
-                              Positioned(
-                                right: 0,
-                                bottom: -1,
-                                child: InkWell(
-                                  onTap: () =>
-                                      open(c, const Composer(kind: 'story')),
-                                  child: Container(
-                                    width: 28,
-                                    height: 28,
-                                    decoration: BoxDecoration(
-                                      color: foreground(c),
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: surface(c),
-                                        width: 2.5,
-                                      ),
-                                    ),
-                                    child: GIcon(
-                                      CupertinoIcons.plus,
-                                      color: surface(c),
-                                      size: 19,
-                                    ),
-                                  ),
+                AuraPanel(
+                  margin: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 20, 14),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 94,
+                          height: 106,
+                          child: Stack(
+                            alignment: Alignment.bottomCenter,
+                            clipBehavior: Clip.none,
+                            children: [
+                              InkWell(
+                                onTap: () => s.stories(widget.user).isNotEmpty
+                                    ? open(c, StoryViewer(user: widget.user))
+                                    : own
+                                    ? open(c, const EditProfile())
+                                    : null,
+                                child: Avatar(
+                                  widget.user,
+                                  size: 80,
+                                  ring: s.hasUnseenStories(widget.user),
                                 ),
                               ),
-                            if (own)
-                              Positioned(
-                                top: -7,
-                                left: -2,
-                                right: -2,
-                                child: InkWell(
-                                  onTap: () => manageOwnNote(c),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 9,
-                                      vertical: 8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: surface(c),
-                                      borderRadius: BorderRadius.circular(18),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withValues(
-                                            alpha: .09,
-                                          ),
-                                          blurRadius: 14,
-                                          offset: const Offset(0, 3),
+                              if (own)
+                                Positioned(
+                                  right: 0,
+                                  bottom: -1,
+                                  child: InkWell(
+                                    onTap: () =>
+                                        open(c, const Composer(kind: 'story')),
+                                    child: Container(
+                                      width: 28,
+                                      height: 28,
+                                      decoration: BoxDecoration(
+                                        color: foreground(c),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: surface(c),
+                                          width: 2.5,
                                         ),
-                                      ],
-                                    ),
-                                    child: Text(
-                                      s.notes
-                                              .where(
-                                                (n) => n.str('owner') == s.myId,
-                                              )
-                                              .firstOrNull
-                                              ?.str('text') ??
-                                          'Lascia una nota…',
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(
-                                        fontSize: 10,
-                                        height: 1.1,
+                                      ),
+                                      child: GIcon(
+                                        CupertinoIcons.plus,
+                                        color: surface(c),
+                                        size: 19,
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
-                          ],
+                              if (own)
+                                Positioned(
+                                  top: -7,
+                                  left: -2,
+                                  right: -2,
+                                  child: InkWell(
+                                    onTap: () => manageOwnNote(c),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 9,
+                                        vertical: 8,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: surface(c),
+                                        borderRadius: BorderRadius.circular(18),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withValues(
+                                              alpha: .09,
+                                            ),
+                                            blurRadius: 14,
+                                            offset: const Offset(0, 3),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Text(
+                                        s.notes
+                                                .where(
+                                                  (n) =>
+                                                      n.str('owner') == s.myId,
+                                                )
+                                                .firstOrNull
+                                                ?.str('text') ??
+                                            'Lascia una nota…',
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          height: 1.1,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 15),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              u.str('name'),
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
+                        const SizedBox(width: 15),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                u.str('name'),
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 13),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                stat(
-                                  u.str(
-                                    'postCount',
-                                    '${s.allPosts.where((p) => p.str('author') == widget.user && p.str('kind') != 'story' && !p.flag('archived')).length}',
+                              const SizedBox(height: 13),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  stat(
+                                    u.str(
+                                      'postCount',
+                                      '${s.allPosts.where((p) => p.str('author') == widget.user && p.str('kind') != 'story' && !p.flag('archived')).length}',
+                                    ),
+                                    'post',
+                                    null,
                                   ),
-                                  'post',
-                                  null,
-                                ),
-                                stat(
-                                  u.str('followers', '0'),
-                                  'follower',
-                                  () => open(
-                                    c,
-                                    Connections(user: widget.user, initial: 0),
+                                  stat(
+                                    u.str('followers', '0'),
+                                    'follower',
+                                    () => open(
+                                      c,
+                                      Connections(
+                                        user: widget.user,
+                                        initial: 0,
+                                      ),
+                                    ),
                                   ),
-                                ),
-                                stat(
-                                  u.str('following', '0'),
-                                  'seguiti',
-                                  () => open(
-                                    c,
-                                    Connections(user: widget.user, initial: 1),
+                                  stat(
+                                    u.str('following', '0'),
+                                    'seguiti',
+                                    () => open(
+                                      c,
+                                      Connections(
+                                        user: widget.user,
+                                        initial: 1,
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                          ],
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
                 Padding(
@@ -3933,24 +3997,26 @@ class _SettingsState extends State<Settings> {
           )
           .toList();
       if (visible.isEmpty) return const SizedBox.shrink();
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(height: 7, color: subdued(c).withValues(alpha: .6)),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(17, 19, 17, 12),
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: muted,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
+      return AuraPanel(
+        margin: const EdgeInsets.fromLTRB(13, 4, 13, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(17, 19, 17, 12),
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: muted,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ),
-          ...visible.map((e) => e.$2),
-          const SizedBox(height: 12),
-        ],
+            ...visible.map((e) => e.$2),
+            const SizedBox(height: 8),
+          ],
+        ),
       );
     }
 

@@ -2575,8 +2575,6 @@ class _InstantArchiveState extends State<InstantArchive> {
   );
   @override
   Widget build(BuildContext c) {
-    final dark = Theme.of(c).brightness == Brightness.dark,
-        background = dark ? const Color(0xff101116) : Colors.white;
     final visible = (rows ?? <J>[])
         .where((r) => !activeOnly || r.number('expires') > now)
         .toList();
@@ -2603,9 +2601,7 @@ class _InstantArchiveState extends State<InstantArchive> {
       groups.putIfAbsent(name, () => []).add(row);
     }
     return Scaffold(
-      backgroundColor: background,
       appBar: AppBar(
-        backgroundColor: background,
         centerTitle: true,
         title: Text(
           selecting ? '${selected.length} selezionate' : 'Le tue istantanee',

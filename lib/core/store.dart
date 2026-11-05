@@ -87,7 +87,7 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
       vault = vault ?? const FlutterSecureStorage();
   J state = {};
   String server = productionServer, token = '';
-  String appearance = 'system';
+  String appearance = 'light';
   Future<void> setAppearance(String value) async {
     if (!['system', 'light', 'dark'].contains(value)) return;
     appearance = value;
@@ -314,7 +314,7 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> init() async {
     WidgetsBinding.instance.addObserver(this);
     prefs = await SharedPreferences.getInstance();
-    appearance = prefs!.getString('gpix.appearance') ?? 'system';
+    appearance = prefs!.getString('gpix.appearance') ?? 'light';
     server = productionServer;
     token = await vault.read(key: 'gpix.token') ?? '';
     final previousServer = prefs!

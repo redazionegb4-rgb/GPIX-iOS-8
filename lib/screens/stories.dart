@@ -1019,12 +1019,11 @@ class _ComposerState extends State<Composer> {
         }),
       );
     return Scaffold(
-      backgroundColor: story ? Colors.black : Colors.white,
+      backgroundColor: story ? const Color(0xff17243c) : Colors.transparent,
       appBar: story
           ? null
           : AppBar(
-              backgroundColor: story ? Colors.black : Colors.white,
-              foregroundColor: story ? Colors.white : ink,
+              foregroundColor: foreground(c),
               leading: IconButton(
                 tooltip: 'Annulla',
                 onPressed: () async {

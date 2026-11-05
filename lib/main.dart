@@ -54,7 +54,12 @@ class GpixApp extends StatelessWidget {
             : ThemeMode.system,
         theme: gpixTheme(Brightness.light),
         darkTheme: gpixTheme(Brightness.dark),
-        builder: (c, child) => Stack(children: [child!, const IncomingCall()]),
+        builder: (c, child) => AuraBackdrop(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [child!, const IncomingCall()],
+          ),
+        ),
         home: AnimatedBuilder(
           animation: store,
           builder: (c, _) => AnimatedSwitcher(

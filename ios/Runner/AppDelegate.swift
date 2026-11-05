@@ -3,34 +3,23 @@ import UIKit
 import Photos
 
 @main
-@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+@objc class AppDelegate: FlutterAppDelegate {
   private var gallery: PhotoGalleryBridge?
-
-  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
-    let registry = engineBridge.pluginRegistry
-    GeneratedPluginRegistrant.register(with: registry)
-
-    gallery = PhotoGalleryBridge(
-      messenger: engineBridge.applicationRegistrar.messenger()
-    )
-    if let registrar = registry.registrar(forPlugin: "GPIXSecurePhoto") {
-      registrar.register(SecurePhotoFactory(), withId: "GPIX/secure-photo")
-    }
-  }
-}
-
-final class GPIXSceneDelegate: FlutterSceneDelegate {
   private var instantPrivacy: InstantPrivacyBridge?
-
-  override func scene(
-    _ scene: UIScene,
-    willConnectTo session: UISceneSession,
-    options connectionOptions: UIScene.ConnectionOptions
-  ) {
-    super.scene(scene, willConnectTo: session, options: connectionOptions)
+  override func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+  ) -> Bool {
+    GeneratedPluginRegistrant.register(with: self)
+    let launched = super.application(application, didFinishLaunchingWithOptions: launchOptions)
     if let controller = window?.rootViewController as? FlutterViewController {
+      gallery = PhotoGalleryBridge(messenger: controller.binaryMessenger)
       instantPrivacy = InstantPrivacyBridge(controller: controller)
+      if let registrar = registrar(forPlugin: "GPIXSecurePhoto") {
+        registrar.register(SecurePhotoFactory(), withId: "GPIX/secure-photo")
+      }
     }
+    return launched
   }
 }
 
@@ -110,8 +99,8 @@ private final class InstantPrivacyBridge: NSObject {
       result(!self.secure || (!UIScreen.main.isCaptured && SecurePhotoSurface.available()))
     }
     NotificationCenter.default.addObserver(self, selector: #selector(captureChanged), name: UIScreen.capturedDidChangeNotification, object: nil)
-    NotificationCenter.default.addObserver(self, selector: #selector(sceneWillDeactivate), name: UIScene.willDeactivateNotification, object: nil)
-    NotificationCenter.default.addObserver(self, selector: #selector(updateCover), name: UIScene.didActivateNotification, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(updateCover), name: UIApplication.willResignActiveNotification, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(updateCover), name: UIApplication.didBecomeActiveNotification, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(screenshot), name: UIApplication.userDidTakeScreenshotNotification, object: nil)
   }
   @objc private func captureChanged() {
@@ -121,15 +110,8 @@ private final class InstantPrivacyBridge: NSObject {
   @objc private func screenshot() {
     if secure { channel.invokeMethod("captured", arguments: nil) }
   }
-  @objc private func sceneWillDeactivate() {
-    applyCover(forceHide: true)
-  }
   @objc private func updateCover() {
-    applyCover(forceHide: false)
-  }
-  private func applyCover(forceHide: Bool) {
-    let scene = controller?.viewIfLoaded?.window?.windowScene
-    let hide = secure && (forceHide || UIScreen.main.isCaptured || scene?.activationState != .foregroundActive)
+    let hide = secure && (UIScreen.main.isCaptured || UIApplication.shared.applicationState != .active)
     if hide, cover == nil, let view = controller?.view {
       let overlay = UIView(frame: view.bounds); overlay.backgroundColor = .black
       overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -173,7 +155,7 @@ private final class SecurePhotoSurface: NSObject, FlutterPlatformView {
     canvas.addSubview(photo)
     if !UIScreen.main.isCaptured, UIApplication.shared.applicationState == .active, let data = data { photo.image = UIImage(data: data) }
     NotificationCenter.default.addObserver(self, selector: #selector(hide), name: UIScreen.capturedDidChangeNotification, object: nil)
-    NotificationCenter.default.addObserver(self, selector: #selector(hide), name: UIScene.willDeactivateNotification, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(hide), name: UIApplication.willResignActiveNotification, object: nil)
   }
   @objc private func hide() { photo.image = nil }
   func view() -> UIView { container }

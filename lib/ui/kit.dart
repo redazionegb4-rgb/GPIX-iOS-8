@@ -1,50 +1,136 @@
 export 'icons.dart';
 import 'icons.dart';
 import 'dart:io';
+import 'dart:ui' show ImageFilter;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../core/data.dart';
 import '../core/store.dart';
 
-const violet = Color(0xff633acb),
-    ink = Color(0xff19172a),
-    muted = Color(0xff777184),
-    soft = Color(0xfff1eef8),
-    line = Color(0xffe7e1f1),
-    danger = Color(0xffed4956);
+const violet = Color(0xff6d28d9),
+    auraBlue = Color(0xff2563eb),
+    ink = Color(0xff101828),
+    muted = Color(0xff596782),
+    soft = Color(0xffeaf1ff),
+    line = Color(0xffdce7fb),
+    danger = Color(0xffe33958);
+
+const auraAction = LinearGradient(
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+  colors: [auraBlue, violet],
+);
+
 ThemeData gpixTheme(Brightness brightness) {
   final dark = brightness == Brightness.dark;
-  final canvas = dark ? const Color(0xff100e19) : const Color(0xfffbfaff);
+  final fontFamily = defaultTargetPlatform == TargetPlatform.iOS
+      ? null
+      : 'Roboto';
+  final canvas = dark ? const Color(0xff17243c) : const Color(0xfff3f8ff);
   final scheme = ColorScheme.fromSeed(
-    seedColor: violet,
+    seedColor: auraBlue,
     brightness: brightness,
-    surface: dark ? const Color(0xff191626) : Colors.white,
-    onSurface: dark ? const Color(0xfff5f0ff) : ink,
-    onSurfaceVariant: dark ? const Color(0xffc1b8d1) : muted,
-    primary: dark ? const Color(0xffc2abff) : violet,
-    primaryContainer: dark ? const Color(0xff35274e) : const Color(0xffece3ff),
-    surfaceContainerHighest: dark ? const Color(0xff282139) : soft,
-    outlineVariant: dark ? const Color(0xff383047) : line,
+    surface: dark ? const Color(0xff223250) : Colors.white,
+    onSurface: dark ? const Color(0xfff1f6ff) : ink,
+    onSurfaceVariant: dark ? const Color(0xffb9c9e5) : muted,
+    primary: dark ? const Color(0xffa9c7ff) : const Color(0xff1d54c5),
+    onPrimary: dark ? ink : Colors.white,
+    primaryContainer: dark ? const Color(0xff334c79) : const Color(0xffd5e7ff),
+    onPrimaryContainer: dark
+        ? const Color(0xffe6efff)
+        : const Color(0xff113879),
+    secondary: dark ? const Color(0xffc4b5fd) : violet,
+    surfaceContainerHighest: dark ? const Color(0xff2b3c60) : soft,
+    outlineVariant: dark ? const Color(0xff485b81) : line,
+  );
+  final rounded = RoundedRectangleBorder(
+    borderRadius: BorderRadius.circular(16),
   );
   final field = OutlineInputBorder(
-    borderRadius: BorderRadius.circular(16),
+    borderRadius: BorderRadius.circular(17),
     borderSide: BorderSide(color: scheme.outlineVariant),
   );
   return ThemeData(
     useMaterial3: true,
+    fontFamily: fontFamily,
     colorScheme: scheme,
-    scaffoldBackgroundColor: canvas,
-    fontFamily: dark ? null : 'Roboto',
+    canvasColor: canvas,
+    scaffoldBackgroundColor: Colors.transparent,
     appBarTheme: AppBarTheme(
       backgroundColor: canvas,
       foregroundColor: scheme.onSurface,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 0,
+      titleTextStyle: TextStyle(
+        fontFamily: fontFamily,
+        color: scheme.onSurface,
+        fontSize: 20,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -.45,
+      ),
     ),
     dividerColor: scheme.outlineVariant,
-    bottomSheetTheme: const BottomSheetThemeData(
+    dividerTheme: DividerThemeData(color: scheme.outlineVariant, thickness: 1),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        shape: rounded,
+        minimumSize: const Size(48, 48),
+      ),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        shape: rounded,
+        minimumSize: const Size(48, 48),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        shape: rounded,
+        minimumSize: const Size(48, 48),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
+    ),
+    cardTheme: CardThemeData(
+      color: scheme.surface,
       surfaceTintColor: Colors.transparent,
+      shadowColor: const Color(0x339686d9),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: scheme.surface,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+    ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: scheme.surface,
+      surfaceTintColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      color: scheme.surface,
+      surfaceTintColor: Colors.transparent,
+      shape: rounded,
+    ),
+    snackBarTheme: SnackBarThemeData(
+      backgroundColor: dark ? const Color(0xffe6efff) : const Color(0xff203557),
+      contentTextStyle: TextStyle(color: dark ? ink : Colors.white),
+    ),
+    listTileTheme: ListTileThemeData(
+      shape: rounded,
+      iconColor: scheme.onSurfaceVariant,
+      selectedColor: scheme.primary,
+      selectedTileColor: scheme.primaryContainer,
+    ),
+    chipTheme: ChipThemeData(
+      backgroundColor: scheme.surface,
+      selectedColor: scheme.primaryContainer,
+      side: BorderSide(color: scheme.outlineVariant),
+      shape: const StadiumBorder(),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
@@ -53,29 +139,128 @@ ThemeData gpixTheme(Brightness brightness) {
       border: field,
       enabledBorder: field,
       focusedBorder: field.copyWith(
-        borderSide: BorderSide(color: scheme.primary, width: 1.4),
+        borderSide: BorderSide(color: scheme.primary, width: 1.5),
       ),
     ),
-    textTheme: const TextTheme(bodyMedium: TextStyle(fontSize: 14)),
   );
 }
 
 Color surface(BuildContext c) => Theme.of(c).colorScheme.surface;
 Color foreground(BuildContext c) => Theme.of(c).colorScheme.onSurface;
-Color subdued(BuildContext c) => Theme.of(c).colorScheme.surfaceContainerHighest;
+Color subdued(BuildContext c) =>
+    Theme.of(c).colorScheme.surfaceContainerHighest;
 Color accent(BuildContext c) => Theme.of(c).colorScheme.primary;
 
+class AuraBackdrop extends StatelessWidget {
+  const AuraBackdrop({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+          colors: dark
+              ? const [Color(0xff243960), Color(0xff19263f), Color(0xff252d51)]
+              : const [Color(0xffeaf7ff), Color(0xfff3f8ff), Color(0xfff2edff)],
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
 LinearGradient crystalGradient(BuildContext c, {bool translucent = false}) {
-  final scheme = Theme.of(c).colorScheme;
-  final base = scheme.surface;
-  final tint = Color.lerp(base, scheme.primaryContainer, .48)!;
+  final dark = Theme.of(c).brightness == Brightness.dark;
+  final top = dark ? const Color(0xff304369) : Colors.white;
+  final bottom = dark ? const Color(0xff243354) : const Color(0xffeaf0ff);
   return LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: translucent
-        ? [base.withValues(alpha: .96), tint.withValues(alpha: .91)]
-        : [base, tint],
+        ? [top.withValues(alpha: .86), bottom.withValues(alpha: .78)]
+        : [top, bottom],
   );
+}
+
+BoxDecoration auraPanelDecoration(
+  BuildContext context, {
+  double radius = 22,
+  bool translucent = false,
+}) {
+  final dark = Theme.of(context).brightness == Brightness.dark;
+  return BoxDecoration(
+    gradient: crystalGradient(context, translucent: translucent),
+    borderRadius: BorderRadius.circular(radius),
+    border: Border.all(
+      color: dark ? Theme.of(context).dividerColor : Colors.white,
+    ),
+    boxShadow: [
+      BoxShadow(
+        color: dark ? const Color(0x340a152c) : const Color(0x279080d9),
+        blurRadius: 19,
+        offset: const Offset(0, 7),
+      ),
+    ],
+  );
+}
+
+class AuraPanel extends StatelessWidget {
+  const AuraPanel({
+    super.key,
+    required this.child,
+    this.margin = EdgeInsets.zero,
+    this.radius = 22,
+    this.frosted = false,
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry margin;
+  final double radius;
+  final bool frosted;
+
+  @override
+  Widget build(BuildContext context) {
+    final decoration = auraPanelDecoration(
+      context,
+      radius: radius,
+      translucent: true,
+    );
+    final borderRadius = BorderRadius.circular(radius);
+    final content = DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: borderRadius,
+        border: decoration.border,
+      ),
+      position: DecorationPosition.foreground,
+      child: DecoratedBox(
+        decoration: BoxDecoration(gradient: decoration.gradient),
+        child: Material(type: MaterialType.transparency, child: child),
+      ),
+    );
+    return Padding(
+      padding: margin,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: borderRadius,
+          boxShadow: decoration.boxShadow,
+        ),
+        child: ClipRRect(
+          borderRadius: borderRadius,
+          child: frosted
+              ? BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                  child: content,
+                )
+              : content,
+        ),
+      ),
+    );
+  }
 }
 
 Future<void> perform(BuildContext c, Future<void> Function() work) async {
@@ -171,7 +356,7 @@ Future<bool> gpixAlert(
                     child: FilledButton(
                       style: FilledButton.styleFrom(
                         minimumSize: const Size(0, 46),
-                        backgroundColor: destructive ? danger : violet,
+                        backgroundColor: destructive ? danger : auraBlue,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(13),
@@ -235,7 +420,7 @@ Future<T?> sheet<T>(BuildContext c, Widget child, {bool scroll = true}) =>
                   width: 38,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: muted.withValues(alpha: .3),
+                    color: foreground(context).withValues(alpha: .24),
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
@@ -319,33 +504,55 @@ class PrimaryButton extends StatelessWidget {
     this.secondary = false,
   });
   @override
-  Widget build(BuildContext c) => SizedBox(
-    width: double.infinity,
-    height: 47,
-    child: FilledButton(
-      onPressed: busy ? null : onTap,
-      style: FilledButton.styleFrom(
-        backgroundColor: secondary ? subdued(c) : violet,
-        foregroundColor: secondary ? foreground(c) : Colors.white,
-        disabledBackgroundColor: violet.withValues(alpha: .4),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+  Widget build(BuildContext c) {
+    final enabled = !busy && onTap != null;
+    final radius = BorderRadius.circular(16);
+    return SizedBox(
+      width: double.infinity,
+      height: 48,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: secondary || !enabled ? null : auraAction,
+          borderRadius: radius,
+          boxShadow: secondary || !enabled
+              ? null
+              : const [
+                  BoxShadow(
+                    color: Color(0x442563eb),
+                    blurRadius: 14,
+                    offset: Offset(0, 5),
+                  ),
+                ],
+        ),
+        child: FilledButton(
+          onPressed: enabled ? onTap : null,
+          style: FilledButton.styleFrom(
+            backgroundColor: secondary ? subdued(c) : Colors.transparent,
+            foregroundColor: secondary ? foreground(c) : Colors.white,
+            disabledBackgroundColor: subdued(c),
+            shape: RoundedRectangleBorder(borderRadius: radius),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+          ),
+          child: busy
+              ? SizedBox.square(
+                  dimension: 19,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: accent(c),
+                  ),
+                )
+              : Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+        ),
       ),
-      child: busy
-          ? const SizedBox(
-              width: 19,
-              height: 19,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            )
-          : Text(
-              label,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-            ),
-    ),
-  );
+    );
+  }
 }
 
 class MediaView extends StatelessWidget {
@@ -429,11 +636,11 @@ class Avatar extends StatelessWidget {
             ? null
             : const SweepGradient(
                 colors: [
-                  Color(0xffbd00e8),
-                  Color(0xffff006a),
-                  Color(0xffffa800),
-                  Color(0xffffd541),
-                  Color(0xffbd00e8),
+                  auraBlue,
+                  Color(0xffa78bfa),
+                  Color(0xff67e8f9),
+                  Color(0xff7dd3fc),
+                  auraBlue,
                 ],
               ),
         color: s.closeStory(user)
@@ -531,11 +738,8 @@ class EmptyState extends StatelessWidget {
         children: [
           Container(
             padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: foreground(c), width: 1.5),
-            ),
-            child: GIcon(icon, size: 33),
+            decoration: auraPanelDecoration(c, radius: 40),
+            child: GIcon(icon, size: 33, color: accent(c)),
           ),
           const SizedBox(height: 20),
           Text(
@@ -596,8 +800,11 @@ Widget pageTitle(String title) => Text(
     letterSpacing: -.45,
   ),
 );
-Future<T?> open<T>(BuildContext c, Widget page) =>
-    Navigator.of(c).push<T>(CupertinoPageRoute(builder: (_) => page));
+Future<T?> open<T>(BuildContext c, Widget page) => Navigator.of(c).push<T>(
+  Theme.of(c).platform == TargetPlatform.iOS
+      ? CupertinoPageRoute<T>(builder: (_) => AuraBackdrop(child: page))
+      : MaterialPageRoute<T>(builder: (_) => AuraBackdrop(child: page)),
+);
 
 class BrandLogo extends StatelessWidget {
   final double width;
