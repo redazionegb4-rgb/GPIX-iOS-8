@@ -52,50 +52,9 @@ class GpixApp extends StatelessWidget {
             : store.appearance == 'light'
             ? ThemeMode.light
             : ThemeMode.system,
-        darkTheme: ThemeData(
-          useMaterial3: true,
-          brightness: Brightness.dark,
-          scaffoldBackgroundColor: Colors.black,
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: violet,
-            brightness: Brightness.dark,
-            surface: const Color(0xff17171c),
-          ),
-          appBarTheme: const AppBarTheme(
-            backgroundColor: Colors.black,
-            surfaceTintColor: Colors.transparent,
-            elevation: 0,
-            scrolledUnderElevation: 0,
-          ),
-          dividerColor: const Color(0xff303038),
-          bottomSheetTheme: const BottomSheetThemeData(
-            surfaceTintColor: Colors.transparent,
-          ),
-        ),
+        theme: gpixTheme(Brightness.light),
+        darkTheme: gpixTheme(Brightness.dark),
         builder: (c, child) => Stack(children: [child!, const IncomingCall()]),
-        theme: ThemeData(
-          useMaterial3: true,
-          brightness: Brightness.light,
-          scaffoldBackgroundColor: Colors.white,
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: violet,
-            surface: Colors.white,
-          ),
-          fontFamily: 'Roboto',
-          appBarTheme: const AppBarTheme(
-            centerTitle: false,
-            backgroundColor: Colors.white,
-            surfaceTintColor: Colors.transparent,
-            elevation: 0,
-            scrolledUnderElevation: 0,
-          ),
-          dividerColor: line,
-          splashFactory: NoSplash.splashFactory,
-          bottomSheetTheme: const BottomSheetThemeData(
-            surfaceTintColor: Colors.transparent,
-          ),
-          textTheme: const TextTheme(bodyMedium: TextStyle(fontSize: 14)),
-        ),
         home: AnimatedBuilder(
           animation: store,
           builder: (c, _) => AnimatedSwitcher(

@@ -1639,8 +1639,8 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
                                       !emojiOnly
                                   ? const LinearGradient(
                                       colors: [
-                                        Color(0xff873ee9),
-                                        Color(0xff6546f7),
+                                        Color(0xff7444d2),
+                                        Color(0xff4f39b5),
                                       ],
                                       begin: Alignment.topLeft,
                                       end: Alignment.bottomRight,

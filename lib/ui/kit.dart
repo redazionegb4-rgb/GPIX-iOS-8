@@ -6,16 +6,78 @@ import 'package:flutter/material.dart';
 import '../core/data.dart';
 import '../core/store.dart';
 
-const violet = Color(0xff7145e8),
-    ink = Color(0xff15151b),
-    muted = Color(0xff85858f),
-    soft = Color(0xfff4f4f7),
-    line = Color(0xffebebef),
+const violet = Color(0xff633acb),
+    ink = Color(0xff19172a),
+    muted = Color(0xff777184),
+    soft = Color(0xfff1eef8),
+    line = Color(0xffe7e1f1),
     danger = Color(0xffed4956);
+ThemeData gpixTheme(Brightness brightness) {
+  final dark = brightness == Brightness.dark;
+  final canvas = dark ? const Color(0xff100e19) : const Color(0xfffbfaff);
+  final scheme = ColorScheme.fromSeed(
+    seedColor: violet,
+    brightness: brightness,
+    surface: dark ? const Color(0xff191626) : Colors.white,
+    onSurface: dark ? const Color(0xfff5f0ff) : ink,
+    onSurfaceVariant: dark ? const Color(0xffc1b8d1) : muted,
+    primary: dark ? const Color(0xffc2abff) : violet,
+    primaryContainer: dark ? const Color(0xff35274e) : const Color(0xffece3ff),
+    surfaceContainerHighest: dark ? const Color(0xff282139) : soft,
+    outlineVariant: dark ? const Color(0xff383047) : line,
+  );
+  final field = OutlineInputBorder(
+    borderRadius: BorderRadius.circular(16),
+    borderSide: BorderSide(color: scheme.outlineVariant),
+  );
+  return ThemeData(
+    useMaterial3: true,
+    colorScheme: scheme,
+    scaffoldBackgroundColor: canvas,
+    fontFamily: dark ? null : 'Roboto',
+    appBarTheme: AppBarTheme(
+      backgroundColor: canvas,
+      foregroundColor: scheme.onSurface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+    ),
+    dividerColor: scheme.outlineVariant,
+    bottomSheetTheme: const BottomSheetThemeData(
+      surfaceTintColor: Colors.transparent,
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: scheme.surfaceContainerHighest,
+      hintStyle: TextStyle(color: scheme.onSurfaceVariant),
+      border: field,
+      enabledBorder: field,
+      focusedBorder: field.copyWith(
+        borderSide: BorderSide(color: scheme.primary, width: 1.4),
+      ),
+    ),
+    textTheme: const TextTheme(bodyMedium: TextStyle(fontSize: 14)),
+  );
+}
+
 Color surface(BuildContext c) => Theme.of(c).colorScheme.surface;
 Color foreground(BuildContext c) => Theme.of(c).colorScheme.onSurface;
-Color subdued(BuildContext c) =>
-    Theme.of(c).brightness == Brightness.dark ? const Color(0xff25252d) : soft;
+Color subdued(BuildContext c) => Theme.of(c).colorScheme.surfaceContainerHighest;
+Color accent(BuildContext c) => Theme.of(c).colorScheme.primary;
+
+LinearGradient crystalGradient(BuildContext c, {bool translucent = false}) {
+  final scheme = Theme.of(c).colorScheme;
+  final base = scheme.surface;
+  final tint = Color.lerp(base, scheme.primaryContainer, .48)!;
+  return LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: translucent
+        ? [base.withValues(alpha: .96), tint.withValues(alpha: .91)]
+        : [base, tint],
+  );
+}
+
 Future<void> perform(BuildContext c, Future<void> Function() work) async {
   try {
     await work();
@@ -40,7 +102,12 @@ Future<bool> gpixAlert(
     await showDialog<bool>(
       context: c,
       builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        backgroundColor: surface(context),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: Theme.of(context).dividerColor),
+        ),
         insetPadding: const EdgeInsets.symmetric(horizontal: 40),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -64,9 +131,9 @@ Future<bool> gpixAlert(
                       Text(
                         message,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 14,
-                          color: muted,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                           height: 1.45,
                         ),
                       ),
@@ -154,8 +221,9 @@ Future<T?> sheet<T>(BuildContext c, Widget child, {bool scroll = true}) =>
             maxHeight: MediaQuery.sizeOf(context).height * .88,
           ),
           decoration: BoxDecoration(
-            color: surface(context),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            gradient: crystalGradient(context),
+            border: Border.all(color: Theme.of(context).dividerColor),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
           ),
           child: SafeArea(
             top: false,
@@ -260,7 +328,7 @@ class PrimaryButton extends StatelessWidget {
         backgroundColor: secondary ? subdued(c) : violet,
         foregroundColor: secondary ? foreground(c) : Colors.white,
         disabledBackgroundColor: violet.withValues(alpha: .4),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         padding: const EdgeInsets.symmetric(horizontal: 12),
       ),
       child: busy
@@ -515,14 +583,7 @@ class AppInput extends StatelessWidget {
     style: const TextStyle(fontSize: 15),
     decoration: InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(color: muted),
-      filled: true,
-      fillColor: subdued(c),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(13),
-        borderSide: BorderSide.none,
-      ),
     ),
   );
 }

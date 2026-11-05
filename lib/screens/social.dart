@@ -83,16 +83,15 @@ class _HomeShellState extends State<HomeShell> {
             height: compact ? 54 : 64,
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
             decoration: BoxDecoration(
-              color: surface(c).withValues(alpha: .97),
+              gradient: crystalGradient(c, translucent: true),
               borderRadius: BorderRadius.circular(40),
               border: Border.all(
-                color: foreground(c).withValues(alpha: .08),
-                width: .7,
+                color: Theme.of(c).colorScheme.outlineVariant,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: .08),
-                  blurRadius: 28,
+                  color: ink.withValues(alpha: .15),
+                  blurRadius: 24,
                   offset: const Offset(0, 5),
                 ),
               ],
@@ -131,7 +130,7 @@ class _HomeShellState extends State<HomeShell> {
                             shape: BoxShape.circle,
                             border: Border.all(
                               color: tab == 3
-                                  ? foreground(c)
+                                  ? accent(c)
                                   : Colors.transparent,
                               width: 1.5,
                             ),
@@ -154,7 +153,9 @@ class _HomeShellState extends State<HomeShell> {
     child: IconButton(
       tooltip: label,
       style: IconButton.styleFrom(
-        backgroundColor: tab == i ? subdued(context) : Colors.transparent,
+        backgroundColor: tab == i
+            ? Theme.of(context).colorScheme.primaryContainer
+            : Colors.transparent,
         shape: const StadiumBorder(),
         minimumSize: const Size(50, 46),
       ),
@@ -176,7 +177,7 @@ class _HomeShellState extends State<HomeShell> {
           GIcon(
             tab == i ? b : a,
             size: compact ? 24 : 27,
-            color: foreground(context),
+            color: tab == i ? accent(context) : foreground(context),
           ),
           if (i == 4 &&
               GpixScope.of(
