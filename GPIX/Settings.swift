@@ -24,7 +24,7 @@ import UIKit
         row("Richieste di seguirti",icon:"person.badge.plus") { [weak self] in self?.push(FollowRequestsController()) }
         add(Design.divider());section("La tua app")
         toggle("Bolla delle istantanee",icon:"camera",value:!session.preferences.flag("hideInstantBubble")) { [weak self] in self?.action("preferences",["key":"hideInstantBubble","value":!$0]) }
-        row("Aspetto",subtitle:UserDefaults.standard.string(forKey:"gpix.appearance") ?? "Sistema",icon:"circle.lefthalf.filled") { [weak self] in self?.menu("Aspetto",items:[("Sistema","system"),("Chiaro","light"),("Scuro","dark")].map { option in (option.0,false,{ UserDefaults.standard.set(option.1,forKey:"gpix.appearance");(UIApplication.shared.delegate as? AppDelegate)?.applyAppearance();self?.render() }) }) }
+        row("Aspetto",subtitle:UserDefaults.standard.string(forKey:"gpix.appearance") ?? "Sistema",icon:"circle.lefthalf.filled") { [weak self] in self?.menu("Aspetto",items:[("Sistema","system"),("Chiaro","light"),("Scuro","dark")].map { option in (option.0,false,{ UserDefaults.standard.set(option.1,forKey:"gpix.appearance");(self?.view.window?.windowScene?.delegate as? SceneDelegate)?.applyAppearance();self?.render() }) }) }
         row("Notifiche",icon:"bell") { [weak self] in self?.push(PrivacyController(mode:"notifications")) }
         row("La tua attività",icon:"chart.bar") { [weak self] in self?.push(LibraryController(mode:"activity")) }
         add(Design.divider());section("Persone e assistenza")
@@ -33,7 +33,7 @@ import UIKit
         row("Assistenza",icon:"questionmark.circle") { [weak self] in self?.push(HelpController()) }
         row("Gestione account",icon:"person.crop.circle.badge.gearshape") { [weak self] in self?.push(SecurityController(mode:"account")) }
         row("Esci",icon:"rectangle.portrait.and.arrow.right") { [weak self] in self?.menu("Uscire da GPIX?",items:[("Esci",true,{ self?.run { await self?.session.logout() } })]) }
-        let footer=Design.label("GPIX · 3.0.0 (59)",size:11,color:Design.muted);footer.textAlignment = .center;add(footer,inset:24);scroll.setContentOffset(offset,animated:false)
+        let footer=Design.label("GPIX · 3.0.0 (60)",size:11,color:Design.muted);footer.textAlignment = .center;add(footer,inset:24);scroll.setContentOffset(offset,animated:false)
     }
     private func toggle(_ title:String,icon:String,value:Bool,changed:@escaping(Bool)->Void) { let control=UISwitch();control.onTintColor=Design.violet;control.isOn=value;control.addAction(UIAction { [weak control] _ in changed(control?.isOn ?? false) },for:.valueChanged);row(title,icon:icon,accessory:control) }
 }

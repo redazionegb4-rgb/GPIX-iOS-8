@@ -1,22 +1,47 @@
 import UIKit
 
 @main @MainActor final class AppDelegate: UIResponder, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        configurationForConnecting session: UISceneSession,
+        options: UIScene.ConnectionOptions
+    ) -> UISceneConfiguration {
+        let configuration = UISceneConfiguration(name: "Default Configuration", sessionRole: session.role)
+        configuration.sceneClass = UIWindowScene.self
+        configuration.delegateClass = SceneDelegate.self
+        return configuration
+    }
+}
+
+@MainActor final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
     private var observer: NSObjectProtocol?
     private var showingHome: Bool?
-    func application(_ application:UIApplication,didFinishLaunchingWithOptions launchOptions:[UIApplication.LaunchOptionsKey:Any]? = nil) -> Bool {
+
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options: UIScene.ConnectionOptions) {
+        guard let windowScene = scene as? UIWindowScene else { return }
         let nav=UINavigationBarAppearance();nav.configureWithOpaqueBackground();nav.backgroundColor=Design.background;nav.shadowColor = .clear;nav.titleTextAttributes=[.font:Design.font(18,.bold),.foregroundColor:Design.ink]
         UINavigationBar.appearance().standardAppearance=nav;UINavigationBar.appearance().scrollEdgeAppearance=nav;UINavigationBar.appearance().tintColor=Design.ink
-        let w=UIWindow(frame:UIScreen.main.bounds);window=w;let launch=UIViewController();launch.view.backgroundColor=Design.background
+        let w=UIWindow(windowScene:windowScene);window=w;let launch=UIViewController();launch.view.backgroundColor=Design.background
         let logo=UIImageView(image:UIImage(named:"GpixLogo"));logo.contentMode = .scaleAspectFit;launch.view.addSubview(logo);logo.translatesAutoresizingMaskIntoConstraints=false;NSLayoutConstraint.activate([logo.centerXAnchor.constraint(equalTo:launch.view.centerXAnchor),logo.centerYAnchor.constraint(equalTo:launch.view.centerYAnchor),logo.widthAnchor.constraint(equalToConstant:150),logo.heightAnchor.constraint(equalToConstant:100)])
         w.rootViewController=launch;w.makeKeyAndVisible();applyAppearance()
         routeIfNeeded()
         observer=NotificationCenter.default.addObserver(forName:Session.changed,object:nil,queue:.main) { [weak self] _ in Task { @MainActor in self?.routeIfNeeded() } }
         Task { do { try await Session.shared.sync() } catch { }; self.routeIfNeeded();Session.shared.startPolling() }
-        return true
     }
-    func applicationDidBecomeActive(_ application:UIApplication) { Task { await Session.shared.presence(true) } }
-    func applicationWillResignActive(_ application:UIApplication) { Task { await Session.shared.presence(false) } }
+
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        Task { await Session.shared.presence(true) }
+    }
+
+    func sceneWillResignActive(_ scene: UIScene) {
+        Task { await Session.shared.presence(false) }
+    }
+
+    deinit {
+        if let observer = observer { NotificationCenter.default.removeObserver(observer) }
+    }
+
     func applyAppearance() { let mode=UserDefaults.standard.string(forKey:"gpix.appearance") ?? "system";window?.overrideUserInterfaceStyle=mode == "dark" ? .dark:mode == "light" ? .light:.unspecified }
     private func routeIfNeeded() {
         let home = Session.shared.signedIn
