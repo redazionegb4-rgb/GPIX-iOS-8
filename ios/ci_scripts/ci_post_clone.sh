@@ -12,7 +12,7 @@ if ! command -v flutter >/dev/null 2>&1 || ! flutter --version | grep -q 'Flutte
 fi
 flutter config --no-analytics
 flutter precache --ios
-flutter pub get --enforce-lockfile
+flutter pub get
 flutter build ios --config-only --no-codesign
 command -v pod >/dev/null 2>&1 || { echo 'CocoaPods richiesto nel runner Xcode.'; exit 1; }
 cd ios
