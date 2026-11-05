@@ -1,0 +1,614 @@
+export 'icons.dart';
+import 'icons.dart';
+import 'dart:io';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import '../core/data.dart';
+import '../core/store.dart';
+
+const violet = Color(0xff633acb),
+    ink = Color(0xff19172a),
+    muted = Color(0xff777184),
+    soft = Color(0xfff1eef8),
+    line = Color(0xffe7e1f1),
+    danger = Color(0xffed4956);
+ThemeData gpixTheme(Brightness brightness) {
+  final dark = brightness == Brightness.dark;
+  final canvas = dark ? const Color(0xff100e19) : const Color(0xfffbfaff);
+  final scheme = ColorScheme.fromSeed(
+    seedColor: violet,
+    brightness: brightness,
+    surface: dark ? const Color(0xff191626) : Colors.white,
+    onSurface: dark ? const Color(0xfff5f0ff) : ink,
+    onSurfaceVariant: dark ? const Color(0xffc1b8d1) : muted,
+    primary: dark ? const Color(0xffc2abff) : violet,
+    primaryContainer: dark ? const Color(0xff35274e) : const Color(0xffece3ff),
+    surfaceContainerHighest: dark ? const Color(0xff282139) : soft,
+    outlineVariant: dark ? const Color(0xff383047) : line,
+  );
+  final field = OutlineInputBorder(
+    borderRadius: BorderRadius.circular(16),
+    borderSide: BorderSide(color: scheme.outlineVariant),
+  );
+  return ThemeData(
+    useMaterial3: true,
+    colorScheme: scheme,
+    scaffoldBackgroundColor: canvas,
+    fontFamily: dark ? null : 'Roboto',
+    appBarTheme: AppBarTheme(
+      backgroundColor: canvas,
+      foregroundColor: scheme.onSurface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+    ),
+    dividerColor: scheme.outlineVariant,
+    bottomSheetTheme: const BottomSheetThemeData(
+      surfaceTintColor: Colors.transparent,
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: scheme.surfaceContainerHighest,
+      hintStyle: TextStyle(color: scheme.onSurfaceVariant),
+      border: field,
+      enabledBorder: field,
+      focusedBorder: field.copyWith(
+        borderSide: BorderSide(color: scheme.primary, width: 1.4),
+      ),
+    ),
+    textTheme: const TextTheme(bodyMedium: TextStyle(fontSize: 14)),
+  );
+}
+
+Color surface(BuildContext c) => Theme.of(c).colorScheme.surface;
+Color foreground(BuildContext c) => Theme.of(c).colorScheme.onSurface;
+Color subdued(BuildContext c) => Theme.of(c).colorScheme.surfaceContainerHighest;
+Color accent(BuildContext c) => Theme.of(c).colorScheme.primary;
+
+LinearGradient crystalGradient(BuildContext c, {bool translucent = false}) {
+  final scheme = Theme.of(c).colorScheme;
+  final base = scheme.surface;
+  final tint = Color.lerp(base, scheme.primaryContainer, .48)!;
+  return LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: translucent
+        ? [base.withValues(alpha: .96), tint.withValues(alpha: .91)]
+        : [base, tint],
+  );
+}
+
+Future<void> perform(BuildContext c, Future<void> Function() work) async {
+  try {
+    await work();
+  } catch (e) {
+    if (c.mounted)
+      await gpixAlert(
+        c,
+        'Operazione non riuscita',
+        e.toString().replaceFirst('Exception: ', ''),
+      );
+  }
+}
+
+Future<bool> gpixAlert(
+  BuildContext c,
+  String title,
+  String message, {
+  String confirm = 'OK',
+  bool destructive = false,
+  bool cancel = false,
+}) async =>
+    await showDialog<bool>(
+      context: c,
+      builder: (context) => Dialog(
+        backgroundColor: surface(context),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: Theme.of(context).dividerColor),
+        ),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 27, 24, 23),
+                  child: Column(
+                    children: [
+                      Text(
+                        title,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          height: 1.25,
+                        ),
+                      ),
+                      const SizedBox(height: 11),
+                      Text(
+                        message,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          height: 1.45,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+              child: Row(
+                children: [
+                  if (cancel) ...[
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 46),
+                          foregroundColor: foreground(context),
+                          backgroundColor: subdued(context),
+                          side: BorderSide.none,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(13),
+                          ),
+                        ),
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text(
+                          'Annulla',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  Expanded(
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 46),
+                        backgroundColor: destructive ? danger : violet,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(13),
+                        ),
+                      ),
+                      onPressed: () => Navigator.pop(context, true),
+                      child: Text(
+                        confirm,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ) ??
+    false;
+void notice(BuildContext c, String text) {
+  ScaffoldMessenger.of(c).hideCurrentSnackBar();
+  ScaffoldMessenger.of(c).showSnackBar(
+    SnackBar(
+      content: Text(text),
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 2),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
+  );
+}
+
+Future<T?> sheet<T>(BuildContext c, Widget child, {bool scroll = true}) =>
+    showModalBottomSheet<T>(
+      context: c,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black38,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * .88,
+          ),
+          decoration: BoxDecoration(
+            gradient: crystalGradient(context),
+            border: Border.all(color: Theme.of(context).dividerColor),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 10),
+                Container(
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: muted.withValues(alpha: .3),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: scroll ? SingleChildScrollView(child: child) : child,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+class ActionRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool destructive;
+  final String? subtitle;
+  const ActionRow(
+    this.icon,
+    this.label,
+    this.onTap, {
+    super.key,
+    this.destructive = false,
+    this.subtitle,
+  });
+  @override
+  Widget build(BuildContext c) => InkWell(
+    onTap: onTap,
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 55),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+        child: Row(
+          children: [
+            GIcon(icon, size: 24, color: destructive ? danger : foreground(c)),
+            const SizedBox(width: 17),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: destructive ? danger : foreground(c),
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle!,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: muted,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class PrimaryButton extends StatelessWidget {
+  final String label;
+  final VoidCallback? onTap;
+  final bool busy, secondary;
+  const PrimaryButton(
+    this.label, {
+    super.key,
+    this.onTap,
+    this.busy = false,
+    this.secondary = false,
+  });
+  @override
+  Widget build(BuildContext c) => SizedBox(
+    width: double.infinity,
+    height: 47,
+    child: FilledButton(
+      onPressed: busy ? null : onTap,
+      style: FilledButton.styleFrom(
+        backgroundColor: secondary ? subdued(c) : violet,
+        foregroundColor: secondary ? foreground(c) : Colors.white,
+        disabledBackgroundColor: violet.withValues(alpha: .4),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+      ),
+      child: busy
+          ? const SizedBox(
+              width: 19,
+              height: 19,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
+          : Text(
+              label,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+    ),
+  );
+}
+
+class MediaView extends StatelessWidget {
+  final String reference;
+  final BoxFit fit;
+  final double? width, height;
+  const MediaView(
+    this.reference, {
+    super.key,
+    this.fit = BoxFit.cover,
+    this.width,
+    this.height,
+  });
+  @override
+  Widget build(BuildContext c) {
+    final s = GpixScope.of(c, listen: false);
+    final path = s.url(reference);
+    Widget placeholder() => ColoredBox(
+      color: subdued(c),
+      child: const Center(
+        child: GIcon(CupertinoIcons.photo, color: muted, size: 24),
+      ),
+    );
+    if (path.isEmpty)
+      return SizedBox(width: width, height: height, child: placeholder());
+    if (path.startsWith('https://'))
+      return Image.network(
+        path,
+        width: width,
+        height: height,
+        fit: fit,
+        errorBuilder: (_, e, st) => placeholder(),
+        loadingBuilder: (c, child, p) => p == null ? child : placeholder(),
+      );
+    if (path.startsWith('/'))
+      return Image.file(
+        File(path),
+        width: width,
+        height: height,
+        fit: fit,
+        errorBuilder: (_, e, st) => placeholder(),
+      );
+    return Image.asset(
+      'assets/media/$path',
+      width: width,
+      height: height,
+      fit: fit,
+      errorBuilder: (_, e, st) => placeholder(),
+    );
+  }
+}
+
+class Avatar extends StatelessWidget {
+  final String user;
+  final double size;
+  final bool ring, viewed;
+  final String? image;
+  const Avatar(
+    this.user, {
+    super.key,
+    this.size = 42,
+    this.ring = false,
+    this.viewed = false,
+    this.image,
+  });
+  @override
+  Widget build(BuildContext c) {
+    final s = GpixScope.of(c);
+    final picture = ClipOval(
+      child: SizedBox.square(
+        dimension: size,
+        child: MediaView(image ?? s.user(user).str('avatar')),
+      ),
+    );
+    if (!ring) return picture;
+    return Container(
+      padding: const EdgeInsets.all(2.3),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: viewed || s.closeStory(user)
+            ? null
+            : const SweepGradient(
+                colors: [
+                  Color(0xffbd00e8),
+                  Color(0xffff006a),
+                  Color(0xffffa800),
+                  Color(0xffffd541),
+                  Color(0xffbd00e8),
+                ],
+              ),
+        color: s.closeStory(user)
+            ? const Color(0xff25bd61)
+            : viewed
+            ? foreground(c).withValues(alpha: .15)
+            : null,
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(2.8),
+        decoration: BoxDecoration(shape: BoxShape.circle, color: surface(c)),
+        child: picture,
+      ),
+    );
+  }
+}
+
+class PersonTile extends StatelessWidget {
+  final String user;
+  final String? subtitle;
+  final VoidCallback? onTap;
+  final Widget? trailing;
+  const PersonTile(
+    this.user, {
+    super.key,
+    this.subtitle,
+    this.onTap,
+    this.trailing,
+  });
+  @override
+  Widget build(BuildContext c) {
+    final s = GpixScope.of(c);
+    final u = s.user(user);
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        child: Row(
+          children: [
+            Avatar(user, size: 47),
+            const SizedBox(width: 13),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    u.str('username'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle ?? u.str('name'),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: muted,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (trailing != null) ...[const SizedBox(width: 10), trailing!],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class EmptyState extends StatelessWidget {
+  final IconData icon;
+  final String title, detail;
+  final Widget? action;
+  const EmptyState(
+    this.icon,
+    this.title,
+    this.detail, {
+    super.key,
+    this.action,
+  });
+  @override
+  Widget build(BuildContext c) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 42),
+    child: SizedBox(
+      width: double.infinity,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: foreground(c), width: 1.5),
+            ),
+            child: GIcon(icon, size: 33),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -.5,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            detail,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 14, color: muted, height: 1.5),
+          ),
+          if (action != null) ...[const SizedBox(height: 22), action!],
+        ],
+      ),
+    ),
+  );
+}
+
+class AppInput extends StatelessWidget {
+  final TextEditingController controller;
+  final String hint;
+  final bool obscure;
+  final int lines;
+  final TextInputType? keyboard;
+  const AppInput(
+    this.controller,
+    this.hint, {
+    super.key,
+    this.obscure = false,
+    this.lines = 1,
+    this.keyboard,
+  });
+  @override
+  Widget build(BuildContext c) => TextField(
+    controller: controller,
+    obscureText: obscure,
+    maxLines: lines,
+    keyboardType: keyboard,
+    style: const TextStyle(fontSize: 15),
+    decoration: InputDecoration(
+      hintText: hint,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+    ),
+  );
+}
+
+Widget pageTitle(String title) => Text(
+  title,
+  style: const TextStyle(
+    fontSize: 21,
+    fontWeight: FontWeight.w700,
+    letterSpacing: -.45,
+  ),
+);
+Future<T?> open<T>(BuildContext c, Widget page) =>
+    Navigator.of(c).push<T>(CupertinoPageRoute(builder: (_) => page));
+
+class BrandLogo extends StatelessWidget {
+  final double width;
+  const BrandLogo({super.key, this.width = 112});
+  @override
+  Widget build(BuildContext c) => Image.asset(
+    Theme.of(c).brightness == Brightness.dark
+        ? 'assets/brand/logo_dark.png'
+        : 'assets/brand/logo_light.png',
+    width: width,
+    fit: BoxFit.contain,
+    semanticLabel: 'GPIX',
+  );
+}
