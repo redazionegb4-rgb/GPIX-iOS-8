@@ -69,8 +69,13 @@ void main() {
       socialLink('instagram', '@demix.87', '')['url'],
       'https://www.instagram.com/demix.87/',
     );
-    final site = socialLink('website', 'https://gpix.cc/about', '');expect(site['title'], 'gpix.cc');expect(site['url'], 'https://gpix.cc/about');
-    expect(()=>socialLink('website','javascript:alert(1)',''),throwsFormatException);
+    final site = socialLink('website', 'https://gpix.cc/about', '');
+    expect(site['title'], 'gpix.cc');
+    expect(site['url'], 'https://gpix.cc/about');
+    expect(
+      () => socialLink('website', 'javascript:alert(1)', ''),
+      throwsFormatException,
+    );
     final w = socialLink('whatsapp', '+39 333 1234567', 'Scrivimi');
     expect(w['value'], '393331234567');
     expect(profileAppUri(w).scheme, 'whatsapp');
@@ -180,6 +185,11 @@ void main() {
         await shot('requests');
         await mount(const Settings());
         await shot('settings');
+        await t.tap(find.text('I tuoi contenuti'));
+        await t.pumpAndSettle();
+        expect(find.widgetWithText(ListTile, 'Archivio'), findsOneWidget);
+        await t.pageBack();
+        await t.pumpAndSettle();
         await t.enterText(
           find.byKey(const ValueKey('settings-search')),
           'Archivio',

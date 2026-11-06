@@ -213,9 +213,9 @@ void main() {
         ),
       );
       await t.pumpAndSettle();
-      expect(find.text('123'), findsOneWidget);
-      expect(find.text('456'), findsOneWidget);
-      expect(find.text('789'), findsOneWidget);
+      expect(find.text('123 post'), findsOneWidget);
+      expect(find.text('456 follower'), findsOneWidget);
+      expect(find.text('789 seguiti'), findsOneWidget);
       expect(t.takeException(), isNull);
       await t.pumpWidget(const SizedBox());
       s.dispose();

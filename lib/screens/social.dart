@@ -2188,7 +2188,7 @@ class Profile extends StatefulWidget {
 
 class _ProfileState extends State<Profile> {
   int selected = 0;
-  bool showSuggestions = true;
+  bool showSuggestions = false;
   final dismissedSuggestions = <String>{};
   @override
   Widget build(BuildContext c) {
@@ -2234,14 +2234,7 @@ class _ProfileState extends State<Profile> {
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: !widget.root,
-        centerTitle: own,
-        leading: own
-            ? IconButton(
-                tooltip: 'Crea',
-                onPressed: () => createMenu(c),
-                icon: const GIcon(CupertinoIcons.plus, size: 28),
-              )
-            : null,
+        centerTitle: false,
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2263,6 +2256,11 @@ class _ProfileState extends State<Profile> {
         ),
         actions: own
             ? [
+                IconButton(
+                  tooltip: 'Crea',
+                  onPressed: () => createMenu(c),
+                  icon: const GIcon(CupertinoIcons.plus, size: 25),
+                ),
                 IconButton(
                   tooltip: 'Richieste di seguirti',
                   onPressed: () => open(c, const Requests()),
@@ -2342,180 +2340,177 @@ class _ProfileState extends State<Profile> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                AuraPanel(
-                  margin: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 20, 14),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 94,
-                          height: 106,
-                          child: Stack(
-                            alignment: Alignment.bottomCenter,
-                            clipBehavior: Clip.none,
-                            children: [
-                              InkWell(
-                                onTap: () => s.stories(widget.user).isNotEmpty
-                                    ? open(c, StoryViewer(user: widget.user))
-                                    : own
-                                    ? open(c, const EditProfile())
-                                    : null,
-                                child: Avatar(
-                                  widget.user,
-                                  size: 80,
-                                  ring: s.hasUnseenStories(widget.user),
-                                ),
-                              ),
-                              if (own)
-                                Positioned(
-                                  right: 0,
-                                  bottom: -1,
-                                  child: InkWell(
-                                    onTap: () =>
-                                        open(c, const Composer(kind: 'story')),
-                                    child: Container(
-                                      width: 28,
-                                      height: 28,
-                                      decoration: BoxDecoration(
-                                        color: foreground(c),
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: surface(c),
-                                          width: 2.5,
-                                        ),
-                                      ),
-                                      child: GIcon(
-                                        CupertinoIcons.plus,
-                                        color: surface(c),
-                                        size: 19,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              if (own)
-                                Positioned(
-                                  top: -7,
-                                  left: -2,
-                                  right: -2,
-                                  child: InkWell(
-                                    onTap: () => manageOwnNote(c),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 9,
-                                        vertical: 8,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: surface(c),
-                                        borderRadius: BorderRadius.circular(18),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black.withValues(
-                                              alpha: .09,
-                                            ),
-                                            blurRadius: 14,
-                                            offset: const Offset(0, 3),
-                                          ),
-                                        ],
-                                      ),
-                                      child: Text(
-                                        s.notes
-                                                .where(
-                                                  (n) =>
-                                                      n.str('owner') == s.myId,
-                                                )
-                                                .firstOrNull
-                                                ?.str('text') ??
-                                            'Lascia una nota…',
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                          height: 1.1,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 15),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                u.str('name'),
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 13),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  stat(
-                                    u.str(
-                                      'postCount',
-                                      '${s.allPosts.where((p) => p.str('author') == widget.user && p.str('kind') != 'story' && !p.flag('archived')).length}',
-                                    ),
-                                    'post',
-                                    null,
-                                  ),
-                                  stat(
-                                    u.str('followers', '0'),
-                                    'follower',
-                                    () => open(
-                                      c,
-                                      Connections(
-                                        user: widget.user,
-                                        initial: 0,
-                                      ),
-                                    ),
-                                  ),
-                                  stat(
-                                    u.str('following', '0'),
-                                    'seguiti',
-                                    () => open(
-                                      c,
-                                      Connections(
-                                        user: widget.user,
-                                        initial: 1,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 19),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (u.str('pronouns').isNotEmpty) ...[
-                        const SizedBox(height: 3),
-                        Text(
-                          u.str('pronouns'),
-                          style: const TextStyle(fontSize: 12, color: muted),
-                        ),
-                      ],
-                      if (u.str('bio').isNotEmpty) ...[
-                        const SizedBox(height: 5),
-                        Text(
-                          u.str('bio').replaceAll('\\n', '\n'),
-                          style: const TextStyle(fontSize: 13, height: 1.4),
-                        ),
-                      ],
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 94,
+                            height: 106,
+                            child: Stack(
+                              alignment: Alignment.bottomCenter,
+                              clipBehavior: Clip.none,
+                              children: [
+                                InkWell(
+                                  onTap: () => s.stories(widget.user).isNotEmpty
+                                      ? open(c, StoryViewer(user: widget.user))
+                                      : own
+                                      ? open(c, const EditProfile())
+                                      : null,
+                                  child: Avatar(
+                                    widget.user,
+                                    size: 80,
+                                    ring: s.hasUnseenStories(widget.user),
+                                  ),
+                                ),
+                                if (own)
+                                  Positioned(
+                                    right: 0,
+                                    bottom: -1,
+                                    child: InkWell(
+                                      onTap: () => open(
+                                        c,
+                                        const Composer(kind: 'story'),
+                                      ),
+                                      child: Container(
+                                        width: 28,
+                                        height: 28,
+                                        decoration: BoxDecoration(
+                                          color: foreground(c),
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: surface(c),
+                                            width: 2.5,
+                                          ),
+                                        ),
+                                        child: GIcon(
+                                          CupertinoIcons.plus,
+                                          color: surface(c),
+                                          size: 19,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                if (own)
+                                  Positioned(
+                                    top: -7,
+                                    left: -2,
+                                    right: -2,
+                                    child: InkWell(
+                                      onTap: () => manageOwnNote(c),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 9,
+                                          vertical: 8,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: surface(c),
+                                          borderRadius: BorderRadius.circular(
+                                            18,
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withValues(
+                                                alpha: .09,
+                                              ),
+                                              blurRadius: 14,
+                                              offset: const Offset(0, 3),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Text(
+                                          s.notes
+                                                  .where(
+                                                    (n) =>
+                                                        n.str('owner') ==
+                                                        s.myId,
+                                                  )
+                                                  .firstOrNull
+                                                  ?.str('text') ??
+                                              'Lascia una nota…',
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            height: 1.1,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  u.str('name'),
+                                  style: const TextStyle(
+                                    fontSize: 19,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                if (u.str('pronouns').isNotEmpty)
+                                  Text(
+                                    u.str('pronouns'),
+                                    style: const TextStyle(
+                                      color: muted,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                if (u.str('bio').isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    u.str('bio').replaceAll(r'\n', '\n'),
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      height: 1.35,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 11,
+                        runSpacing: 3,
+                        children: [
+                          stat(
+                            u.str(
+                              'postCount',
+                              '${s.allPosts.where((p) => p.str('author') == widget.user && p.str('kind') != 'story' && !p.flag('archived')).length}',
+                            ),
+                            'post',
+                            null,
+                          ),
+                          stat(
+                            u.str('followers', '0'),
+                            'follower',
+                            () => open(
+                              c,
+                              Connections(user: widget.user, initial: 0),
+                            ),
+                          ),
+                          stat(
+                            u.str('following', '0'),
+                            'seguiti',
+                            () => open(
+                              c,
+                              Connections(user: widget.user, initial: 1),
+                            ),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 10),
                       ProfileLinkChips(links: u.rows('links'), own: own),
                       const SizedBox(height: 16),
@@ -2524,19 +2519,29 @@ class _ProfileState extends State<Profile> {
                             ? [
                                 Expanded(
                                   child: smallButton(
-                                    'Modifica',
+                                    'Modifica profilo',
                                     () => open(c, const EditProfile()),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
-                                  child: smallButton(
-                                    'Condividi profilo',
-                                    () => SharePlus.instance.share(
-                                      ShareParams(
-                                        text:
-                                            'Seguimi su GPIX: @${u.str('username')}',
-                                      ),
+                                  child: Builder(
+                                    builder: (buttonContext) => smallButton(
+                                      'Condividi profilo',
+                                      () => perform(buttonContext, () async {
+                                        final box =
+                                            buttonContext.findRenderObject()
+                                                as RenderBox;
+                                        await SharePlus.instance.share(
+                                          ShareParams(
+                                            text:
+                                                'Seguimi su GPIX: @${u.str('username')}',
+                                            sharePositionOrigin:
+                                                box.localToGlobal(Offset.zero) &
+                                                box.size,
+                                          ),
+                                        );
+                                      }),
                                     ),
                                   ),
                                 ),
@@ -2615,39 +2620,32 @@ class _ProfileState extends State<Profile> {
                     ],
                   ),
                 ),
-                if (own && showSuggestions) _suggestions(c),
                 if (own || highlights.isNotEmpty)
                   SizedBox(
-                    height: 100,
+                    height: 112,
                     child: ListView.separated(
                       padding: const EdgeInsets.symmetric(horizontal: 19),
                       scrollDirection: Axis.horizontal,
                       itemCount: highlights.length + (own ? 1 : 0),
-                      separatorBuilder: (_, i) => const SizedBox(width: 18),
+                      separatorBuilder: (_, i) => const SizedBox(width: 7),
                       itemBuilder: (c, i) {
                         if (own && i == 0)
                           return InkWell(
                             onTap: () => createHighlight(c),
-                            child: Column(
-                              children: [
-                                Container(
-                                  width: 62,
-                                  height: 62,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: line),
-                                  ),
-                                  child: const GIcon(
-                                    CupertinoIcons.plus,
-                                    size: 27,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'Nuova',
-                                  style: TextStyle(fontSize: 11),
-                                ),
-                              ],
+                            child: Container(
+                              width: 78,
+                              decoration: BoxDecoration(
+                                color: subdued(c),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  GIcon(CupertinoIcons.plus, size: 24),
+                                  SizedBox(height: 5),
+                                  Text('Nuova', style: TextStyle(fontSize: 11)),
+                                ],
+                              ),
                             ),
                           );
                         final h = highlights[i - (own ? 1 : 0)],
@@ -2681,41 +2679,55 @@ class _ProfileState extends State<Profile> {
                                   ),
                                 )
                               : null,
-                          child: Column(
-                            children: [
-                              Container(
-                                width: 62,
-                                height: 62,
-                                padding: const EdgeInsets.all(3),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: line),
-                                ),
-                                child: ClipOval(
-                                  child: MediaView(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: SizedBox(
+                              width: 78,
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  MediaView(
                                     ids.isEmpty
                                         ? ''
                                         : s.post(ids.first).str('media'),
                                   ),
-                                ),
+                                  const DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          Colors.transparent,
+                                          Colors.black87,
+                                        ],
+                                        stops: [.46, 1],
+                                      ),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    left: 6,
+                                    right: 6,
+                                    bottom: 7,
+                                    child: Text(
+                                      h.str('title'),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 8),
-                              SizedBox(
-                                width: 65,
-                                child: Text(
-                                  h.str('title'),
-                                  maxLines: 1,
-                                  textAlign: TextAlign.center,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: 11),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         );
                       },
                     ),
                   ),
+                if (own && showSuggestions) _suggestions(c),
                 Row(
                   children: [
                     for (var i = 0; i < 4; i++)
@@ -2728,7 +2740,7 @@ class _ProfileState extends State<Profile> {
                               border: Border(
                                 bottom: BorderSide(
                                   color: selected == i
-                                      ? foreground(c)
+                                      ? violet
                                       : Theme.of(c).dividerColor,
                                   width: selected == i ? 1.5 : .5,
                                 ),
@@ -2743,7 +2755,7 @@ class _ProfileState extends State<Profile> {
                                   ? CupertinoIcons.repeat
                                   : CupertinoIcons.person_crop_square,
                               size: 23,
-                              color: selected == i ? foreground(c) : muted,
+                              color: selected == i ? violet : muted,
                             ),
                           ),
                         ),
@@ -2841,7 +2853,7 @@ class _ProfileState extends State<Profile> {
                 crossAxisCount: 3,
                 crossAxisSpacing: 2,
                 mainAxisSpacing: 2,
-                childAspectRatio: .8,
+                childAspectRatio: 1,
               ),
             ),
           const SliverToBoxAdapter(child: SizedBox(height: 115)),
@@ -2978,20 +2990,25 @@ class _ProfileState extends State<Profile> {
 
   Widget stat(String value, String label, VoidCallback? tap) => InkWell(
     onTap: tap,
-    child: Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Text.rich(
+        TextSpan(
+          style: const TextStyle(fontSize: 13),
+          children: [
+            TextSpan(
+              text: value,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+            TextSpan(text: ' $label'),
+          ],
         ),
-        const SizedBox(height: 4),
-        Text(label, style: const TextStyle(fontSize: 12)),
-      ],
+      ),
     ),
   );
   Widget smallButton(String text, VoidCallback tap, {bool primary = false}) =>
-      SizedBox(
-        height: 35,
+      ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 40),
         child: FilledButton(
           onPressed: tap,
           style: FilledButton.styleFrom(
@@ -3004,6 +3021,7 @@ class _ProfileState extends State<Profile> {
           ),
           child: Text(
             text,
+            textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
           ),
         ),
@@ -3243,12 +3261,21 @@ class _EditProfileState extends State<EditProfile> {
         children: [
           const SizedBox(height: 22),
           Center(
-            child: Avatar(
-              s.myId,
-              size: 88,
-              image: avatar == s.me.str('avatarId')
-                  ? s.me.str('avatar')
-                  : avatar,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: violet),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(2),
+                child: Avatar(
+                  s.myId,
+                  size: 88,
+                  image: avatar == s.me.str('avatarId')
+                      ? s.me.str('avatar')
+                      : avatar,
+                ),
+              ),
             ),
           ),
           TextButton(
@@ -3265,109 +3292,127 @@ class _EditProfileState extends State<EditProfile> {
               );
               if (mounted) setState(() => avatar = ref);
             }),
-            child: const Text('Modifica immagine del profilo'),
+            child: const Text('Cambia foto'),
           ),
           const SizedBox(height: 8),
-          AuraPanel(
-            radius: 18,
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const GIcon(CupertinoIcons.link),
-                  title: const Text('Link del profilo'),
-                  trailing: const GIcon(CupertinoIcons.chevron_right, size: 17),
-                  onTap: () => open(c, const ProfileLinks()),
-                ),
-                ListTile(
-                  leading: const GIcon(CupertinoIcons.square_grid_2x2),
-                  title: const Text('Riordina griglia'),
-                  trailing: const GIcon(CupertinoIcons.chevron_right, size: 17),
-                  onTap: () => open(c, const GridOrder()),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 22),
-          Padding(
-            padding: const EdgeInsets.only(left: 4, bottom: 10),
-            child: Text(
-              'Informazioni del profilo',
-              style: Theme.of(c).textTheme.titleSmall,
-            ),
-          ),
           for (final field in const [
             (key: 'name', label: 'Nome', max: 60),
             (key: 'username', label: 'Nome utente', max: 30),
             (key: 'pronouns', label: 'Pronomi', max: 40),
             (key: 'bio', label: 'Biografia', max: 150),
           ])
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: TextField(
-                key: ValueKey('edit-profile-${field.key}'),
-                controller: fields[field.key],
-                minLines: field.key == 'bio' ? 2 : 1,
-                maxLines: field.key == 'bio' ? 5 : 1,
-                maxLength: field.max,
-                textCapitalization: ['name', 'bio'].contains(field.key)
-                    ? TextCapitalization.sentences
-                    : TextCapitalization.none,
-                style: const TextStyle(fontSize: 15, height: 1.4),
-                decoration: InputDecoration(
-                  labelText: field.label,
-                  floatingLabelBehavior: FloatingLabelBehavior.always,
-                  counterText: '',
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 15,
+            LayoutBuilder(
+              builder: (c, constraints) {
+                final wide =
+                    constraints.maxWidth >= 280 &&
+                    MediaQuery.textScalerOf(c).scale(15) <= 19;
+                final label = Text(
+                  field.label,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                );
+                final input = Semantics(
+                  label: field.label,
+                  child: TextField(
+                    key: ValueKey('edit-profile-${field.key}'),
+                    controller: fields[field.key],
+                    maxLines: field.key == 'bio' ? 5 : 1,
+                    minLines: 1,
+                    maxLength: field.max,
+                    textCapitalization: ['name', 'bio'].contains(field.key)
+                        ? TextCapitalization.sentences
+                        : TextCapitalization.none,
+                    style: const TextStyle(fontSize: 15, height: 1.4),
+                    decoration: InputDecoration(
+                      hintText: field.key == 'pronouns' ? 'Aggiungi' : null,
+                      counterText: '',
+                      filled: false,
+                      enabledBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: Theme.of(c).dividerColor),
+                      ),
+                      focusedBorder: const UnderlineInputBorder(
+                        borderSide: BorderSide(color: violet),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
                   ),
-                ),
-              ),
-            ),
-          AuraPanel(
-            radius: 18,
-            child: ListTile(
-              title: const Text('Genere'),
-              subtitle: Text(
-                fields['gender']!.text.isEmpty
-                    ? 'Non specificato'
-                    : fields['gender']!.text,
-              ),
-              trailing: const GIcon(
-                CupertinoIcons.chevron_right,
-                size: 17,
-                color: muted,
-              ),
-              onTap: () => sheet(
-                c,
-                Builder(
-                  builder: (menu) => Column(
-                    children: [
-                      for (final gender in [
-                        'Uomo',
-                        'Donna',
-                        'Non binario',
-                        'Preferisco non specificarlo',
-                      ])
-                        ListTile(
-                          title: Text(gender),
-                          trailing: fields['gender']!.text == gender
-                              ? const GIcon(
-                                  CupertinoIcons.check_mark,
-                                  color: violet,
-                                )
-                              : null,
-                          onTap: () {
-                            setState(() => fields['gender']!.text = gender);
-                            Navigator.pop(menu);
-                          },
+                );
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: wide
+                      ? Row(
+                          children: [
+                            SizedBox(
+                              width: constraints.maxWidth * .33,
+                              child: label,
+                            ),
+                            Expanded(child: input),
+                          ],
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [label, input],
                         ),
-                    ],
-                  ),
+                );
+              },
+            ),
+          const SizedBox(height: 20),
+          const Divider(height: 1),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const GIcon(CupertinoIcons.link),
+            title: const Text('Link del profilo'),
+            trailing: const GIcon(CupertinoIcons.chevron_right, size: 17),
+            onTap: () => open(c, const ProfileLinks()),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const GIcon(CupertinoIcons.square_grid_2x2),
+            title: const Text('Riordina griglia'),
+            trailing: const GIcon(CupertinoIcons.chevron_right, size: 17),
+            onTap: () => open(c, const GridOrder()),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const GIcon(CupertinoIcons.person),
+            title: const Text('Genere'),
+            subtitle: Text(
+              fields['gender']!.text.isEmpty
+                  ? 'Non specificato'
+                  : fields['gender']!.text,
+            ),
+            trailing: const GIcon(CupertinoIcons.chevron_right, size: 17),
+            onTap: () => sheet(
+              c,
+              Builder(
+                builder: (menu) => Column(
+                  children: [
+                    for (final gender in [
+                      'Uomo',
+                      'Donna',
+                      'Non binario',
+                      'Preferisco non specificarlo',
+                    ])
+                      ListTile(
+                        title: Text(gender),
+                        trailing: fields['gender']!.text == gender
+                            ? const GIcon(
+                                CupertinoIcons.check_mark,
+                                color: violet,
+                              )
+                            : null,
+                        onTap: () {
+                          setState(() => fields['gender']!.text = gender);
+                          Navigator.pop(menu);
+                        },
+                      ),
+                  ],
                 ),
               ),
             ),
           ),
+          const Divider(height: 1),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 4, vertical: 12),
             child: Text(
@@ -4267,7 +4312,9 @@ class _RequestsState extends State<Requests> {
 }
 
 class Settings extends StatefulWidget {
-  const Settings({super.key});
+  final String? _area;
+  const Settings({super.key}) : _area = null;
+  const Settings._category(this._area);
   @override
   State<Settings> createState() => _SettingsState();
 }
@@ -4306,40 +4353,6 @@ class _SettingsState extends State<Settings> {
       ),
       onTap: tap,
     );
-    Widget section(String title, List<(String, Widget)> entries) {
-      final visible = entries
-          .where(
-            (e) =>
-                query.isEmpty ||
-                '${title.toLowerCase()} ${e.$1.toLowerCase()}'.contains(
-                  query.toLowerCase(),
-                ),
-          )
-          .toList();
-      if (visible.isEmpty) return const SizedBox.shrink();
-      return AuraPanel(
-        margin: const EdgeInsets.fromLTRB(13, 4, 13, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(17, 19, 17, 12),
-              child: Text(
-                title,
-                style: const TextStyle(
-                  color: muted,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            ...visible.map((e) => e.$2),
-            const SizedBox(height: 8),
-          ],
-        ),
-      );
-    }
-
     void controls(String title, List<Widget> children) =>
         open(c, _SettingsDetail(title: title, children: children));
     final privacy = row(
@@ -4354,12 +4367,265 @@ class _SettingsState extends State<Settings> {
       () => open(c, const _BlockedAccounts()),
       value: '${s.state.ids('blocks').length}',
     );
+    final groups = <(String, String, IconData, List<(String, Widget)>)>[
+      (
+        'Account',
+        'Dati, accesso e sicurezza',
+        CupertinoIcons.person_crop_circle,
+        [
+          (
+            'Dispositivi collegati',
+            row(
+              CupertinoIcons.device_phone_portrait,
+              'Dispositivi collegati',
+              () => open(c, const DeviceSessions()),
+            ),
+          ),
+          (
+            'Modifica profilo',
+            row(
+              CupertinoIcons.person_crop_circle,
+              'Modifica profilo',
+              () => open(c, const EditProfile()),
+            ),
+          ),
+          (
+            'Password e sicurezza',
+            row(
+              CupertinoIcons.lock_shield,
+              'Password e sicurezza',
+              () => open(c, const AccountSecurity()),
+            ),
+          ),
+          (
+            'Verifica email',
+            row(
+              CupertinoIcons.envelope_badge,
+              'Verifica email',
+              () => open(c, const AccountSecurity(mode: 'verify')),
+            ),
+          ),
+        ],
+      ),
+      (
+        'Privacy',
+        'Visibilità e interazioni',
+        CupertinoIcons.shield,
+        [
+          ("Privacy dell'account", privacy),
+          (
+            'Amici più stretti',
+            row(
+              CupertinoIcons.star_circle,
+              'Amici più stretti',
+              () => open(c, const CloseFriends()),
+              value: '${s.state.ids('closeFriends').length}',
+            ),
+          ),
+          ('Utenti bloccati', blocked),
+          (
+            'Storie nascoste silenziati restrizioni messaggi tag menzioni',
+            row(
+              CupertinoIcons.shield,
+              'Gestisci le interazioni',
+              () => open(c, const PrivacyTools()),
+              subtitle: 'Storie, messaggi, menzioni e account silenziati.',
+            ),
+          ),
+          (
+            'Messaggi e risposte alle storie attività conferme lettura anteprime protezione',
+            row(
+              CupertinoIcons.check_mark_circled,
+              'Messaggi e risposte alle storie',
+              () => open(c, const _MessagePrivacy()),
+            ),
+          ),
+          (
+            'Richieste di seguirti',
+            row(
+              CupertinoIcons.person_add,
+              'Richieste di seguirti',
+              () => open(c, const Requests()),
+              value: '${s.state.ids('requests').length}',
+            ),
+          ),
+        ],
+      ),
+      (
+        'Notifiche',
+        'Avvisi e attività',
+        CupertinoIcons.bell,
+        [
+          (
+            'Notifiche push',
+            row(
+              CupertinoIcons.bell,
+              'Notifiche push',
+              () => open(c, const PushSettings()),
+            ),
+          ),
+          (
+            'Attività ricevuta',
+            row(
+              CupertinoIcons.heart,
+              'Attività ricevuta',
+              () => open(c, const Activity()),
+            ),
+          ),
+        ],
+      ),
+      (
+        'I tuoi contenuti',
+        'Bozze, salvati e archivio',
+        CupertinoIcons.photo_on_rectangle,
+        [
+          (
+            'Bozze',
+            row(
+              CupertinoIcons.doc_text,
+              'Bozze',
+              () => open(c, const DraftList()),
+            ),
+          ),
+          (
+            'Salvati',
+            row(
+              CupertinoIcons.bookmark,
+              'Salvati',
+              () => open(c, const CollectionPage(kind: 'saved')),
+            ),
+          ),
+          (
+            'Archivio',
+            row(
+              CupertinoIcons.archivebox,
+              'Archivio',
+              () => open(c, const CollectionPage(kind: 'archive')),
+            ),
+          ),
+          (
+            'Note',
+            row(CupertinoIcons.text_bubble, 'Note', () => manageOwnNote(c)),
+          ),
+        ],
+      ),
+      (
+        'Aspetto',
+        'Tema e visualizzazione',
+        CupertinoIcons.moon,
+        [
+          (
+            'Istantanee bolla nascondi',
+            row(
+              CupertinoIcons.photo_on_rectangle,
+              'Bolla delle istantanee',
+              () => open(c, const InstantBubbleSetting()),
+            ),
+          ),
+          (
+            'Aspetto chiaro scuro tema',
+            row(
+              CupertinoIcons.moon,
+              'Aspetto',
+              () => open(c, const AppearancePage()),
+              value: s.appearance == 'dark'
+                  ? 'Scuro'
+                  : s.appearance == 'light'
+                  ? 'Chiaro'
+                  : 'Dispositivo',
+            ),
+          ),
+        ],
+      ),
+      (
+        'Assistenza',
+        'Aiuto e contatti',
+        CupertinoIcons.question_circle,
+        [
+          (
+            'Trova persone',
+            row(
+              CupertinoIcons.search,
+              'Trova persone',
+              () => open(c, const Explore()),
+            ),
+          ),
+          (
+            'Invita amici',
+            row(
+              CupertinoIcons.share,
+              'Invita amici',
+              () => SharePlus.instance.share(
+                ShareParams(text: 'Seguimi su GPIX: @${s.me.str('username')}'),
+              ),
+            ),
+          ),
+          (
+            'Aiuto',
+            row(
+              CupertinoIcons.question_circle,
+              'Aiuto',
+              () => controls('Aiuto', const [
+                ListTile(
+                  leading: GIcon(CupertinoIcons.person_crop_circle),
+                  title: Text('Modificare il profilo'),
+                  subtitle: Text(
+                    'Apri Profilo → Modifica profilo e premi Fine per salvare.',
+                  ),
+                ),
+                ListTile(
+                  leading: GIcon(CupertinoIcons.doc_text),
+                  title: Text('Salvare una bozza'),
+                  subtitle: Text(
+                    'Durante la creazione di un post o reel tocca Salva bozza. Ritrovi il contenuto in Crea → Bozze.',
+                  ),
+                ),
+                ListTile(
+                  leading: GIcon(CupertinoIcons.text_bubble),
+                  title: Text('Pubblicare una nota'),
+                  subtitle: Text(
+                    'Nei Messaggi tocca La tua nota. Massimo 60 caratteri.',
+                  ),
+                ),
+              ]),
+            ),
+          ),
+        ],
+      ),
+    ];
+    final access = row(
+      CupertinoIcons.square_arrow_left,
+      'Gestisci accesso e account',
+      () => open(c, const _AccountSettings()),
+    );
+    final area = widget._area;
+    if (area != null) {
+      final group = groups.firstWhere((group) => group.$1 == area);
+      return Scaffold(
+        appBar: AppBar(title: pageTitle(area)),
+        body: ListView(
+          children: [
+            for (final entry in group.$4) entry.$2,
+            if (area == 'Account') access,
+          ],
+        ),
+      );
+    }
+    final filter = query.trim().toLowerCase();
+    final results = [
+      for (final group in groups)
+        for (final entry in group.$4)
+          if ('${group.$1} ${entry.$1}'.toLowerCase().contains(filter))
+            entry.$2,
+      if ('gestisci accesso esci elimina account'.contains(filter)) access,
+    ];
     return Scaffold(
       appBar: AppBar(
         title: pageTitle('Impostazioni e attività'),
         centerTitle: true,
       ),
       body: ListView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
@@ -4367,7 +4633,7 @@ class _SettingsState extends State<Settings> {
               key: const ValueKey('settings-search'),
               onChanged: (v) => setState(() => query = v),
               decoration: InputDecoration(
-                hintText: 'Cerca',
+                hintText: 'Cerca un’impostazione',
                 prefixIcon: const Padding(
                   padding: EdgeInsets.all(13),
                   child: GIcon(CupertinoIcons.search, size: 21, color: muted),
@@ -4382,210 +4648,79 @@ class _SettingsState extends State<Settings> {
               ),
             ),
           ),
-          section('Il tuo account', [
-            (
-              'Dispositivi collegati',
-              row(
-                CupertinoIcons.device_phone_portrait,
-                'Dispositivi collegati',
-                () => open(c, const DeviceSessions()),
+          if (filter.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: LayoutBuilder(
+                builder: (c, constraints) {
+                  final columns =
+                      constraints.maxWidth < 270 ||
+                          MediaQuery.textScalerOf(c).scale(15) > 21
+                      ? 1
+                      : 2;
+                  final width =
+                      (constraints.maxWidth - (columns - 1) * 10) / columns;
+                  return Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      for (final group in groups)
+                        SizedBox(
+                          width: width,
+                          child: Material(
+                            color: subdued(c),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(color: Theme.of(c).dividerColor),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: InkWell(
+                              onTap: () =>
+                                  open(c, Settings._category(group.$1)),
+                              child: Padding(
+                                padding: const EdgeInsets.all(13),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    GIcon(group.$3, size: 22),
+                                    const SizedBox(height: 9),
+                                    Text(
+                                      group.$1,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      group.$2,
+                                      style: const TextStyle(
+                                        color: muted,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
               ),
-            ),
-            (
-              'Modifica profilo',
-              row(
-                CupertinoIcons.person_crop_circle,
-                'Modifica profilo',
-                () => open(c, const EditProfile()),
-              ),
-            ),
-            (
-              'Password e sicurezza',
-              row(
-                CupertinoIcons.lock_shield,
-                'Password e sicurezza',
-                () => open(c, const AccountSecurity()),
-              ),
-            ),
-            (
-              'Verifica email',
-              row(
-                CupertinoIcons.envelope_badge,
-                'Verifica email',
-                () => open(c, const AccountSecurity(mode: 'verify')),
-              ),
-            ),
-          ]),
-          section('I tuoi contenuti', [
-            (
-              'Bozze',
-              row(
-                CupertinoIcons.doc_text,
-                'Bozze',
-                () => open(c, const DraftList()),
-              ),
-            ),
-            (
-              'Salvati',
-              row(
-                CupertinoIcons.bookmark,
-                'Salvati',
-                () => open(c, const CollectionPage(kind: 'saved')),
-              ),
-            ),
-            (
-              'Archivio',
-              row(
-                CupertinoIcons.archivebox,
-                'Archivio',
-                () => open(c, const CollectionPage(kind: 'archive')),
-              ),
-            ),
-            (
-              'Note',
-              row(CupertinoIcons.text_bubble, 'Note', () => manageOwnNote(c)),
-            ),
-          ]),
-          section('Privacy e interazioni', [
-            ("Privacy dell'account", privacy),
-            (
-              'Amici più stretti',
-              row(
-                CupertinoIcons.star_circle,
-                'Amici più stretti',
-                () => open(c, const CloseFriends()),
-                value: '${s.state.ids('closeFriends').length}',
-              ),
-            ),
-            ('Utenti bloccati', blocked),
-            (
-              'Storie nascoste silenziati restrizioni messaggi tag menzioni',
-              row(
-                CupertinoIcons.shield,
-                'Gestisci le interazioni',
-                () => open(c, const PrivacyTools()),
-                subtitle: 'Storie, messaggi, menzioni e account silenziati.',
-              ),
-            ),
-            (
-              'Messaggi e risposte alle storie attività conferme lettura anteprime protezione',
-              row(
-                CupertinoIcons.check_mark_circled,
-                'Messaggi e risposte alle storie',
-                () => open(c, const _MessagePrivacy()),
-              ),
-            ),
-            (
-              'Richieste di seguirti',
-              row(
-                CupertinoIcons.person_add,
-                'Richieste di seguirti',
-                () => open(c, const Requests()),
-                value: '${s.state.ids('requests').length}',
-              ),
-            ),
-          ]),
-          section('App e notifiche', [
-            (
-              'Istantanee bolla nascondi',
-              row(
-                CupertinoIcons.photo_on_rectangle,
-                'Bolla delle istantanee',
-                () => open(c, const InstantBubbleSetting()),
-              ),
-            ),
-            (
-              'Aspetto chiaro scuro tema',
-              row(
-                CupertinoIcons.moon,
-                'Aspetto',
-                () => open(c, const AppearancePage()),
-                value: s.appearance == 'dark'
-                    ? 'Scuro'
-                    : s.appearance == 'light'
-                    ? 'Chiaro'
-                    : 'Dispositivo',
-              ),
-            ),
-            (
-              'Notifiche push',
-              row(
-                CupertinoIcons.bell,
-                'Notifiche push',
-                () => open(c, const PushSettings()),
-              ),
-            ),
-            (
-              'Attività ricevuta',
-              row(
-                CupertinoIcons.heart,
-                'Attività ricevuta',
-                () => open(c, const Activity()),
-              ),
-            ),
-          ]),
-          section('Persone e assistenza', [
-            (
-              'Trova persone',
-              row(
-                CupertinoIcons.search,
-                'Trova persone',
-                () => open(c, const Explore()),
-              ),
-            ),
-            (
-              'Invita amici',
-              row(
-                CupertinoIcons.share,
-                'Invita amici',
-                () => SharePlus.instance.share(
-                  ShareParams(
-                    text: 'Seguimi su GPIX: @${s.me.str('username')}',
-                  ),
-                ),
-              ),
-            ),
-            (
-              'Aiuto',
-              row(
-                CupertinoIcons.question_circle,
-                'Aiuto',
-                () => controls('Aiuto', const [
-                  ListTile(
-                    leading: GIcon(CupertinoIcons.person_crop_circle),
-                    title: Text('Modificare il profilo'),
-                    subtitle: Text(
-                      'Apri Profilo → Modifica e premi Fine per salvare.',
-                    ),
-                  ),
-                  ListTile(
-                    leading: GIcon(CupertinoIcons.doc_text),
-                    title: Text('Salvare una bozza'),
-                    subtitle: Text(
-                      'Durante la creazione di un post o reel tocca Salva bozza. Ritrovi il contenuto in Crea → Bozze.',
-                    ),
-                  ),
-                  ListTile(
-                    leading: GIcon(CupertinoIcons.text_bubble),
-                    title: Text('Pubblicare una nota'),
-                    subtitle: Text(
-                      'Nei Messaggi tocca La tua nota. Massimo 60 caratteri.',
-                    ),
-                  ),
-                ]),
-              ),
-            ),
-          ]),
-          section('Accesso', [
-            (
-              'Gestisci accesso esci elimina account',
-              row(
-                CupertinoIcons.square_arrow_left,
-                'Gestisci accesso e account',
-                () => open(c, const _AccountSettings()),
-              ),
-            ),
-          ]),
+            )
+          else if (results.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(20),
+              child: Text('Nessuna impostazione trovata'),
+            )
+          else
+            ...results,
+          if (filter.isEmpty) ...[
+            const SizedBox(height: 16),
+            const Divider(indent: 16, endIndent: 16),
+            row(CupertinoIcons.square_arrow_left, 'Esci', () => _logout(c, s)),
+          ],
           const SizedBox(height: 30),
         ],
       ),
@@ -4833,6 +4968,20 @@ class _BlockedAccounts extends StatelessWidget {
   }
 }
 
+Future<void> _logout(BuildContext c, GpixStore store) async {
+  if (await gpixAlert(
+        c,
+        'Uscire da GPIX?',
+        'Puoi accedere di nuovo in qualsiasi momento.',
+        confirm: 'Esci',
+        cancel: true,
+      ) &&
+      c.mounted) {
+    await store.logout();
+    if (c.mounted) Navigator.popUntil(c, (route) => route.isFirst);
+  }
+}
+
 class _AccountSettings extends StatelessWidget {
   const _AccountSettings();
   @override
@@ -4860,19 +5009,12 @@ class _AccountSettings extends StatelessWidget {
                   perform(c, () => s.startDemo(reset: true));
               },
             ),
-          ActionRow(CupertinoIcons.square_arrow_left, 'Esci', () async {
-            if (await gpixAlert(
-                  c,
-                  'Uscire da GPIX?',
-                  'Puoi accedere di nuovo in qualsiasi momento.',
-                  confirm: 'Esci',
-                  cancel: true,
-                ) &&
-                c.mounted) {
-              await s.logout();
-              if (c.mounted) Navigator.popUntil(c, (r) => r.isFirst);
-            }
-          }, destructive: true),
+          ActionRow(
+            CupertinoIcons.square_arrow_left,
+            'Esci',
+            () => _logout(c, s),
+            destructive: true,
+          ),
           ActionRow(CupertinoIcons.trash, 'Elimina account', () async {
             final pass = s.demo
                 ? 'demo'
