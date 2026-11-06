@@ -136,10 +136,12 @@ List<double> postMatrix(String filter, double brightness) {
 class PostComposer extends StatefulWidget {
   final List<String> initialFiles;
   final J? initialDraft;
+  final ValueChanged<bool>? onPublishStepChanged;
   const PostComposer({
     super.key,
     this.initialFiles = const [],
     this.initialDraft,
+    this.onPublishStepChanged,
   });
   @override
   State<PostComposer> createState() => _PostComposerState();
@@ -217,7 +219,7 @@ class _PostComposerState extends State<PostComposer> {
       audio = '',
       audioName = '',
       topic = '',
-      audience = 'all';
+      audience = 'followers';
   J? poll, music;
   final J adjustments = {};
   double intensity = 1, textX = .5, textY = .7, textSize = 24;
@@ -297,9 +299,19 @@ class _PostComposerState extends State<PostComposer> {
   final copied = <String, String>{};
   final tagged = <String>{};
   final photos = PageController(keepPage: false);
+  final publishPhotos = PageController(viewportFraction: .76, keepPage: false);
+
+  void goToStep(int value) {
+    setState(() => step = value);
+    widget.onPublishStepChanged?.call(value == 2);
+    positionPreview();
+  }
+
   void positionPreview() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && photos.hasClients) photos.jumpToPage(index);
+      if (!mounted) return;
+      final controller = step == 2 && files.length > 1 ? publishPhotos : photos;
+      if (controller.hasClients) controller.jumpToPage(index);
     });
   }
 
@@ -335,7 +347,7 @@ class _PostComposerState extends State<PostComposer> {
               .number('textAlign', 2)
               .toInt()
               .clamp(0, TextAlign.values.length - 1)];
-      audience = d.str('audience', 'all');
+      audience = d.str('audience') == 'close' ? 'close' : 'followers';
       tagged.addAll(d.ids('tagged'));
       music = d['music'] == null ? null : d.obj('music');
       audioName = d.str('audioName');
@@ -372,13 +384,19 @@ class _PostComposerState extends State<PostComposer> {
     } catch (_) {}
   }
 
-  Future<void> selectPhoto(GalleryPhoto photo) async {
+  Future<void> selectPhoto(GalleryPhoto photo, {bool toggle = false}) async {
+    final selected = copied[photo.id];
+    if (!toggle && selected != null && files.contains(selected)) {
+      openPhotoPreview(context, selected);
+      return;
+    }
     if (copying) return;
     setState(() => copying = true);
     await perform(context, () async {
       final path = copied[photo.id] ?? await DeviceGallery.copy(photo.id);
       copied[photo.id] = path;
       if (!mounted) return;
+      final previousFirst = files.firstOrNull;
       setState(() {
         if (!multiple) {
           files = [path];
@@ -391,7 +409,8 @@ class _PostComposerState extends State<PostComposer> {
           index = files.length - 1;
         }
       });
-      if (files.length == 1) await originalRatio(path);
+      final first = files.firstOrNull;
+      if (first != null && first != previousFirst) await originalRatio(first);
     });
     if (mounted) {
       setState(() => copying = false);
@@ -403,6 +422,7 @@ class _PostComposerState extends State<PostComposer> {
   void dispose() {
     draftTimer?.cancel();
     photos.dispose();
+    publishPhotos.dispose();
     overlayInput.dispose();
     caption.dispose();
     location.dispose();
@@ -426,13 +446,22 @@ class _PostComposerState extends State<PostComposer> {
           files = list;
           index = 0;
         });
-        if (list.length == 1) await originalRatio(list.first);
+        await originalRatio(list.first);
+        positionPreview();
       }
     });
   }
 
+  bool preparingPublish = false;
+
   Future<void> publish() async {
-    await saveDraft();
+    if (busy || preparingPublish) return;
+    preparingPublish = true;
+    try {
+      await saveDraft();
+    } finally {
+      preparingPublish = false;
+    }
     if (!mounted) return;
     setState(() => busy = true);
     await perform(context, () async {
@@ -462,26 +491,29 @@ class _PostComposerState extends State<PostComposer> {
         }
       }
       final track = music?.str('audio') ?? '';
-      await s.act('post', {
-        'kind': 'post',
-        'idempotencyKey': draftId,
-        'text': caption.text.trim(),
-        'location': location.text.trim(),
-        'media': media.first,
-        'mediaItems': media,
-        'audience': audience,
-        'style': {
-          'aspect': aspect,
-          'draftKey': draftId,
-          'audio': track,
-          'audioName': audioName,
-          if (music != null) 'music': music,
-          'taggedUsers': tagged.toList(),
-          'aiLabel': aiLabel,
-          'topic': topic,
-          if (poll != null) 'poll': poll,
+      await s.act(
+        audience == 'followers' && !s.demo ? 'postForFollowers' : 'post',
+        {
+          'kind': 'post',
+          'idempotencyKey': draftId,
+          'text': caption.text.trim(),
+          'location': location.text.trim(),
+          'media': media.first,
+          'mediaItems': media,
+          'audience': audience,
+          'style': {
+            'aspect': aspect,
+            'draftKey': draftId,
+            'audio': track,
+            'audioName': audioName,
+            if (music != null) 'music': music,
+            'taggedUsers': tagged.toList(),
+            'aiLabel': aiLabel,
+            'topic': topic,
+            if (poll != null) 'poll': poll,
+          },
         },
-      });
+      );
       final post = s.posts.firstWhere(
         (p) =>
             p.str('author') == s.myId &&
@@ -512,52 +544,92 @@ class _PostComposerState extends State<PostComposer> {
       );
     return PageView.builder(
       key: ValueKey(files.join('|')),
-      controller: photos,
+      controller: finalStep && files.length > 1 ? publishPhotos : photos,
       itemCount: files.length,
       onPageChanged: (i) => setState(() => index = i),
-      itemBuilder: (c, i) => Center(
-        child: AspectRatio(
-          aspectRatio: aspect,
-          child: LayoutBuilder(
-            builder: (c, box) => Stack(
-              fit: StackFit.expand,
-              children: [
-                processed(files[i]),
-                if (overlayText.isNotEmpty) movableCaption(box),
-                if (overlay.isNotEmpty)
-                  Positioned(
-                    bottom: 12,
-                    right: 12,
-                    width: box.maxWidth * .28,
-                    child: MediaView(overlay),
-                  ),
-                if (files.length > 1)
-                  Positioned(
-                    top: 12,
-                    right: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        '${i + 1}/${files.length}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
+      itemBuilder: (c, i) => step == 0
+          ? InkWell(
+              onTap: () => openPhotoPreview(c, files[i]),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  MediaView(files[i], fit: BoxFit.contain),
+                  if (files.length > 1)
+                    Positioned(
+                      top: 10,
+                      right: 12,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 9,
+                            vertical: 5,
+                          ),
+                          child: Text(
+                            '${i + 1}/${files.length}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                            ),
+                          ),
                         ),
                       ),
                     ),
+                ],
+              ),
+            )
+          : Padding(
+              padding: EdgeInsets.symmetric(horizontal: finalStep ? 5 : 0),
+              child: Center(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(finalStep ? 18 : 0),
+                  child: AspectRatio(
+                    aspectRatio: aspect,
+                    child: LayoutBuilder(
+                      builder: (c, box) => Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          processed(files[i]),
+                          if (overlayText.isNotEmpty) movableCaption(box),
+                          if (overlay.isNotEmpty)
+                            Positioned(
+                              bottom: 12,
+                              right: 12,
+                              width: box.maxWidth * .28,
+                              child: MediaView(overlay),
+                            ),
+                          if (files.length > 1)
+                            Positioned(
+                              top: 12,
+                              right: 12,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  '${i + 1}/${files.length}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
-              ],
+                ),
+              ),
             ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -629,8 +701,7 @@ class _PostComposerState extends State<PostComposer> {
               ? null
               : () {
                   if (step > 0) {
-                    setState(() => step--);
-                    positionPreview();
+                    goToStep(step - 1);
                   } else {
                     Navigator.pop(c);
                   }
@@ -645,16 +716,22 @@ class _PostComposerState extends State<PostComposer> {
           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
         ),
         actions: [
-          TextButton.icon(
-            key: const ValueKey('save-post-draft'),
-            onPressed: busy ? null : () => saveDraft(feedback: true),
-            icon: GIcon(
-              CupertinoIcons.doc_text,
-              size: 18,
-              color: foreground(c),
+          if (step != 2)
+            TextButton.icon(
+              key: const ValueKey('save-post-draft'),
+              onPressed: busy ? null : () => saveDraft(feedback: true),
+              icon: GIcon(
+                CupertinoIcons.doc_text,
+                size: 18,
+                color: foreground(c),
+              ),
+              label: Text('Bozza', style: TextStyle(color: foreground(c))),
             ),
-            label: Text('Bozza', style: TextStyle(color: foreground(c))),
-          ),
+          if (step == 2)
+            TextButton(
+              onPressed: busy ? null : publish,
+              child: const Text('Pubblica'),
+            ),
           if (step == 0)
             Padding(
               padding: const EdgeInsets.only(right: 12),
@@ -662,8 +739,7 @@ class _PostComposerState extends State<PostComposer> {
                 onPressed: files.isEmpty
                     ? null
                     : () {
-                        setState(() => step++);
-                        positionPreview();
+                        goToStep(1);
                       },
                 style: TextButton.styleFrom(
                   backgroundColor: subdued(c),
@@ -681,7 +757,11 @@ class _PostComposerState extends State<PostComposer> {
           ? SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-                child: PrimaryButton('Condividi', busy: busy, onTap: publish),
+                child: PrimaryButton(
+                  'Pubblica post',
+                  busy: busy,
+                  onTap: publish,
+                ),
               ),
             )
           : null,
@@ -820,35 +900,47 @@ class _PostComposerState extends State<PostComposer> {
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          Image.memory(photo.thumbnail, fit: BoxFit.cover),
-                          if (number > 0) ColoredBox(color: Colors.black26),
+                          ColoredBox(
+                            color: subdued(c),
+                            child: number > 0 && path != null
+                                ? MediaView(path, fit: BoxFit.contain)
+                                : Image.memory(
+                                    photo.thumbnail,
+                                    fit: BoxFit.contain,
+                                  ),
+                          ),
                           if (multiple || number > 0)
                             Positioned(
                               top: 7,
                               right: 7,
-                              child: Container(
-                                width: 24,
-                                height: 24,
-                                decoration: BoxDecoration(
-                                  color: number > 0 ? blue : Colors.black26,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 1.5,
-                                  ),
-                                ),
-                                child: number > 0
-                                    ? Center(
-                                        child: Text(
-                                          '$number',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      )
+                              child: GestureDetector(
+                                onTap: multiple
+                                    ? () => selectPhoto(photo, toggle: true)
                                     : null,
+                                child: Container(
+                                  width: 24,
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                    color: number > 0 ? blue : Colors.black26,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.white,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  child: number > 0
+                                      ? Center(
+                                          child: Text(
+                                            '$number',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        )
+                                      : null,
+                                ),
                               ),
                             ),
                         ],
@@ -871,7 +963,13 @@ class _PostComposerState extends State<PostComposer> {
               for (final path in files)
                 Padding(
                   padding: const EdgeInsets.all(2),
-                  child: SizedBox(width: 90, child: MediaView(path)),
+                  child: InkWell(
+                    onTap: () => openPhotoPreview(c, path),
+                    child: SizedBox(
+                      width: 90,
+                      child: MediaView(path, fit: BoxFit.contain),
+                    ),
+                  ),
                 ),
             ],
           ),
@@ -1015,9 +1113,9 @@ class _PostComposerState extends State<PostComposer> {
                 ],
               ),
               const SizedBox(height: 14),
-              const Text(
+              Text(
                 'Trascina il testo sulla foto per spostarlo. Toccalo due volte per modificarlo.',
-                style: TextStyle(color: Colors.white60, fontSize: 12),
+                style: TextStyle(color: secondaryText(c), fontSize: 12),
               ),
             ],
           ),
@@ -1167,8 +1265,7 @@ class _PostComposerState extends State<PostComposer> {
               const SizedBox(width: 12),
               FilledButton(
                 onPressed: () {
-                  setState(() => step = 2);
-                  positionPreview();
+                  goToStep(2);
                 },
                 style: FilledButton.styleFrom(backgroundColor: blue),
                 child: const Row(
@@ -1200,7 +1297,7 @@ class _PostComposerState extends State<PostComposer> {
         width: 74,
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: Colors.white10,
+          color: subdued(context),
           borderRadius: BorderRadius.circular(15),
         ),
         child: Column(
@@ -1389,7 +1486,7 @@ class _PostComposerState extends State<PostComposer> {
                   filters
                       ? 'Intensità · ${(intensity * 100).round()}'
                       : '$selected · ${adjustments.number(selected).round()}',
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  style: TextStyle(color: secondaryText(c), fontSize: 12),
                 ),
                 Slider(
                   value: filters ? intensity : adjustments.number(selected),
@@ -1492,27 +1589,106 @@ class _PostComposerState extends State<PostComposer> {
       padding: const EdgeInsets.only(bottom: 16),
       children: [
         const SizedBox(height: 12),
-        Center(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: SizedBox(
-              width: 180,
-              height: 240,
-              child: preview(finalStep: true),
-            ),
+        LayoutBuilder(
+          builder: (c, box) => SizedBox(
+            height: math.min(box.maxWidth * .82, 330),
+            child: preview(finalStep: true),
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(18, 18, 18, 6),
-          child: TextField(
-            controller: caption,
-            maxLength: 2200,
-            minLines: 3,
-            maxLines: 6,
-            decoration: const InputDecoration(
-              hintText: 'Aggiungi una didascalia…',
-              border: InputBorder.none,
-              counterText: '',
+        if (files.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(top: 7),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (var i = 0; i < files.length; i++)
+                  Container(
+                    width: 6,
+                    height: 6,
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: i == index ? accent(c) : Theme.of(c).dividerColor,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        Container(
+          margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+          padding: const EdgeInsets.fromLTRB(10, 6, 10, 5),
+          decoration: BoxDecoration(
+            border: Border.all(color: Theme.of(c).dividerColor),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 7),
+                child: Avatar(store.myId, size: 34),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: TextField(
+                  controller: caption,
+                  maxLength: 2200,
+                  minLines: 1,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    hintText: 'Scrivi una didascalia…',
+                    filled: false,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        row(
+          c,
+          CupertinoIcons.person_crop_rectangle,
+          'Tagga persone',
+          tagged.isEmpty ? null : '${tagged.length} persone',
+          () => tagPeople(c),
+        ),
+        row(
+          c,
+          CupertinoIcons.placemark,
+          'Aggiungi luogo',
+          location.text.isEmpty ? null : location.text,
+          () async {
+            final value = await textDialog(c, 'Aggiungi luogo', location.text);
+            if (value != null && mounted) setState(() => location.text = value);
+          },
+        ),
+        row(
+          c,
+          CupertinoIcons.music_note_2,
+          'Aggiungi musica',
+          audioName.isEmpty ? null : audioName,
+          chooseAudio,
+        ),
+        row(
+          c,
+          CupertinoIcons.person_2,
+          'Pubblico',
+          audience == 'close' ? 'Amici più stretti' : 'Follower',
+          () => sheet(
+            c,
+            Column(
+              children: [
+                ActionRow(CupertinoIcons.person_2, 'Follower', () {
+                  setState(() => audience = 'followers');
+                  Navigator.pop(c);
+                }),
+                ActionRow(CupertinoIcons.star_circle, 'Amici più stretti', () {
+                  setState(() => audience = 'close');
+                  Navigator.pop(c);
+                }),
+              ],
             ),
           ),
         ),
@@ -1545,30 +1721,6 @@ class _PostComposerState extends State<PostComposer> {
             ],
           ),
         ),
-        row(
-          c,
-          CupertinoIcons.music_note_2,
-          'Aggiungi musica',
-          audioName.isEmpty ? null : audioName,
-          chooseAudio,
-        ),
-        row(
-          c,
-          CupertinoIcons.person_crop_rectangle,
-          'Tagga persone',
-          tagged.isEmpty ? null : '${tagged.length} persone',
-          () => tagPeople(c),
-        ),
-        row(
-          c,
-          CupertinoIcons.placemark,
-          'Aggiungi luogo',
-          location.text.isEmpty ? null : location.text,
-          () async {
-            final value = await textDialog(c, 'Aggiungi luogo', location.text);
-            if (value != null && mounted) setState(() => location.text = value);
-          },
-        ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 18),
           child: Wrap(
@@ -1597,31 +1749,6 @@ class _PostComposerState extends State<PostComposer> {
           value: aiLabel,
           onChanged: (value) => setState(() => aiLabel = value),
         ),
-        row(
-          c,
-          CupertinoIcons.person_2,
-          'Pubblico',
-          audience == 'close'
-              ? 'Amici più stretti'
-              : store.me.flag('private')
-              ? 'Follower'
-              : 'Come il tuo profilo',
-          () => sheet(
-            c,
-            Column(
-              children: [
-                ActionRow(CupertinoIcons.person_2, 'Come il tuo profilo', () {
-                  setState(() => audience = 'all');
-                  Navigator.pop(c);
-                }),
-                ActionRow(CupertinoIcons.star_circle, 'Amici più stretti', () {
-                  setState(() => audience = 'close');
-                  Navigator.pop(c);
-                }),
-              ],
-            ),
-          ),
-        ),
         const Divider(thickness: 6, height: 18),
         row(
           c,
@@ -1633,6 +1760,14 @@ class _PostComposerState extends State<PostComposer> {
             StatefulBuilder(
               builder: (c, update) => Column(
                 children: [
+                  ListTile(
+                    leading: const GIcon(CupertinoIcons.doc_text),
+                    title: const Text('Salva bozza'),
+                    onTap: () {
+                      Navigator.pop(c);
+                      saveDraft(feedback: true);
+                    },
+                  ),
                   SwitchListTile(
                     title: const Text('Disattiva commenti'),
                     value: commentsOff,
@@ -1668,20 +1803,40 @@ class _PostComposerState extends State<PostComposer> {
     String label,
     String? detail,
     VoidCallback action,
-  ) => ListTile(
-    minVerticalPadding: 16,
-    leading: GIcon(icon, size: 26),
-    title: Text(label, style: const TextStyle(fontSize: 15)),
-    subtitle: detail == null
-        ? null
-        : Text(
-            detail,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: muted, fontSize: 12),
-          ),
-    trailing: const GIcon(CupertinoIcons.chevron_right, size: 17, color: muted),
-    onTap: action,
+  ) => Column(
+    children: [
+      ListTile(
+        dense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+        leading: GIcon(icon, size: 22),
+        title: Text(label, style: const TextStyle(fontSize: 15)),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (detail != null)
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.sizeOf(c).width * .28,
+                ),
+                child: Text(
+                  detail,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: secondaryText(c), fontSize: 12),
+                ),
+              ),
+            const SizedBox(width: 6),
+            GIcon(
+              CupertinoIcons.chevron_right,
+              size: 16,
+              color: secondaryText(c),
+            ),
+          ],
+        ),
+        onTap: action,
+      ),
+      const Divider(height: 1, indent: 14, endIndent: 14),
+    ],
   );
 }
 

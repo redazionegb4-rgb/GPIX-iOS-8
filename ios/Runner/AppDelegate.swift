@@ -182,7 +182,7 @@ private final class PhotoGalleryBridge {
     let imageOptions = PHImageRequestOptions(); imageOptions.isSynchronous = true; imageOptions.deliveryMode = .fastFormat; imageOptions.resizeMode = .fast; imageOptions.isNetworkAccessAllowed = false
     var photos = [[String: Any]]()
     assets.enumerateObjects { asset, _, _ in
-      PHImageManager.default().requestImage(for: asset, targetSize: CGSize(width: 180, height: 180), contentMode: .aspectFill, options: imageOptions) { image, _ in
+      PHImageManager.default().requestImage(for: asset, targetSize: CGSize(width: 180, height: 180), contentMode: .aspectFit, options: imageOptions) { image, _ in
         if let data = image?.jpegData(compressionQuality: 0.75) { photos.append(["id": asset.localIdentifier, "thumbnail": FlutterStandardTypedData(bytes: data)]) }
       }
     }

@@ -579,6 +579,26 @@ class PrimaryButton extends StatelessWidget {
   }
 }
 
+Future<void> openPhotoPreview(BuildContext context, String path) {
+  return showDialog<void>(
+    context: context,
+    builder: (c) => Dialog.fullscreen(
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Anteprima foto'),
+          leading: const CloseButton(),
+        ),
+        body: Center(
+          child: InteractiveViewer(
+            maxScale: 4,
+            child: MediaView(path, fit: BoxFit.contain),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 class MediaView extends StatelessWidget {
   final String reference;
   final BoxFit fit;

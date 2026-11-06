@@ -12,14 +12,24 @@ import 'package:gpix/core/data.dart';
 import 'package:gpix/screens/post_composer.dart';
 import 'package:gpix/ui/kit.dart';
 
-Future<void> capture(WidgetTester tester,GlobalKey key,String name) async {
- for(var i=0;i<3;i++) {await tester.runAsync(()=>Future<void>.delayed(const Duration(milliseconds:100)));await tester.pump(const Duration(milliseconds:100));}
- await tester.runAsync(()async {
-  final image=await (key.currentContext!.findRenderObject() as RenderRepaintBoundary).toImage(pixelRatio:2);
-  final bytes=await image.toByteData(format:ui.ImageByteFormat.png);
-  await Directory('QA/corrections26').create(recursive:true);
-  await File('QA/corrections26/$name.png').writeAsBytes(bytes!.buffer.asUint8List());image.dispose();
- });
+Future<void> capture(WidgetTester tester, GlobalKey key, String name) async {
+  for (var i = 0; i < 3; i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  await tester.runAsync(() async {
+    final image =
+        await (key.currentContext!.findRenderObject() as RenderRepaintBoundary)
+            .toImage(pixelRatio: 2);
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    await Directory('QA/corrections26').create(recursive: true);
+    await File(
+      'QA/corrections26/$name.png',
+    ).writeAsBytes(bytes!.buffer.asUint8List());
+    image.dispose();
+  });
 }
 
 void main() {
@@ -68,17 +78,30 @@ void main() {
       final bytes = (await tester.runAsync(
         () => File('assets/media/post0.jpg').readAsBytes(),
       ))!;
-      await tester.runAsync(()async {
-      for(final name in ['post0','post1']) {
-        final ready=Completer<void>();
-        final stream=FileImage(File('assets/media/$name.jpg').absolute).resolve(ImageConfiguration.empty);
-        final listener=ImageStreamListener((image,sync){if(!ready.isCompleted)ready.complete();},onError:(Object e,StackTrace? stack){if(!ready.isCompleted)ready.completeError(e,stack);});
-        stream.addListener(listener);
-        for(var i=0;i<30 && !ready.isCompleted;i++){await tester.pump();await Future<void>.delayed(const Duration(milliseconds:20));}
-        await ready.future.timeout(const Duration(seconds:2));stream.removeListener(listener);
-      }
-    });
-    final copies = <String>[];
+      await tester.runAsync(() async {
+        for (final name in ['post0', 'post1']) {
+          final ready = Completer<void>();
+          final stream = FileImage(
+            File('assets/media/$name.jpg').absolute,
+          ).resolve(ImageConfiguration.empty);
+          final listener = ImageStreamListener(
+            (image, sync) {
+              if (!ready.isCompleted) ready.complete();
+            },
+            onError: (Object e, StackTrace? stack) {
+              if (!ready.isCompleted) ready.completeError(e, stack);
+            },
+          );
+          stream.addListener(listener);
+          for (var i = 0; i < 30 && !ready.isCompleted; i++) {
+            await tester.pump();
+            await Future<void>.delayed(const Duration(milliseconds: 20));
+          }
+          await ready.future.timeout(const Duration(seconds: 2));
+          stream.removeListener(listener);
+        }
+      });
+      final copies = <String>[];
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(const MethodChannel('GPIX/gallery'), (
             call,
@@ -123,6 +146,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(copies, ['one', 'two']);
       expect(find.text('2/2'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('gallery-photo-two')));
+      await tester.pumpAndSettle();
+      expect(find.text('Anteprima foto'), findsOneWidget);
+      await tester.tap(find.byType(CloseButton));
+      await tester.pumpAndSettle();
+      expect(find.text('2/2'), findsOneWidget);
       if (width == 390) await capture(tester, key, 'post-select');
       await tester.tap(find.text('Avanti'));
       await tester.pumpAndSettle();
@@ -131,9 +160,19 @@ void main() {
       if (width == 390) await capture(tester, key, 'post-edit');
       await tester.tap(find.text('Avanti'));
       await tester.pumpAndSettle();
-      expect(find.text('Sondaggio'), findsOneWidget);
-      expect(find.text('Tema'), findsOneWidget);
+      expect(find.text('Pubblica post'), findsOneWidget);
+      expect(find.text('Pubblica'), findsOneWidget);
       if (width == 390) await capture(tester, key, 'post-publish');
+      await tester.scrollUntilVisible(
+        find.text('Pubblico'),
+        150,
+        scrollable: find
+            .byWidgetPredicate(
+              (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+            )
+            .first,
+      );
+      expect(find.text('Follower'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       s.dispose();

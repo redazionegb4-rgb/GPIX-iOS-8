@@ -1141,169 +1141,162 @@ class _InstantComposerState extends State<InstantComposer> {
     ),
   );
   @override
-  Widget build(BuildContext c) => Theme(
-    data: gpixTheme(Brightness.dark),
-    child: Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        leading: IconButton(
-          tooltip: 'Chiudi',
-          onPressed: busy ? null : () => Navigator.pop(c),
-          icon: const GIcon(CupertinoIcons.xmark),
-        ),
-        title: const Text(
-          'Nuova istantanea',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-        ),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            tooltip: 'Le tue istantanee',
-            onPressed: () => open(c, const InstantArchive()),
-            icon: const GIcon(CupertinoIcons.square_grid_2x2),
-          ),
-        ],
+  Widget build(BuildContext c) => Scaffold(
+    backgroundColor: surface(c),
+    appBar: AppBar(
+      backgroundColor: surface(c),
+      foregroundColor: foreground(c),
+      leading: IconButton(
+        tooltip: 'Chiudi',
+        onPressed: busy ? null : () => Navigator.pop(c),
+        icon: const GIcon(CupertinoIcons.xmark),
       ),
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (c, box) => SingleChildScrollView(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: box.maxHeight),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
-                child: Column(
-                  children: [
-                    if (error.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Text(
-                          error,
-                          style: const TextStyle(color: Colors.white60),
-                        ),
+      title: const Text(
+        'Nuova istantanea',
+        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+      ),
+      centerTitle: true,
+      actions: [
+        IconButton(
+          tooltip: 'Le tue istantanee',
+          onPressed: () => open(c, const InstantArchive()),
+          icon: const GIcon(CupertinoIcons.square_grid_2x2),
+        ),
+      ],
+    ),
+    body: SafeArea(
+      child: LayoutBuilder(
+        builder: (c, box) => SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: box.maxHeight),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
+              child: Column(
+                children: [
+                  if (error.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Text(
+                        error,
+                        style: TextStyle(color: secondaryText(c)),
                       ),
-                    if (photo.isEmpty)
-                      widget.capture != null
-                          ? const AspectRatio(
-                              aspectRatio: 1,
-                              child: ColoredBox(
-                                color: Color(0xff18191f),
-                                child: Center(
-                                  child: GIcon(
-                                    CupertinoIcons.camera,
+                    ),
+                  if (photo.isEmpty)
+                    widget.capture != null
+                        ? const AspectRatio(
+                            aspectRatio: 1,
+                            child: ColoredBox(
+                              color: Color(0xff18191f),
+                              child: Center(
+                                child: GIcon(
+                                  CupertinoIcons.camera,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          )
+                        : LiveInstantCamera(onPhoto: takePhoto)
+                  else ...[
+                    AspectRatio(
+                      aspectRatio: 1,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(38),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Image.file(File(photo), fit: BoxFit.cover),
+                            if (caption.text.isNotEmpty)
+                              Positioned(
+                                left: 18,
+                                right: 18,
+                                bottom: 20,
+                                child: Text(
+                                  caption.text,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
                                     color: Colors.white,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w600,
+                                    shadows: [
+                                      Shadow(
+                                        color: Colors.black,
+                                        blurRadius: 10,
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
-                            )
-                          : LiveInstantCamera(onPhoto: takePhoto)
-                    else ...[
-                      AspectRatio(
-                        aspectRatio: 1,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(38),
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              Image.file(File(photo), fit: BoxFit.cover),
-                              if (caption.text.isNotEmpty)
-                                Positioned(
-                                  left: 18,
-                                  right: 18,
-                                  bottom: 20,
-                                  child: Text(
-                                    caption.text,
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w600,
-                                      shadows: [
-                                        Shadow(
-                                          color: Colors.black,
-                                          blurRadius: 10,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      TextField(
-                        controller: caption,
-                        maxLength: 120,
-                        onChanged: (_) => setState(() {}),
-                        style: TextStyle(color: foreground(c)),
-                        decoration: mediaInputDecoration(
-                          c,
-                          'Aggiungi una didascalia…',
-                        ),
-                      ),
-                      TextButton.icon(
-                        onPressed: busy
-                            ? null
-                            : () {
-                                final old = photo;
-                                setState(() => photo = '');
-                                widget.onPhotoChanged?.call(false);
-                                unawaited(
-                                  File(
-                                    old,
-                                  ).delete().catchError((_) => File(old)),
-                                );
-                              },
-                        icon: const GIcon(CupertinoIcons.arrow_clockwise),
-                        label: const Text('Scatta di nuovo'),
-                      ),
-                    ],
-                    const SizedBox(height: 24),
-                    if (widget.replyTo != null)
-                      Text(
-                        'Risposta a @${widget.replyTo!.str('username')}',
-                        style: const TextStyle(color: Colors.white70),
-                      )
-                    else
-                      TextButton.icon(
-                        onPressed: () => audienceSheet(c),
-                        icon: const GIcon(
-                          CupertinoIcons.person_2,
-                          color: Colors.white,
-                        ),
-                        label: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              audience == 'close'
-                                  ? 'Amici più stretti'
-                                  : 'Amici',
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                            const SizedBox(width: 5),
-                            const GIcon(
-                              CupertinoIcons.chevron_down,
-                              size: 14,
-                              color: Colors.white,
-                            ),
                           ],
                         ),
                       ),
-                    if (photo.isNotEmpty)
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: busy || data == null ? null : send,
-                          icon: const GIcon(CupertinoIcons.paperplane_fill),
-                          label: Text(
-                            busy ? 'Condivisione…' : 'Pubblica istantanea',
+                    ),
+                    const SizedBox(height: 24),
+                    TextField(
+                      controller: caption,
+                      maxLength: 120,
+                      onChanged: (_) => setState(() {}),
+                      style: TextStyle(color: foreground(c)),
+                      decoration: mediaInputDecoration(
+                        c,
+                        'Aggiungi una didascalia…',
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: busy
+                          ? null
+                          : () {
+                              final old = photo;
+                              setState(() => photo = '');
+                              widget.onPhotoChanged?.call(false);
+                              unawaited(
+                                File(old).delete().catchError((_) => File(old)),
+                              );
+                            },
+                      icon: const GIcon(CupertinoIcons.arrow_clockwise),
+                      label: const Text('Scatta di nuovo'),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  if (widget.replyTo != null)
+                    Text(
+                      'Risposta a @${widget.replyTo!.str('username')}',
+                      style: TextStyle(color: secondaryText(c)),
+                    )
+                  else
+                    TextButton.icon(
+                      onPressed: () => audienceSheet(c),
+                      icon: GIcon(
+                        CupertinoIcons.person_2,
+                        color: foreground(c),
+                      ),
+                      label: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            audience == 'close' ? 'Amici più stretti' : 'Amici',
+                            style: TextStyle(color: foreground(c)),
                           ),
+                          const SizedBox(width: 5),
+                          GIcon(
+                            CupertinoIcons.chevron_down,
+                            size: 14,
+                            color: foreground(c),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (photo.isNotEmpty)
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: busy || data == null ? null : send,
+                        icon: const GIcon(CupertinoIcons.paperplane_fill),
+                        label: Text(
+                          busy ? 'Condivisione…' : 'Pubblica istantanea',
                         ),
                       ),
-                  ],
-                ),
+                    ),
+                ],
               ),
             ),
           ),

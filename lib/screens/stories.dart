@@ -1008,7 +1008,7 @@ class _ComposerState extends State<Composer> {
         }),
       );
     return Scaffold(
-      backgroundColor: story ? Colors.black : Colors.transparent,
+      backgroundColor: surface(c),
       appBar: story
           ? null
           : AppBar(
@@ -1480,9 +1480,9 @@ class _ComposerState extends State<Composer> {
                   stickers.removeAt(selectedSticker);
                   selectedSticker = -1;
                 }),
-                icon: const GIcon(
+                icon: GIcon(
                   CupertinoIcons.trash,
-                  color: Colors.white,
+                  color: foreground(c),
                   size: 20,
                 ),
               ),
@@ -1501,9 +1501,9 @@ class _ComposerState extends State<Composer> {
                   () => stickers[selectedSticker]['angle'] =
                       stickers[selectedSticker].number('angle') + .2,
                 ),
-                icon: const GIcon(
+                icon: GIcon(
                   CupertinoIcons.rotate_right,
-                  color: Colors.white,
+                  color: foreground(c),
                   size: 20,
                 ),
               ),
@@ -1566,8 +1566,8 @@ class _ComposerState extends State<Composer> {
                 child: FilledButton.icon(
                   onPressed: busy ? null : () => publish(),
                   style: FilledButton.styleFrom(
-                    backgroundColor: Colors.white12,
-                    foregroundColor: Colors.white,
+                    backgroundColor: subdued(c),
+                    foregroundColor: foreground(c),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
                       vertical: 16,
@@ -1601,8 +1601,8 @@ class _ComposerState extends State<Composer> {
                               publish(audience: 'close');
                           },
                     style: FilledButton.styleFrom(
-                      backgroundColor: Colors.white12,
-                      foregroundColor: Colors.white,
+                      backgroundColor: subdued(c),
+                      foregroundColor: foreground(c),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 7,
                         vertical: 16,

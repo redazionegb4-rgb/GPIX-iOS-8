@@ -145,7 +145,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     final size = tester.getSize(photo);
-    expect(size.width, closeTo(390 - 24, .1));
+    expect(size.width, closeTo(390 - 12, .1));
     expect(size.height / size.width, closeTo(1.5, .01));
     await tester.pumpWidget(const SizedBox());
     s.dispose();
@@ -181,6 +181,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 60));
     await tester.tapAt(point);
     await tester.pump(const Duration(milliseconds: 800));
+    expect(list.controller!.offset, closeTo(stable, .1));
+    expect(find.text('Anteprima foto'), findsNothing);
+    await tester.tapAt(point);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(find.text('Anteprima foto'), findsOneWidget);
+    await tester.tap(find.byType(CloseButton));
+    await tester.pumpAndSettle();
     expect(list.controller!.offset, closeTo(stable, .1));
     expect(offset, greaterThan(0));
     expect(tester.takeException(), isNull);
@@ -1328,7 +1336,7 @@ void main() {
     await tester.tap(find.text('Avanti'));
     await tester.pumpAndSettle();
     expect(
-      find.widgetWithText(TextField, 'Aggiungi una didascalia…'),
+      find.widgetWithText(TextField, 'Scrivi una didascalia…'),
       findsOneWidget,
     );
     await tester.scrollUntilVisible(

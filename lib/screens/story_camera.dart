@@ -280,7 +280,7 @@ class _StoryCameraState extends State<StoryCamera> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    backgroundColor: Colors.black,
+    backgroundColor: surface(c),
     body: SafeArea(
       child: Column(
         children: [
@@ -545,9 +545,9 @@ class _StoryCameraState extends State<StoryCamera> with WidgetsBindingObserver {
                   IconButton(
                     tooltip: 'Galleria',
                     onPressed: gallery,
-                    icon: const GIcon(
+                    icon: GIcon(
                       CupertinoIcons.photo,
-                      color: Colors.white,
+                      color: foreground(c),
                       size: 28,
                     ),
                   ),
@@ -577,8 +577,8 @@ class _StoryCameraState extends State<StoryCamera> with WidgetsBindingObserver {
                               item,
                               style: TextStyle(
                                 color: item == 'STORIA'
-                                    ? Colors.white
-                                    : Colors.white38,
+                                    ? accent(c)
+                                    : secondaryText(c),
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 1,
@@ -594,9 +594,9 @@ class _StoryCameraState extends State<StoryCamera> with WidgetsBindingObserver {
                       lens++;
                       initialize();
                     },
-                    icon: const GIcon(
+                    icon: GIcon(
                       CupertinoIcons.camera_rotate,
-                      color: Colors.white,
+                      color: foreground(c),
                       size: 29,
                     ),
                   ),

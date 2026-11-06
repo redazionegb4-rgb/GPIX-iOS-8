@@ -693,51 +693,81 @@ class _PostCardState extends State<PostCard>
       icon: const GIcon(CupertinoIcons.ellipsis, size: 22),
       onPressed: () => postMenu(c, p),
     );
-    final author = AuraPanel(
-      radius: 27,
-      frosted: media.isNotEmpty,
-      child: InkWell(
-        onTap: () => open(c, Profile(user: uid)),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 5, 12, 5),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Avatar(uid, size: 34),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      u.str('username'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
+    final location = p.str('location');
+    final audience = p.str('audience') == 'close'
+        ? 'Amici più stretti'
+        : p.str('audience') == 'followers' || u.flag('private')
+        ? 'Follower'
+        : 'Pubblico';
+    final postSubtitle = widget.detail
+        ? relative(p['created'])
+        : location.isEmpty
+        ? audience
+        : '$location · $audience';
+    final authorInfo = InkWell(
+      onTap: () => open(c, Profile(user: uid)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 5, 12, 5),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Avatar(uid, size: widget.detail ? 34 : 38),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    u.str('username'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
                     ),
-                    Text(
-                      relative(p['created']),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11, color: secondaryText(c)),
-                    ),
-                  ],
-                ),
+                  ),
+                  Text(
+                    postSubtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 11, color: secondaryText(c)),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
+    final author = widget.detail
+        ? AuraPanel(radius: 27, frosted: media.isNotEmpty, child: authorInfo)
+        : authorInfo;
+    final canFollow = uid != s.myId && !s.follows(uid);
+    final followButton = TextButton(
+      key: ValueKey('feed-follow-$uid-${widget.id}'),
+      onPressed: () =>
+          perform(c, () => s.act('follow', {'user': uid, 'enabled': true})),
+      style: TextButton.styleFrom(
+        backgroundColor: subdued(c),
+        foregroundColor: foreground(c),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        minimumSize: const Size(68, 34),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+      ),
+      child: const Text(
+        'Segui',
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+      ),
+    );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 5, 12, 13),
+      padding: widget.detail
+          ? const EdgeInsets.fromLTRB(12, 5, 12, 13)
+          : const EdgeInsets.fromLTRB(6, 4, 6, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (!widget.detail) const Divider(height: 1, indent: 6, endIndent: 6),
           if (p.ids('reposts').isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(17, 10, 17, 0),
@@ -754,19 +784,28 @@ class _PostCardState extends State<PostCard>
                 ],
               ),
             ),
-          if (media.isEmpty)
-            Row(
-              children: [
-                Expanded(
-                  child: Align(alignment: Alignment.centerLeft, child: author),
-                ),
-                menu,
-              ],
-            )
-          else
+          if (!widget.detail || media.isEmpty)
+            Padding(
+              padding: EdgeInsets.only(bottom: widget.detail ? 0 : 5),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: author,
+                    ),
+                  ),
+                  if (!widget.detail && canFollow) followButton,
+                  menu,
+                ],
+              ),
+            ),
+          if (media.isNotEmpty)
             ClipRRect(
               borderRadius: BorderRadius.circular(19),
               child: GestureDetector(
+                onTap: () =>
+                    openPhotoPreview(c, media[page.clamp(0, media.length - 1)]),
                 onDoubleTap: () => like(c, p, force: true),
                 child: LayoutBuilder(
                   builder: (c, constraints) {
@@ -808,7 +847,8 @@ class _PostCardState extends State<PostCard>
                           ),
                         if (media.length > 1)
                           Positioned(
-                            bottom: 10,
+                            top: widget.detail ? null : 10,
+                            bottom: widget.detail ? 10 : null,
                             right: 10,
                             child: Container(
                               padding: const EdgeInsets.symmetric(
@@ -828,24 +868,26 @@ class _PostCardState extends State<PostCard>
                               ),
                             ),
                           ),
-                        Positioned(
-                          top: 9,
-                          left: 9,
-                          right: 62,
-                          child: Align(
-                            alignment: Alignment.topLeft,
-                            child: author,
+                        if (widget.detail)
+                          Positioned(
+                            top: 9,
+                            left: 9,
+                            right: 62,
+                            child: Align(
+                              alignment: Alignment.topLeft,
+                              child: author,
+                            ),
                           ),
-                        ),
-                        Positioned(
-                          top: 7,
-                          right: 7,
-                          child: AuraPanel(
-                            radius: 24,
-                            frosted: true,
-                            child: menu,
+                        if (widget.detail)
+                          Positioned(
+                            top: 7,
+                            right: 7,
+                            child: AuraPanel(
+                              radius: 24,
+                              frosted: true,
+                              child: menu,
+                            ),
                           ),
-                        ),
                         Positioned.fill(
                           child: IgnorePointer(
                             child: AnimatedBuilder(
@@ -931,7 +973,7 @@ class _PostCardState extends State<PostCard>
                       ),
                       if (p.str('kind') != 'story' &&
                           !s.user(p.str('author')).flag('private') &&
-                          p.str('audience') != 'close')
+                          !['close', 'followers'].contains(p.str('audience')))
                         Flexible(
                           child: _PostAction(
                             label: p.ids('reposts').contains(s.myId)
@@ -982,31 +1024,12 @@ class _PostCardState extends State<PostCard>
               ],
             ),
           ),
-          if (uid != s.myId && !s.follows(uid))
+          if (widget.detail && canFollow)
             Align(
               alignment: Alignment.centerRight,
               child: Padding(
                 padding: const EdgeInsets.only(left: 6, right: 3),
-                child: TextButton(
-                  key: ValueKey('feed-follow-$uid-${widget.id}'),
-                  onPressed: () => perform(
-                    c,
-                    () => s.act('follow', {'user': uid, 'enabled': true}),
-                  ),
-                  style: TextButton.styleFrom(
-                    backgroundColor: subdued(c),
-                    foregroundColor: foreground(c),
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    minimumSize: const Size(68, 34),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(9),
-                    ),
-                  ),
-                  child: const Text(
-                    'Segui',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                  ),
-                ),
+                child: followButton,
               ),
             ),
           PostExtras(post: p),
@@ -1095,7 +1118,7 @@ class _PostCardState extends State<PostCard>
                     style: TextStyle(fontSize: 11, color: secondaryText(c)),
                   ),
                 ],
-                if (p.str('location').isNotEmpty) ...[
+                if (widget.detail && location.isNotEmpty) ...[
                   const SizedBox(height: 7),
                   Text(
                     p.str('location'),
