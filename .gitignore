@@ -16,6 +16,7 @@ Backend/.venv/
 QA/screens/
 
 android/app/google-services.json
-ios/Runner/GoogleService-Info.plist
+# Xcode Cloud requires this Firebase client configuration in the checkout.
+!/ios/Runner/GoogleService-Info.plist
 **/delivery.json
 **/*service-account*.json

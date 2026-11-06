@@ -11,6 +11,11 @@ cd "$GPIX_ROOT"
 for item in pubspec.yaml pubspec.lock lib/main.dart ios/Podfile ios/Runner.xcodeproj/project.pbxproj; do
   [[ -f "$item" ]] || { echo "GPIX: manca $item. Carica tutto GPIX su GitHub, non solo ios." >&2; exit 1; }
 done
+if [[ ! -s ios/Runner/GoogleService-Info.plist ]]; then
+  echo 'GPIX: manca ios/Runner/GoogleService-Info.plist. Aggiungi il file di configurazione client Firebase al branch usato da Xcode Cloud.' >&2
+  exit 1
+fi
+/usr/bin/plutil -lint ios/Runner/GoogleService-Info.plist
 export CI=true FLUTTER_SUPPRESS_ANALYTICS=true
 export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1
 unset BUNDLE_GEMFILE BUNDLE_PATH BUNDLE_BIN_PATH BUNDLE_FORCE_RUBY_PLATFORM RUBYOPT RUBYLIB || true
