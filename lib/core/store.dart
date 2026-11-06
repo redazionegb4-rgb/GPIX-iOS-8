@@ -327,15 +327,8 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
       token = '';
       await vault.delete(key: 'gpix.token');
     }
-    demo = prefs!.getBool('gpix.demo') ?? false;
-    if (demo) {
-      try {
-        state = object(jsonDecode(prefs!.getString('gpix.demoData') ?? '{}'));
-      } catch (_) {
-        state = {};
-      }
-    }
-    normalizeDemoConnections();
+    demo = false;
+    await prefs!.remove('gpix.demo');
     ready = true;
     notifyListeners();
     if (!demo && token.isNotEmpty) {

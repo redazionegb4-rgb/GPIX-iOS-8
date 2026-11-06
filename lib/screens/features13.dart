@@ -534,14 +534,14 @@ class _PushSettingsState extends State<PushSettings> {
             const Padding(
               padding: EdgeInsets.all(18),
               child: Text(
-                'Questo APK di prova non include le notifiche push. Le altre notifiche dentro l’app restano disponibili.',
+                'Le notifiche push non sono disponibili in questa build. L’attività dentro GPIX resta disponibile.',
               ),
             ),
           SwitchListTile.adaptive(
             secondary: const GIcon(CupertinoIcons.bell),
             title: const Text('Ricevi notifiche'),
             subtitle: const Text(
-              'Messaggi, richieste, commenti e chiamate in arrivo.',
+              'Messaggi, richieste, commenti, chiamate e avvisi da GPIX.',
             ),
             value: s.preferences['pushEnabled'] != false,
             onChanged: busy
@@ -557,10 +557,16 @@ class _PushSettingsState extends State<PushSettings> {
           Padding(
             padding: const EdgeInsets.all(18),
             child: FilledButton(
-              onPressed: busy
+              onPressed:
+                  busy ||
+                      !PushService.nativePushAvailable ||
+                      s.preferences['pushEnabled'] == false
                   ? null
                   : () async {
-                      setState(() => busy = true);
+                      setState(() {
+                        busy = true;
+                        status = '';
+                      });
                       try {
                         status = await PushService.instance.enable(s);
                       } catch (e) {
@@ -568,11 +574,18 @@ class _PushSettingsState extends State<PushSettings> {
                       }
                       if (mounted) setState(() => busy = false);
                     },
-              child: Text(busy ? 'Attendi…' : 'Attiva su questo dispositivo'),
+              child: Text(
+                busy
+                    ? 'Registrazione in corso…'
+                    : 'Attiva o verifica questo dispositivo',
+              ),
             ),
           ),
           if (status.isNotEmpty)
-            Padding(padding: const EdgeInsets.all(18), child: Text(status)),
+            Padding(
+              padding: const EdgeInsets.all(18),
+              child: Semantics(liveRegion: true, child: Text(status)),
+            ),
         ],
       ),
     );

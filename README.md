@@ -1,4 +1,4 @@
-# GPIX Aura Glass · 2.24.0 build 58
+# GPIX Aura Glass · 2.24.0 build 61
 
 Progetto Flutter di GPIX per iOS e Android. Include il codice Dart, gli asset, i progetti nativi e i test.
 
@@ -20,6 +20,10 @@ La build 57 usa accenti blu, sposta Esci nel piè di pagina delle impostazioni e
 
 La build 58 mostra le foto singole a tutta larghezza nel feed, anche quando sono più alte del formato 3:4.
 
+La build 59 abilita Firebase nelle build Xcode Cloud e mostra l’esito della registrazione in Notifiche push. Gli annunci aperti dalla notifica mostrano titolo e messaggio dentro GPIX. Consulta la guida nel pacchetto Sito 4.1 e Backend 2.24.2 per configurare FCM e provare la consegna.
+
+La build 60 include i file client Firebase Android e iOS e verifica che il progetto configurato sul server coincida con quello dell’app. Le credenziali di invio e la chiave APNs si configurano separatamente nel pannello GPIX e in Firebase.
+
 ## Verifica locale
 
 Dalla cartella `GPIX`, con Flutter 3.38.9 nel PATH:
@@ -30,7 +34,7 @@ flutter analyze lib
 flutter test
 ```
 
-Per esplorare i flussi con dati locali, usa la modalità demo dalla schermata iniziale.
+La build 61 richiede un account per entrare e registra automaticamente le notifiche dopo l’accesso, se autorizzate dal dispositivo.
 
 ## Android
 
@@ -38,4 +42,4 @@ Su una macchina configurata con Android SDK, esegui `bash build-android.sh` dall
 
 ## iOS e Xcode Cloud
 
-Apri `GPIX.xcworkspace` e seleziona lo schema Runner. Usa il Team e il bundle ID esistenti. Per Xcode Cloud, aggiorna il repository con il contenuto della cartella GPIX e mantieni i punti di ingresso `ci_scripts` e `ios/ci_scripts`. Il bootstrap prepara Flutter 3.38.9 e CocoaPods. Per TestFlight, usa 58 come prossimo numero di build Cloud, oppure un numero superiore se 58 è già stato caricato su App Store Connect. Per la build locale serve macOS con Xcode e CocoaPods.
+Apri `GPIX.xcworkspace` e seleziona lo schema Runner. Usa il Team e il bundle ID esistenti. Per Xcode Cloud, aggiorna il repository con il contenuto della cartella GPIX e mantieni i punti di ingresso `ci_scripts` e `ios/ci_scripts`. Il bootstrap prepara Flutter 3.38.9 e CocoaPods. Per TestFlight, usa 61 come prossimo numero di build Cloud, oppure un numero superiore se 61 è già stato caricato su App Store Connect. Per la build locale serve macOS con Xcode e CocoaPods.

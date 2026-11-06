@@ -41,6 +41,7 @@ void main() {
   Future<void> showSignup(WidgetTester t, GpixStore s) async {
     await t.pumpWidget(GpixApp(store: s));
     await t.pumpAndSettle();
+    expect(find.text('Esplora la demo'), findsNothing);
     await t.tap(find.text('Crea un account'));
     await t.pumpAndSettle();
   }

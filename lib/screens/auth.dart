@@ -90,24 +90,6 @@ class _WelcomeState extends State<Welcome> {
     }
   }
 
-  Future<void> demo() async {
-    if (busy) return;
-    setState(() {
-      busy = true;
-      error = '';
-    });
-    try {
-      await GpixScope.of(context, listen: false).startDemo();
-    } catch (_) {
-      if (mounted)
-        setState(
-          () => error = 'Non è stato possibile aprire la demo. Riprova.',
-        );
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
-
   @override
   void dispose() {
     for (final c in [name, username, email, login, password, confirmation]) {
@@ -480,34 +462,6 @@ class _WelcomeState extends State<Welcome> {
                                   ),
                                 ),
                               ],
-                              SizedBox(height: form ? 16 : 28),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Divider(
-                                      color: Theme.of(c).dividerColor,
-                                    ),
-                                  ),
-                                  const Padding(
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: 15,
-                                    ),
-                                    child: Text(
-                                      'oppure',
-                                      style: TextStyle(
-                                        color: muted,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: Divider(
-                                      color: Theme.of(c).dividerColor,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 14),
                               if (form && !register)
                                 TextButton(
                                   onPressed: busy
@@ -518,18 +472,6 @@ class _WelcomeState extends State<Welcome> {
                                         ),
                                   child: const Text('Password dimenticata?'),
                                 ),
-                              TextButton(
-                                onPressed: busy ? null : demo,
-                                child: const Text(
-                                  'Esplora la demo',
-                                  style: TextStyle(fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                              const Text(
-                                'Prova GPIX senza creare un account.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 12, color: muted),
-                              ),
                               const SizedBox(height: 22),
                             ],
                           ),
