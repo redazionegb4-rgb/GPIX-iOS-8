@@ -42,7 +42,9 @@ void main() {
           ),
         );
         await t.pumpAndSettle();
-        expect(find.text('GPIX'), findsOneWidget);
+        expect(find.text('GPIX'), findsNothing);
+        expect(find.widgetWithText(TextButton, 'Per te'), findsOneWidget);
+        expect(find.widgetWithText(TextButton, 'Seguiti'), findsOneWidget);
         expect(t.takeException(), isNull);
         if (width == 390) {
           for (var i = 0; i < 3; i++) {

@@ -281,77 +281,74 @@ class _FeedState extends State<Feed> {
         .toList();
     return Scaffold(
       appBar: AppBar(
-        centerTitle: true,
-        title: const Text(
-          'GPIX',
-          style: TextStyle(
-            color: auraBlue,
-            fontSize: 24,
-            fontWeight: FontWeight.w900,
-            letterSpacing: -.7,
-          ),
-        ),
-        bottom: PreferredSize(
-          preferredSize: Size.fromHeight(refreshing ? 55 : 52),
-          child: Column(
+        centerTitle: false,
+        titleSpacing: 12,
+        toolbarHeight: 54,
+        title: ConstrainedBox(
+          key: const ValueKey('feed-filter-title'),
+          constraints: const BoxConstraints(maxWidth: 220),
+          child: Row(
             children: [
-              Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 290),
-                  child: Container(
-                    key: const ValueKey('feed-filter-title'),
-                    margin: const EdgeInsets.only(bottom: 4),
-                    padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: subdued(c),
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: Row(
-                      children: [
-                        for (final option in ['Per te', 'Seguiti'])
-                          Expanded(
-                            child: Semantics(
-                              selected: filter == option,
-                              child: TextButton(
-                                style: TextButton.styleFrom(
-                                  minimumSize: const Size(0, 44),
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  backgroundColor: filter == option
-                                      ? surface(c)
-                                      : Colors.transparent,
-                                  foregroundColor: filter == option
-                                      ? accent(c)
-                                      : secondaryText(c),
-                                  shape: const StadiumBorder(),
-                                ),
-                                onPressed: () {
-                                  if (filter != option)
-                                    setState(() => filter = option);
-                                },
-                                child: Text(
-                                  option,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
+              for (final option in ['Per te', 'Seguiti'])
+                Expanded(
+                  child: Semantics(
+                    selected: filter == option,
+                    child: TextButton(
+                      onPressed: () {
+                        if (filter != option) setState(() => filter = option);
+                      },
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(0, 48),
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        foregroundColor: filter == option
+                            ? accent(c)
+                            : secondaryText(c),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            option,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: filter == option
+                                  ? FontWeight.w800
+                                  : FontWeight.w600,
                             ),
                           ),
-                      ],
+                          const SizedBox(height: 4),
+                          Container(
+                            height: 3,
+                            width: 18,
+                            decoration: BoxDecoration(
+                              color: filter == option
+                                  ? accent(c)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ),
-              if (refreshing)
-                const LinearProgressIndicator(
-                  key: ValueKey('home-refresh-indicator'),
-                  minHeight: 3,
                 ),
             ],
           ),
         ),
+        bottom: refreshing
+            ? const PreferredSize(
+                preferredSize: Size.fromHeight(3),
+                child: LinearProgressIndicator(
+                  key: ValueKey('home-refresh-indicator'),
+                  minHeight: 3,
+                ),
+              )
+            : null,
         actions: [
           IconButton(
             tooltip: 'Attività',
