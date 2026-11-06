@@ -116,6 +116,41 @@ void main() {
       await root.delete(recursive: true);
     }
   });
+  testWidgets('Tall feed photos fill the card width at their original ratio', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final s = GpixStore()..startTestDemo();
+    await tester.pumpWidget(
+      GpixScope(
+        store: s,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(child: PostCard(id: 'my-p0')),
+          ),
+        ),
+      ),
+    );
+    final photo = find.byWidgetPredicate(
+      (widget) => widget is MediaView && widget.reference == 'post0.jpg',
+    );
+    await tester.runAsync(
+      () => precacheImage(
+        const AssetImage('assets/media/post0.jpg'),
+        tester.element(photo),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final size = tester.getSize(photo);
+    expect(size.width, closeTo(390 - 24, .1));
+    expect(size.height / size.width, closeTo(1.5, .01));
+    await tester.pumpWidget(const SizedBox());
+    s.dispose();
+  });
+
   testWidgets('double tap likes without changing feed offset', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;

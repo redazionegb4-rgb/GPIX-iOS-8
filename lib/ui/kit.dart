@@ -559,22 +559,26 @@ class PrimaryButton extends StatelessWidget {
 class MediaView extends StatelessWidget {
   final String reference;
   final BoxFit fit;
-  final double? width, height;
+  final double? width, height, placeholderHeight;
   const MediaView(
     this.reference, {
     super.key,
     this.fit = BoxFit.cover,
     this.width,
     this.height,
+    this.placeholderHeight,
   });
   @override
   Widget build(BuildContext c) {
     final s = GpixScope.of(c, listen: false);
     final path = s.url(reference);
-    Widget placeholder() => ColoredBox(
-      color: subdued(c),
-      child: const Center(
-        child: GIcon(CupertinoIcons.photo, color: muted, size: 24),
+    Widget placeholder() => SizedBox(
+      height: placeholderHeight,
+      child: ColoredBox(
+        color: subdued(c),
+        child: const Center(
+          child: GIcon(CupertinoIcons.photo, color: muted, size: 24),
+        ),
       ),
     );
     if (path.isEmpty)

@@ -1,4 +1,4 @@
-# GPIX Aura Glass · 2.24.0 build 57
+# GPIX Aura Glass · 2.24.0 build 58
 
 Progetto Flutter di GPIX per iOS e Android. Include il codice Dart, gli asset, i progetti nativi e i test.
 
@@ -18,6 +18,8 @@ La build 56 separa le storie in evidenza dalle schede dei post e mostra i social
 
 La build 57 usa accenti blu, sposta Esci nel piè di pagina delle impostazioni e aggiorna le proporzioni delle foto nel profilo e nel feed.
 
+La build 58 mostra le foto singole a tutta larghezza nel feed, anche quando sono più alte del formato 3:4.
+
 ## Verifica locale
 
 Dalla cartella `GPIX`, con Flutter 3.38.9 nel PATH:
@@ -36,4 +38,4 @@ Su una macchina configurata con Android SDK, esegui `bash build-android.sh` dall
 
 ## iOS e Xcode Cloud
 
-Apri `GPIX.xcworkspace` e seleziona lo schema Runner. Usa il Team e il bundle ID esistenti. Per Xcode Cloud, aggiorna il repository con il contenuto della cartella GPIX e mantieni i punti di ingresso `ci_scripts` e `ios/ci_scripts`. Il bootstrap prepara Flutter 3.38.9 e CocoaPods. Per TestFlight, usa 57 come prossimo numero di build Cloud, oppure un numero superiore se 57 è già stato caricato su App Store Connect. Per la build locale serve macOS con Xcode e CocoaPods.
+Apri `GPIX.xcworkspace` e seleziona lo schema Runner. Usa il Team e il bundle ID esistenti. Per Xcode Cloud, aggiorna il repository con il contenuto della cartella GPIX e mantieni i punti di ingresso `ci_scripts` e `ios/ci_scripts`. Il bootstrap prepara Flutter 3.38.9 e CocoaPods. Per TestFlight, usa 58 come prossimo numero di build Cloud, oppure un numero superiore se 58 è già stato caricato su App Store Connect. Per la build locale serve macOS con Xcode e CocoaPods.

@@ -706,7 +706,8 @@ class _PostCardState extends State<PostCard>
                     final aspect = p
                         .obj('style')
                         .number('aspect', 1)
-                        .clamp(.75, 1.91);
+                        .clamp(.35, 2.5)
+                        .toDouble();
                     Widget photo(String ref) => ColoredBox(
                       color: subdued(c),
                       child: InteractiveViewer(
@@ -716,6 +717,7 @@ class _PostCardState extends State<PostCard>
                           ref,
                           width: width,
                           fit: BoxFit.contain,
+                          placeholderHeight: width / aspect,
                         ),
                       ),
                     );
@@ -723,15 +725,12 @@ class _PostCardState extends State<PostCard>
                       children: [
                         if (media.length == 1)
                           ConstrainedBox(
-                            constraints: BoxConstraints(
-                              minHeight: width / 2.5,
-                              maxHeight: width / .75,
-                            ),
+                            constraints: BoxConstraints(minHeight: width / 2.5),
                             child: photo(media.first),
                           )
                         else
                           AspectRatio(
-                            aspectRatio: aspect.toDouble(),
+                            aspectRatio: aspect,
                             child: PageView.builder(
                               key: PageStorageKey('media-${widget.id}'),
                               itemCount: media.length,
