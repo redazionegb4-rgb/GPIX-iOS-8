@@ -993,12 +993,14 @@ class InstantComposer extends StatefulWidget {
   final Future<XFile?> Function()? capture;
   final bool autoCapture;
   final J? replyTo;
+  final ValueChanged<bool>? onPhotoChanged;
   const InstantComposer({
     super.key,
     this.eligible = const [],
     this.capture,
     this.autoCapture = false,
     this.replyTo,
+    this.onPhotoChanged,
   });
   @override
   State<InstantComposer> createState() => _InstantComposerState();
@@ -1056,6 +1058,7 @@ class _InstantComposerState extends State<InstantComposer> {
       uploaded = '';
       key = newId();
     });
+    widget.onPhotoChanged?.call(true);
     if (old.isNotEmpty && old != photo)
       await File(old).delete().catchError((_) => File(old));
   }
@@ -1252,6 +1255,7 @@ class _InstantComposerState extends State<InstantComposer> {
                             : () {
                                 final old = photo;
                                 setState(() => photo = '');
+                                widget.onPhotoChanged?.call(false);
                                 unawaited(
                                   File(
                                     old,

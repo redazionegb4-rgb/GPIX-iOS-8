@@ -95,6 +95,14 @@ void main() {
       await t.pump(const Duration(milliseconds: 100));
       expect(find.text('Sta scrivendo…'), findsOneWidget);
       expect(find.byType(TypingDots), findsOneWidget);
+      thread['typing'] = [
+        {'user': peer, 'kind': 'recording', 'until': now + 8},
+      ];
+      s.notifyListeners();
+      await t.pump();
+      expect(find.text('Sta registrando un audio…'), findsOneWidget);
+      expect(find.text('Online'), findsOneWidget);
+      expect(find.byType(TypingDots), findsNothing);
       thread['typing'] = [];
       s.user(peer)['onlineUntil'] = now - 1;
       s.notifyListeners();
@@ -109,6 +117,40 @@ void main() {
       s.dispose();
     },
   );
+  testWidgets('Inbox activity replaces the message preview temporarily', (
+    t,
+  ) async {
+    final s = GpixStore()..startTestDemo();
+    final thread = s.inboxThreads.firstWhere((x) => x.str('owner').isEmpty);
+    final peer = s.other(thread);
+    final preview = inboxPreview(s, thread);
+    await t.pumpWidget(
+      GpixScope(
+        store: s,
+        child: const MaterialApp(home: Inbox()),
+      ),
+    );
+    expect(find.text(preview), findsOneWidget);
+    thread['typing'] = [
+      {'user': peer, 'kind': 'typing', 'until': now + 8},
+    ];
+    s.notifyListeners();
+    await t.pump();
+    expect(find.text('Sta scrivendo…'), findsOneWidget);
+    expect(find.text(preview), findsNothing);
+    thread['typing'] = [
+      {'user': peer, 'kind': 'recording', 'until': now + 8},
+    ];
+    s.notifyListeners();
+    await t.pump();
+    expect(find.text('Sta registrando un audio…'), findsOneWidget);
+    thread['typing'] = [];
+    s.notifyListeners();
+    await t.pump();
+    expect(find.text(preview), findsOneWidget);
+    await t.pumpWidget(const SizedBox());
+    s.dispose();
+  });
   testWidgets(
     'Inbox instant pile enters viewing deck; grid opens own archive, no hub',
     (t) async {

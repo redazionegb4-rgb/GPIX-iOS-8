@@ -69,6 +69,25 @@ void main() {
     await t.pumpWidget(const SizedBox());
     s.dispose();
   });
+  testWidgets('Explore can find reels separately from photo posts', (t) async {
+    final s = GpixStore()..startTestDemo();
+    s.reels.first['text'] = 'Ricerca reel univoca';
+    await t.pumpWidget(
+      GpixScope(
+        store: s,
+        child: const MaterialApp(home: Explore()),
+      ),
+    );
+    await t.enterText(find.byType(TextField), 'univoca');
+    await t.tap(find.widgetWithText(ChoiceChip, 'Reel'));
+    await t.pumpAndSettle();
+    expect(find.text('Ricerca reel univoca'), findsOneWidget);
+    await t.tap(find.widgetWithText(ChoiceChip, 'Post'));
+    await t.pumpAndSettle();
+    expect(find.text('Nessun risultato'), findsOneWidget);
+    await t.pumpWidget(const SizedBox());
+    s.dispose();
+  });
   testWidgets(
     'Story likes use story wording and reactions are absent from Activity',
     (t) async {

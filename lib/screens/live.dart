@@ -8,13 +8,15 @@ import '../ui/kit.dart';
 import 'social.dart';
 import 'calls.dart';
 
-Future<void> createLive(BuildContext c) async {
-  final title = await textDialog(
-    c,
-    'Titolo della diretta',
-    '',
-    hint: 'Di cosa parliamo?',
-  );
+Future<void> createLive(BuildContext c, {String? initialTitle}) async {
+  final title =
+      initialTitle ??
+      await textDialog(
+        c,
+        'Titolo della diretta',
+        '',
+        hint: 'Di cosa parliamo?',
+      );
   if (title == null || !c.mounted) return;
   final s = GpixScope.of(c, listen: false);
   await perform(c, () async {

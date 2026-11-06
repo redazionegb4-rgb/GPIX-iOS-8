@@ -768,13 +768,16 @@ class _StoryViewerState extends State<StoryViewer>
 
 class Composer extends StatefulWidget {
   final String kind;
-  final bool editStory;
+  final bool editStory, studio;
   final J? initialDraft;
+  final VoidCallback? onEditorOpened;
   const Composer({
     super.key,
     required this.kind,
     this.editStory = false,
+    this.studio = false,
     this.initialDraft,
+    this.onEditorOpened,
   });
   @override
   State<Composer> createState() => _ComposerState();
@@ -1010,11 +1013,18 @@ class _ComposerState extends State<Composer> {
     final story = kind == 'story';
     if (story && cameraStage)
       return StoryCamera(
-        onMedia: (path) => setState(() {
-          files = [path];
-          cameraStage = false;
-        }),
-        onCreate: () => setState(() => cameraStage = false),
+        showModes: !widget.studio,
+        onMedia: (path) {
+          setState(() {
+            files = [path];
+            cameraStage = false;
+          });
+          widget.onEditorOpened?.call();
+        },
+        onCreate: () {
+          setState(() => cameraStage = false);
+          widget.onEditorOpened?.call();
+        },
         onMode: (mode) => setState(() {
           kind = mode;
           cameraStage = false;
@@ -1133,7 +1143,10 @@ class _ComposerState extends State<Composer> {
                             ),
                           )
                         : kind == 'reel'
-                        ? ClipPlayer(reference: files.first, active: true)
+                        ? ClipPlayer(
+                            reference: files.first,
+                            active: TickerMode.of(c),
+                          )
                         : PageView.builder(
                             itemCount: files.length,
                             onPageChanged: (i) => setState(() => page = i),

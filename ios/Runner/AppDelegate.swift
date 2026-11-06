@@ -1,9 +1,11 @@
 import Flutter
 import UIKit
 import Photos
+import Speech
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  private var transcription: VoiceTranscription?
   private var gallery: PhotoGalleryBridge?
   private var instantPrivacy: InstantPrivacyBridge?
 
@@ -13,9 +15,97 @@ import Photos
 
     let messenger = engineBridge.applicationRegistrar.messenger()
     gallery = PhotoGalleryBridge(messenger: messenger)
+    transcription = VoiceTranscription(messenger: messenger)
     instantPrivacy = InstantPrivacyBridge(messenger: messenger)
     if let registrar = registry.registrar(forPlugin: "GPIXSecurePhoto") {
       registrar.register(SecurePhotoFactory(), withId: "GPIX/secure-photo")
+    }
+  }
+}
+
+private final class VoiceTranscription {
+  private let channel: FlutterMethodChannel
+  private var recognizer: SFSpeechRecognizer?
+  private var task: SFSpeechRecognitionTask?
+  private var timeout: DispatchWorkItem?
+  private var pending: FlutterResult?
+  private var session: UUID?
+
+  init(messenger: FlutterBinaryMessenger) {
+    channel = FlutterMethodChannel(name: "GPIX/transcription", binaryMessenger: messenger)
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard call.method == "transcribe" else { result(FlutterMethodNotImplemented); return }
+      guard let self = self, let arguments = call.arguments as? [String: String],
+            let path = arguments["path"], let language = arguments["language"] else {
+        result(FlutterError(code: "AUDIO", message: "Vocale non disponibile.", details: nil))
+        return
+      }
+      self.transcribe(path: path, language: language, result: result)
+    }
+  }
+
+  private func transcribe(path: String, language: String, result: @escaping FlutterResult) {
+    guard pending == nil else {
+      result(FlutterError(code: "BUSY", message: "È già in corso una trascrizione.", details: nil))
+      return
+    }
+    guard #available(iOS 13.0, *),
+          let recognizer = SFSpeechRecognizer(locale: Locale(identifier: language)),
+          recognizer.supportsOnDeviceRecognition else {
+      result(FlutterError(code: "UNAVAILABLE",
+        message: "Riconoscimento vocale italiano sul dispositivo non disponibile.", details: nil))
+      return
+    }
+    pending = result
+    let identifier = UUID()
+    session = identifier
+    SFSpeechRecognizer.requestAuthorization { [weak self] status in
+      DispatchQueue.main.async {
+        guard let self = self, self.session == identifier else { return }
+        guard status == .authorized else {
+          self.finish(error: "Consenti il riconoscimento vocale nelle impostazioni di GPIX.")
+          return
+        }
+        guard recognizer.isAvailable else {
+          self.finish(error: "Riconoscimento vocale temporaneamente non disponibile.")
+          return
+        }
+        self.recognizer = recognizer
+        let request = SFSpeechURLRecognitionRequest(url: URL(fileURLWithPath: path))
+        request.requiresOnDeviceRecognition = true
+        request.shouldReportPartialResults = false
+        let deadline = DispatchWorkItem { [weak self] in
+          self?.finish(error: "Tempo scaduto durante la trascrizione.")
+        }
+        self.timeout = deadline
+        DispatchQueue.main.asyncAfter(deadline: .now() + 90, execute: deadline)
+        self.task = recognizer.recognitionTask(with: request) { [weak self] recognition, error in
+          DispatchQueue.main.async {
+            guard let self = self, self.session == identifier else { return }
+            if let recognition = recognition, recognition.isFinal {
+              self.finish(text: recognition.bestTranscription.formattedString)
+            } else if error != nil {
+              self.finish(error: "Impossibile riconoscere il parlato di questo vocale.")
+            }
+          }
+        }
+      }
+    }
+  }
+
+  private func finish(text: String? = nil, error: String? = nil) {
+    let result = pending
+    pending = nil
+    session = nil
+    timeout?.cancel()
+    timeout = nil
+    task?.cancel()
+    task = nil
+    recognizer = nil
+    if let error = error {
+      result?(FlutterError(code: "TRANSCRIPTION", message: error, details: nil))
+    } else {
+      result?(text)
     }
   }
 }

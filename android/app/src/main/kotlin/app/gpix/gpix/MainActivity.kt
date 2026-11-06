@@ -6,10 +6,12 @@ import io.flutter.plugin.common.MethodChannel
 import android.view.WindowManager
 
 class MainActivity : FlutterActivity() {
+    private var transcription: VoiceTranscription? = null
     private var gallery: GalleryBridge? = null
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         gallery = GalleryBridge(this)
+        transcription = VoiceTranscription(this, flutterEngine.dartExecutor.binaryMessenger)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "GPIX/gallery").setMethodCallHandler(gallery)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "GPIX/privacy").setMethodCallHandler { call, result ->
             if (call.method == "secure") {
@@ -23,6 +25,6 @@ class MainActivity : FlutterActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         gallery?.permissionResult(requestCode)
     }
-    override fun onDestroy() { gallery?.close(); super.onDestroy() }
+    override fun onDestroy() { gallery?.close(); transcription?.close(); super.onDestroy() }
 }
 

@@ -28,6 +28,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Scatta foto e registra video per GPIX.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>GPIX usa il riconoscimento sul dispositivo per trascrivere i vocali che scegli.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Registra messaggi vocali e video su GPIX.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

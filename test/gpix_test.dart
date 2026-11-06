@@ -36,7 +36,11 @@ class _TestPaths extends PathProviderPlatform {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('GPIX/gallery'),(call)async=>call.method=='recent'?[]:null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('GPIX/gallery'),
+          (call) async => call.method == 'recent' ? [] : null,
+        );
     await Directory('QA/screens').create(recursive: true);
     final roboto = FontLoader('Roboto')
       ..addFont(
@@ -723,8 +727,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('andrea.rossi'), findsNothing);
-    expect(find.text('giulia.b'), findsOneWidget);
+    expect(find.textContaining('andrea.rossi'), findsNothing);
+    expect(find.textContaining('giulia.b'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     s.dispose();
   });
@@ -762,13 +766,19 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const ValueKey('settings-search')), 'Messaggi');
+    await tester.enterText(
+      find.byKey(const ValueKey('settings-search')),
+      'Messaggi',
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Messaggi e risposte alle storie'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Mostra conferme di lettura'));
     await tester.pumpAndSettle();
-    final toggle = find.widgetWithText(SwitchListTile, 'Mostra conferme di lettura');
+    final toggle = find.widgetWithText(
+      SwitchListTile,
+      'Mostra conferme di lettura',
+    );
     await tester.ensureVisible(toggle);
     await tester.tap(toggle);
     await tester.pumpAndSettle();
@@ -890,7 +900,7 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     s.dispose();
   });
-  testWidgets('live creation is available from the create menu', (
+  testWidgets('live creation is available from the creation studio', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -903,9 +913,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Crea'));
     await tester.pumpAndSettle();
-    expect(find.text('Diretta'), findsOneWidget);
-    await tester.tap(find.text('Diretta'));
-    await tester.pumpAndSettle();
+    final modes = find.byType(PageView);
+    for (var index = 0; index < 4; index++) {
+      await tester.drag(modes, const Offset(-90, 0));
+      await tester.pumpAndSettle();
+    }
     expect(find.text('Titolo della diretta'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     s.dispose();
@@ -1187,7 +1199,9 @@ void main() {
         );
       }),
     )..startTestDemo();
-    s.demo = false; s.server = 'https://gpix.test'; s.token = 'test-token';
+    s.demo = false;
+    s.server = 'https://gpix.test';
+    s.token = 'test-token';
     String selected = '';
     await tester.pumpWidget(
       GpixScope(
@@ -1258,7 +1272,15 @@ void main() {
     expect(find.text('Testo'), findsOneWidget);
     await tester.tap(find.text('Filtri'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Mono'),200,scrollable:find.byWidgetPredicate((w)=>w is Scrollable && w.axisDirection==AxisDirection.right).last);
+    await tester.scrollUntilVisible(
+      find.text('Mono'),
+      200,
+      scrollable: find
+          .byWidgetPredicate(
+            (w) => w is Scrollable && w.axisDirection == AxisDirection.right,
+          )
+          .last,
+    );
     await tester.tap(find.text('Mono'));
     await tester.tap(find.text('Fine'));
     await tester.pumpAndSettle();
@@ -1268,7 +1290,15 @@ void main() {
       find.widgetWithText(TextField, 'Aggiungi una didascalia…'),
       findsOneWidget,
     );
-    await tester.scrollUntilVisible(find.text('Altre opzioni'),200,scrollable:find.byWidgetPredicate((w)=>w is Scrollable && w.axisDirection==AxisDirection.down).first);
+    await tester.scrollUntilVisible(
+      find.text('Altre opzioni'),
+      200,
+      scrollable: find
+          .byWidgetPredicate(
+            (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+          )
+          .first,
+    );
     await tester.tap(find.text('Altre opzioni'));
     await tester.pumpAndSettle();
     expect(find.text('Disattiva commenti'), findsOneWidget);
@@ -1319,37 +1349,34 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     s.dispose();
   });
-  testWidgets(
-    'GIPHY configuration is absent from mobile app',
-    (tester) async {
-      SharedPreferences.setMockInitialValues({});
-      final s = GpixStore(
-        client: MockClient(
-          (r) async =>
-              http.Response('{"data":[],"pagination":{"total_count":0}}', 200),
-        ),
-      )..startTestDemo();
-      await tester.pumpWidget(
-        GpixScope(
-          store: s,
-          child: MaterialApp(
-            home: Scaffold(
-              body: SingleChildScrollView(
-                child: GiphyGallery(onSelected: (_) {}, onImport: () {}),
-              ),
+  testWidgets('GIPHY configuration is absent from mobile app', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final s = GpixStore(
+      client: MockClient(
+        (r) async =>
+            http.Response('{"data":[],"pagination":{"total_count":0}}', 200),
+      ),
+    )..startTestDemo();
+    await tester.pumpWidget(
+      GpixScope(
+        store: s,
+        child: MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: GiphyGallery(onSelected: (_) {}, onImport: () {}),
             ),
           ),
         ),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text('Collega GIPHY'), findsNothing);
-      expect(find.text('Powered By GIPHY'), findsOneWidget);
-      expect(find.byType(TextField),findsOneWidget);
-      expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox());
-      s.dispose();
-      SharedPreferences.setMockInitialValues({});
-    },
-  );
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Collega GIPHY'), findsNothing);
+    expect(find.text('Powered By GIPHY'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    s.dispose();
+    SharedPreferences.setMockInitialValues({});
+  });
 }

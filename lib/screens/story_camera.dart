@@ -69,11 +69,13 @@ Future<String> storyComposite(
 class StoryCamera extends StatefulWidget {
   final ValueChanged<String> onMedia, onMode;
   final VoidCallback onCreate;
+  final bool showModes;
   const StoryCamera({
     super.key,
     required this.onMedia,
     required this.onMode,
     required this.onCreate,
+    this.showModes = true,
   });
   @override
   State<StoryCamera> createState() => _StoryCameraState();
@@ -553,7 +555,10 @@ class _StoryCameraState extends State<StoryCamera> with WidgetsBindingObserver {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        for (final item in ['POST', 'STORIA', 'REEL'])
+                        for (final item
+                            in widget.showModes
+                                ? ['POST', 'STORIA', 'REEL']
+                                : <String>[])
                           TextButton(
                             style: TextButton.styleFrom(
                               minimumSize: const Size(0, 36),

@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/cupertino.dart';
@@ -174,20 +176,23 @@ class _InboxState extends State<Inbox> {
                                   ),
                                 ),
                                 const SizedBox(height: 6),
-                                Text(
-                                  inboxPreview(s, t),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: s.chatHasUnread(t)
-                                        ? foreground(c)
-                                        : muted,
-                                    fontWeight: s.chatHasUnread(t)
-                                        ? FontWeight.w600
-                                        : FontWeight.w400,
-                                    fontSize: 13,
+                                if (s.typingPeers(t.str('id')).isNotEmpty)
+                                  ConversationActivity(thread: t)
+                                else
+                                  Text(
+                                    inboxPreview(s, t),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: s.chatHasUnread(t)
+                                          ? foreground(c)
+                                          : muted,
+                                      fontWeight: s.chatHasUnread(t)
+                                          ? FontWeight.w600
+                                          : FontWeight.w400,
+                                      fontSize: 13,
+                                    ),
                                   ),
-                                ),
                               ],
                             ),
                           ),
@@ -551,7 +556,7 @@ String inboxPreview(GpixStore s, J t) {
   final composing = s.typingPeers(t.str('id'));
   if (composing.isNotEmpty)
     return composing.any((x) => x.str('kind') == 'recording')
-        ? 'Sta registrando un vocale…'
+        ? 'Sta registrando un audio…'
         : 'Sta scrivendo…';
   final reactions = s.chatReactions(t);
   if (reactions.isNotEmpty &&
@@ -733,7 +738,7 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
 
   void edited() {
     lastEdit = now;
-    signalTyping(input.text.trim().isNotEmpty);
+    if (!recording) signalTyping(input.text.trim().isNotEmpty);
     if (mounted) setState(() {});
   }
 
@@ -743,7 +748,7 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
   }
 
   void focusChanged() {
-    if (!focus.hasFocus) signalTyping(false);
+    if (!focus.hasFocus && !recording) signalTyping(false);
   }
 
   final input = TextEditingController(), scroll = ScrollController();
@@ -1093,8 +1098,7 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    ChatActivityLabel(thread: t),
+                    if (group) ChatActivityLabel(thread: t),
                   ],
                 ),
               ),
@@ -1136,6 +1140,11 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
       ),
       body: Column(
         children: [
+          if (!group && activityLabel(s, s.other(t)).isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 7),
+              child: ChatActivityLabel(thread: t, wrap: true),
+            ),
           const Divider(height: 1, thickness: .5),
           if (expiresIn != 0)
             InkWell(
@@ -1202,6 +1211,11 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
               },
             ),
           ),
+          if (s.typingPeers(widget.id).isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+              child: ConversationActivity(thread: t),
+            ),
           if (quote.isNotEmpty)
             Container(
               color: subdued(c),
@@ -1763,6 +1777,7 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
                                   )
                                 else if (m.str('kind') == 'audio')
                                   AudioBubble(
+                                    key: ValueKey(m.str('id')),
                                     reference: m.str('media'),
                                     own: own,
                                   )
@@ -2060,7 +2075,72 @@ class AudioBubble extends StatefulWidget {
 
 class _AudioBubbleState extends State<AudioBubble> {
   final player = AudioPlayer();
-  bool playing = false;
+  bool playing = false, transcribing = false, transcriptVisible = false;
+  String? transcript;
+
+  Future<void> transcribe() async {
+    if (transcribing) return;
+    if (transcript != null) {
+      setState(() => transcriptVisible = !transcriptVisible);
+      return;
+    }
+    final ref = GpixScope.of(context, listen: false).url(widget.reference);
+    setState(() => transcribing = true);
+    Directory? temporary;
+    try {
+      var path = ref;
+      if (ref.startsWith('https://')) {
+        temporary = await (await getTemporaryDirectory()).createTemp(
+          'gpix-voice-',
+        );
+        final client = HttpClient()
+          ..connectionTimeout = const Duration(seconds: 15);
+        try {
+          final response = await (await client.getUrl(Uri.parse(ref))).close();
+          if (response.statusCode != HttpStatus.ok) {
+            throw const FileSystemException('Audio non disponibile');
+          }
+          final file = File('${temporary.path}/voice.m4a');
+          await response
+              .timeout(const Duration(seconds: 20))
+              .pipe(file.openWrite());
+          path = file.path;
+        } finally {
+          client.close(force: true);
+        }
+      } else if (ref.startsWith('file:')) {
+        path = Uri.parse(ref).toFilePath();
+      }
+      if (!mounted) return;
+      final value = await const MethodChannel(
+        'GPIX/transcription',
+      ).invokeMethod<String>('transcribe', {'path': path, 'language': 'it-IT'});
+      if (!mounted) return;
+      if (value == null || value.trim().isEmpty) {
+        notice(context, 'Nessuna parola riconosciuta in questo vocale.');
+      } else {
+        setState(() {
+          transcript = value.trim();
+          transcriptVisible = true;
+        });
+      }
+    } on PlatformException catch (error) {
+      if (mounted)
+        notice(context, error.message ?? 'Trascrizione non disponibile.');
+    } on Exception {
+      if (mounted) notice(context, 'Impossibile trascrivere il vocale.');
+    } finally {
+      if (temporary != null) {
+        try {
+          await temporary.delete(recursive: true);
+        } on FileSystemException {
+          // The operating system can clear the temporary directory.
+        }
+      }
+      if (mounted) setState(() => transcribing = false);
+    }
+  }
+
   StreamSubscription? completion;
   @override
   void initState() {
@@ -2082,50 +2162,79 @@ class _AudioBubbleState extends State<AudioBubble> {
     final color = widget.own ? Colors.white : foreground(c);
     return SizedBox(
       width: 175,
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          InkWell(
-            onTap: () => perform(c, () async {
-              if (playing) {
-                await player.pause();
-              } else {
-                final ref = GpixScope.of(
-                  c,
-                  listen: false,
-                ).url(widget.reference);
-                await player.play(
-                  ref.startsWith('https://')
-                      ? UrlSource(ref)
-                      : DeviceFileSource(ref),
-                );
-              }
-              setState(() => playing = !playing);
-            }),
-            child: GIcon(
-              playing ? CupertinoIcons.pause_fill : CupertinoIcons.play_fill,
-              color: color,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: List.generate(
-                22,
-                (i) => Container(
-                  width: 2,
-                  height: 7 + (i * 7 % 19).toDouble(),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: .8),
-                    borderRadius: BorderRadius.circular(3),
+          Row(
+            children: [
+              InkWell(
+                onTap: () => perform(c, () async {
+                  if (playing) {
+                    await player.pause();
+                  } else {
+                    final ref = GpixScope.of(
+                      c,
+                      listen: false,
+                    ).url(widget.reference);
+                    await player.play(
+                      ref.startsWith('https://')
+                          ? UrlSource(ref)
+                          : DeviceFileSource(ref),
+                    );
+                  }
+                  if (mounted) setState(() => playing = !playing);
+                }),
+                child: GIcon(
+                  playing
+                      ? CupertinoIcons.pause_fill
+                      : CupertinoIcons.play_fill,
+                  color: color,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: List.generate(
+                    22,
+                    (i) => Container(
+                      width: 2,
+                      height: 7 + (i * 7 % 19).toDouble(),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: .8),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
                   ),
                 ),
               ),
+              const SizedBox(width: 10),
+              GIcon(CupertinoIcons.mic_fill, color: color, size: 14),
+            ],
+          ),
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: color,
+              padding: EdgeInsets.zero,
+            ),
+            onPressed: transcribing ? null : transcribe,
+            child: Text(
+              transcribing
+                  ? 'Trascrizione in corso…'
+                  : transcriptVisible
+                  ? 'Nascondi trascrizione'
+                  : transcript != null
+                  ? 'Mostra trascrizione'
+                  : 'Trascrivi',
+              style: TextStyle(color: color, fontSize: 12),
             ),
           ),
-          const SizedBox(width: 10),
-          GIcon(CupertinoIcons.mic_fill, color: color, size: 14),
+          if (transcriptVisible)
+            Text(
+              transcript!,
+              style: TextStyle(color: color, fontSize: 14, height: 1.4),
+            ),
         ],
       ),
     );
@@ -2540,43 +2649,11 @@ class ChatPresenceAvatar extends StatelessWidget {
 
 class ChatActivityLabel extends StatelessWidget {
   final J thread;
-  const ChatActivityLabel({super.key, required this.thread});
+  final bool wrap;
+  const ChatActivityLabel({super.key, required this.thread, this.wrap = false});
   @override
   Widget build(BuildContext c) {
-    final s = GpixScope.of(c),
-        typing = s.typingPeers(thread.str('id')),
-        group = thread.str('owner').isNotEmpty;
-    if (typing.isNotEmpty) {
-      final names = typing
-          .map(
-            (x) => s
-                .user(x.str('user'))
-                .str('name', s.user(x.str('user')).str('username')),
-          )
-          .take(2)
-          .join(', ');
-      final text = typing.any((x) => x.str('kind') == 'recording')
-          ? 'Sta registrando un vocale…'
-          : 'Sta scrivendo…';
-      return Row(
-        children: [
-          const TypingDots(),
-          const SizedBox(width: 5),
-          Expanded(
-            child: Text(
-              group ? '$names · $text' : text,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: violet,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      );
-    }
+    final s = GpixScope.of(c), group = thread.str('owner').isNotEmpty;
     final text = group
         ? '${thread.ids('members').length} partecipanti'
         : activityLabel(s, s.other(thread));
@@ -2584,14 +2661,55 @@ class ChatActivityLabel extends StatelessWidget {
       text.isEmpty
           ? (group ? '' : s.user(s.other(thread)).str('username'))
           : text,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
+      maxLines: wrap ? null : 1,
+      overflow: wrap ? null : TextOverflow.ellipsis,
       style: TextStyle(
         color: !group && s.online(s.other(thread))
             ? const Color(0xff26ae55)
             : muted,
-        fontSize: 10,
+        fontSize: wrap ? 12 : 10,
       ),
+    );
+  }
+}
+
+class ConversationActivity extends StatelessWidget {
+  final J thread;
+  const ConversationActivity({super.key, required this.thread});
+
+  @override
+  Widget build(BuildContext c) {
+    final s = GpixScope.of(c);
+    final peers = s.typingPeers(thread.str('id'));
+    if (peers.isEmpty) return const SizedBox.shrink();
+    final recording = peers.where((peer) => peer.str('kind') == 'recording');
+    final isRecording = recording.isNotEmpty;
+    final peer = (isRecording ? recording.first : peers.first).str('user');
+    final name = s.user(peer).str('name', s.user(peer).str('username'));
+    final action = isRecording ? 'sta registrando un audio…' : 'sta scrivendo…';
+    final text = thread.str('owner').isNotEmpty && name.isNotEmpty
+        ? '$name $action'
+        : 'S${action.substring(1)}';
+    return Row(
+      children: [
+        if (isRecording)
+          GIcon(CupertinoIcons.mic_fill, size: 13, color: accent(c))
+        else if (!MediaQuery.disableAnimationsOf(c))
+          const TypingDots(),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: accent(c),
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
