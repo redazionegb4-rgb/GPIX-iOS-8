@@ -576,6 +576,25 @@ class _StoryTrayState extends State<StoryTray> {
   }
 }
 
+class _PostCount extends StatelessWidget {
+  const _PostCount({required this.label, this.onTap});
+
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+      ),
+    );
+    return onTap == null ? text : InkWell(onTap: onTap, child: text);
+  }
+}
+
 class PostCard extends StatefulWidget {
   final String id;
   final bool detail;
@@ -937,17 +956,31 @@ class _PostCardState extends State<PostCard>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (!p.flag('hideLikes'))
-                  GestureDetector(
-                    onTap: () => people(c, p.ids('likes'), 'Mi piace'),
-                    child: Text(
-                      '${p.ids('likes').length} Mi piace',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12.5,
+                Wrap(
+                  spacing: 14,
+                  runSpacing: 2,
+                  children: [
+                    if (!p.flag('hideLikes'))
+                      _PostCount(
+                        label: '${p.ids('likes').length} Mi piace',
+                        onTap: () => people(c, p.ids('likes'), 'Mi piace'),
                       ),
+                    _PostCount(
+                      label:
+                          '${p.rows('comments').length} '
+                          '${p.rows('comments').length == 1 ? 'commento' : 'commenti'}',
+                      onTap: p.flag('commentsOff')
+                          ? null
+                          : () => comments(c, widget.id),
                     ),
-                  ),
+                    _PostCount(
+                      label:
+                          '${p.number('shareCount').toInt()} '
+                          '${p.number('shareCount') == 1 ? 'condivisione' : 'condivisioni'}',
+                      onTap: () => sharePost(c, p),
+                    ),
+                  ],
+                ),
                 if (p.str('text').isNotEmpty) ...[
                   const SizedBox(height: 6),
                   Text.rich(
@@ -963,14 +996,12 @@ class _PostCardState extends State<PostCard>
                     style: const TextStyle(fontSize: 13, height: 1.4),
                   ),
                 ],
-                if (!p.flag('commentsOff')) ...[
+                if (!p.flag('commentsOff') && p.rows('comments').isEmpty) ...[
                   const SizedBox(height: 7),
                   InkWell(
                     onTap: () => comments(c, widget.id),
                     child: Text(
-                      p.rows('comments').isEmpty
-                          ? 'Aggiungi un commento…'
-                          : 'Visualizza tutti i ${p.rows('comments').length} commenti',
+                      'Aggiungi un commento…',
                       style: TextStyle(fontSize: 12.5, color: secondaryText(c)),
                     ),
                   ),

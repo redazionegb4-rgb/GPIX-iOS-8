@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'store.dart';
 import 'firebase_options.dart';
 import 'data.dart';
@@ -28,6 +29,7 @@ class PushService {
     'GPIX_NATIVE_PUSH',
     defaultValue: true,
   );
+  static const _appleRegistration = MethodChannel('GPIX/pushRegistration');
   static const _permissionRequested = 'gpix.pushPermissionRequested';
   String _session = '', _attemptSession = '';
   Future<String>? _automaticCheck;
@@ -128,18 +130,28 @@ class PushService {
     if (settings.authorizationStatus != AuthorizationStatus.authorized &&
         settings.authorizationStatus != AuthorizationStatus.provisional)
       return 'Consenti le notifiche nelle impostazioni del telefono.';
-    if (Platform.isIOS) {
-      var apns = await messaging.getAPNSToken();
-      for (
-        var attempt = 0;
-        currentSession() && s.foreground && apns == null && attempt < 8;
-        attempt++
-      ) {
-        await Future<void>.delayed(const Duration(milliseconds: 500));
-        apns = await messaging.getAPNSToken();
+    if (Platform.isIOS && await messaging.getAPNSToken() == null) {
+      if (!currentSession() || !s.foreground) {
+        return 'Riapri GPIX per completare la registrazione.';
       }
-      if (apns == null)
-        return 'Registrazione Apple in attesa. Riprova tra poco.';
+      await _appleRegistration.invokeMethod<void>('register');
+      for (var attempt = 0; attempt < 12 && currentSession(); attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        try {
+          await _appleRegistration.invokeMethod<void>('failure');
+        } on PlatformException catch (error) {
+          if (error.code == 'APNS_3000') {
+            return 'Firma iOS senza abilitazione Push Notifications (APNs 3000). '
+                'Controlla la capability e il profilo della build TestFlight.';
+          }
+          return 'Registrazione Apple non riuscita (${error.code}). '
+              '${error.message ?? 'Riprova più tardi.'}';
+        }
+        if (await messaging.getAPNSToken() != null) break;
+      }
+      if (await messaging.getAPNSToken() == null) {
+        return 'Apple non ha ancora restituito il token push. Riprova tra poco.';
+      }
     }
     final token = await messaging.getToken();
     if (token == null)

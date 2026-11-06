@@ -2,18 +2,41 @@ import Flutter
 import UIKit
 import Photos
 import Speech
+import FirebaseCore
+import FirebaseMessaging
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var transcription: VoiceTranscription?
   private var gallery: PhotoGalleryBridge?
   private var instantPrivacy: InstantPrivacyBridge?
+  private var pushRegistrationError: NSError?
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     let registry = engineBridge.pluginRegistry
     GeneratedPluginRegistrant.register(with: registry)
 
     let messenger = engineBridge.applicationRegistrar.messenger()
+    FlutterMethodChannel(name: "GPIX/pushRegistration", binaryMessenger: messenger)
+      .setMethodCallHandler { [weak self] call, result in
+        guard let self = self else { result(FlutterMethodNotImplemented); return }
+        switch call.method {
+        case "register":
+          self.pushRegistrationError = nil
+          UIApplication.shared.registerForRemoteNotifications()
+          result(nil)
+        case "failure":
+          if let error = self.pushRegistrationError {
+            result(FlutterError(code: "APNS_\(error.code)",
+                                message: error.localizedDescription, details: error.domain))
+          } else {
+            result(nil)
+          }
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
+
     gallery = PhotoGalleryBridge(messenger: messenger)
     transcription = VoiceTranscription(messenger: messenger)
     instantPrivacy = InstantPrivacyBridge(messenger: messenger)
@@ -21,6 +44,24 @@ import Speech
       registrar.register(SecurePhotoFactory(), withId: "GPIX/secure-photo")
     }
   }
+
+  override func application(
+    _ application: UIApplication,
+    didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+  ) {
+    pushRegistrationError = nil
+    if FirebaseApp.app() != nil { Messaging.messaging().apnsToken = deviceToken }
+    super.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
+  }
+
+  override func application(
+    _ application: UIApplication,
+    didFailToRegisterForRemoteNotificationsWithError error: Error
+  ) {
+    pushRegistrationError = error as NSError
+    super.application(application, didFailToRegisterForRemoteNotificationsWithError: error)
+  }
+
 }
 
 private final class VoiceTranscription {
