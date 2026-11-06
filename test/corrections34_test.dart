@@ -130,7 +130,7 @@ void main() {
   });
   for (final dark in [false, true]) {
     testWidgets(
-      'Centered requests, unique settings, profile pin and social pills dark=$dark',
+      'Centered requests, unique settings, profile pin and social platform tiles dark=$dark',
       (t) async {
         t.view.physicalSize = const Size(390, 844);
         t.view.devicePixelRatio = 1;
@@ -203,9 +203,7 @@ void main() {
         expect(find.text('demix.87'), findsOneWidget);
         await shot('profile');
         await mount(const SocialLinkEditor());
-        await t.tap(find.byKey(const ValueKey('social-platform-picker')));
-        await t.pumpAndSettle();
-        await t.tap(find.text('WhatsApp'));
+        await t.tap(find.byKey(const ValueKey('social-platform-whatsapp')));
         await t.pumpAndSettle();
         expect(find.text('Numero WhatsApp'), findsOneWidget);
         await t.enterText(

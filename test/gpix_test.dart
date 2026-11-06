@@ -133,9 +133,15 @@ void main() {
     await tester.ensureVisible(card);
     await tester.pumpAndSettle();
     final stable = list.controller!.offset;
-    final point = tester.getCenter(
-      find.descendant(of: card, matching: find.byType(AspectRatio)).first,
-    );
+    final photo = find
+        .descendant(
+          of: card,
+          matching: find.byWidgetPredicate(
+            (widget) => widget is MediaView && widget.fit == BoxFit.contain,
+          ),
+        )
+        .first;
+    final point = tester.getCenter(photo);
     await tester.tapAt(point);
     await tester.pump(const Duration(milliseconds: 60));
     await tester.tapAt(point);

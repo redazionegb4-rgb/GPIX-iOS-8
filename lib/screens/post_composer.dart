@@ -365,10 +365,10 @@ class _PostComposerState extends State<PostComposer> {
       final bytes = await File(path).readAsBytes();
       final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
       final descriptor = await ui.ImageDescriptor.encoded(buffer);
-      final ratio = (descriptor.width / descriptor.height).clamp(.5, 1.91);
+      final ratio = descriptor.width / descriptor.height;
       descriptor.dispose();
       buffer.dispose();
-      if (mounted) setState(() => aspect = ratio);
+      if (mounted && files.firstOrNull == path) setState(() => aspect = ratio);
     } catch (_) {}
   }
 
@@ -421,11 +421,13 @@ class _PostComposerState extends State<PostComposer> {
             ]
           : await picker.pickMultiImage(limit: 10, imageQuality: 94);
       final list = chosen.whereType<XFile>().map((f) => f.path).toList();
-      if (mounted && list.isNotEmpty)
+      if (mounted && list.isNotEmpty) {
         setState(() {
           files = list;
           index = 0;
         });
+        if (list.length == 1) await originalRatio(list.first);
+      }
     });
   }
 

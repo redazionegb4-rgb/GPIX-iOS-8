@@ -39,7 +39,7 @@ class PostExtras extends StatelessWidget {
               child: Text(
                 '# ${style.str('topic')}',
                 style: const TextStyle(
-                  color: violet,
+                  color: auraBlue,
                   fontWeight: FontWeight.w600,
                   fontSize: 12,
                 ),
@@ -84,7 +84,7 @@ class PostExtras extends StatelessWidget {
                     height: 43,
                     clipBehavior: Clip.antiAlias,
                     decoration: BoxDecoration(
-                      border: Border.all(color: mine == i ? violet : line),
+                      border: Border.all(color: mine == i ? auraBlue : line),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Stack(
@@ -94,7 +94,7 @@ class PostExtras extends StatelessWidget {
                             widthFactor: total == 0 ? 0 : counts[i] / total,
                             heightFactor: 1,
                             child: ColoredBox(
-                              color: violet.withValues(alpha: .12),
+                              color: auraBlue.withValues(alpha: .12),
                             ),
                           ),
                         Padding(
@@ -110,7 +110,7 @@ class PostExtras extends StatelessWidget {
                               if (mine == i)
                                 const Icon(
                                   CupertinoIcons.check_mark,
-                                  color: violet,
+                                  color: auraBlue,
                                   size: 16,
                                 ),
                               if (mine >= 0)

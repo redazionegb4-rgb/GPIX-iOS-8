@@ -165,7 +165,7 @@ class _ConnectionsState extends State<Connections>
                                                       following ||
                                                       pending
                                                   ? soft
-                                                  : violet,
+                                                  : auraBlue,
                                               foregroundColor:
                                                   (own && i == 0) ||
                                                       following ||

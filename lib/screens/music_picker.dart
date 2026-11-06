@@ -172,14 +172,14 @@ class _MusicPickerState extends State<MusicPicker> with WidgetsBindingObserver {
                           width: 48,
                           height: 48,
                           decoration: BoxDecoration(
-                            color: violet.withValues(alpha: .15),
+                            color: auraBlue.withValues(alpha: .15),
                             borderRadius: BorderRadius.circular(9),
                           ),
                           child: Icon(
                             chosen
                                 ? CupertinoIcons.check_mark
                                 : CupertinoIcons.music_note_2,
-                            color: violet,
+                            color: auraBlue,
                           ),
                         ),
                         title: Text(

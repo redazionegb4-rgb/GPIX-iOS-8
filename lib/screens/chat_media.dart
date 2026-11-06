@@ -223,7 +223,7 @@ Future<void> messageInfo(BuildContext c, J message, J thread) => sheet(
                   message.ids('readBy').contains(id)
                       ? CupertinoIcons.checkmark_seal_fill
                       : CupertinoIcons.check_mark,
-                  color: message.ids('readBy').contains(id) ? violet : muted,
+                  color: message.ids('readBy').contains(id) ? auraBlue : muted,
                   size: 20,
                 ),
               ),

@@ -228,48 +228,6 @@ class _SocialLinkEditorState extends State<SocialLinkEditor> {
     super.dispose();
   }
 
-  Future<void> choosePlatform() async {
-    FocusScope.of(context).unfocus();
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      useSafeArea: true,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (menu) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: .72,
-        minChildSize: .4,
-        maxChildSize: .93,
-        builder: (menu, scroll) => ListView(
-          controller: scroll,
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(12, 0, 12, 8),
-              child: Text(
-                'Scegli la piattaforma',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-              ),
-            ),
-            for (final entry in socialNames.entries)
-              ListTile(
-                leading: FaIcon(socialIcon(entry.key), size: 20),
-                title: Text(entry.value),
-                selected: entry.key == type,
-                trailing: entry.key == type ? const Icon(Icons.check) : null,
-                onTap: () => Navigator.pop(menu, entry.key),
-              ),
-          ],
-        ),
-      ),
-    );
-    if (!mounted || picked == null || picked == type) return;
-    setState(() {
-      type = picked;
-      error = '';
-    });
-  }
-
   void submit() {
     try {
       Navigator.pop(context, socialLink(type, value.text, title.text));
@@ -312,24 +270,42 @@ class _SocialLinkEditorState extends State<SocialLinkEditor> {
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         children: [
-          Text('Piattaforma', style: theme.textTheme.titleSmall),
-          const SizedBox(height: 8),
-          Material(
-            color: subdued(c),
-            borderRadius: BorderRadius.circular(14),
-            clipBehavior: Clip.antiAlias,
-            child: ListTile(
-              key: const ValueKey('social-platform-picker'),
-              leading: FaIcon(socialIcon(type), size: 21),
-              title: Text(
-                socialNames[type]!,
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-              trailing: const GIcon(CupertinoIcons.chevron_down, size: 17),
-              onTap: choosePlatform,
-            ),
+          Text('Scegli la piattaforma', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (c, constraints) {
+              const gap = 8.0;
+              final columns =
+                  constraints.maxWidth < 250 ||
+                      MediaQuery.textScalerOf(c).scale(12) > 17
+                  ? 2
+                  : 3;
+              final width =
+                  (constraints.maxWidth - gap * (columns - 1)) / columns;
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (final entry in socialNames.entries)
+                    SizedBox(
+                      width: width,
+                      child: _PlatformTile(
+                        platform: entry.key,
+                        name: entry.value,
+                        selected: type == entry.key,
+                        onTap: () => setState(() {
+                          type = entry.key;
+                          error = '';
+                        }),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 24),
+          Text('Dati del collegamento', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 14),
           TextField(
             key: const ValueKey('social-handle'),
             controller: value,
@@ -390,6 +366,99 @@ class _SocialLinkEditorState extends State<SocialLinkEditor> {
           child: FilledButton(
             onPressed: value.text.trim().isEmpty ? null : submit,
             child: Text(editing ? 'Salva modifiche' : 'Aggiungi collegamento'),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlatformTile extends StatelessWidget {
+  final String platform, name;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _PlatformTile({
+    required this.platform,
+    required this.name,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final brand = switch (platform) {
+      'instagram' => const Color(0xffd83b83),
+      'facebook' => const Color(0xff1877f2),
+      'whatsapp' => const Color(0xff16864d),
+      'telegram' => const Color(0xff1682bd),
+      'tiktok' => const Color(0xffa73267),
+      'youtube' => const Color(0xffd52733),
+      'website' => const Color(0xff2563eb),
+      _ => scheme.onSurface,
+    };
+    final iconColor = theme.brightness == Brightness.dark
+        ? Color.lerp(brand, Colors.white, .38)!
+        : brand;
+    final accent = scheme.primary;
+    return Semantics(
+      selected: selected,
+      child: Material(
+        color: selected
+            ? Color.alphaBlend(accent.withValues(alpha: .10), scheme.surface)
+            : scheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+          side: BorderSide(color: selected ? accent : theme.dividerColor),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          key: ValueKey('social-platform-$platform'),
+          onTap: onTap,
+          child: Stack(
+            children: [
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 8, 4, 7),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 34,
+                        height: 34,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: iconColor.withValues(alpha: .13),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: FaIcon(
+                          socialIcon(platform),
+                          color: iconColor,
+                          size: 18,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        name,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (selected)
+                PositionedDirectional(
+                  end: 5,
+                  top: 5,
+                  child: Icon(Icons.check_circle, size: 14, color: accent),
+                ),
+            ],
           ),
         ),
       ),

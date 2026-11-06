@@ -212,7 +212,7 @@ class _InstantPileState extends State<InstantPile> {
                             width: 6,
                             height: 6,
                             decoration: const BoxDecoration(
-                              color: violet,
+                              color: auraBlue,
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -536,7 +536,7 @@ class _InstantCollectionPageState extends State<InstantCollectionPage> {
                 child: Ink(
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [Color(0xff6748f6), Color(0xffbd48c7)],
+                      colors: [Color(0xff2463e9), Color(0xff0891b2)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
@@ -1130,7 +1130,7 @@ class _InstantComposerState extends State<InstantComposer> {
             leading: GIcon(choice.$3),
             title: Text(choice.$2),
             trailing: audience == choice.$1
-                ? const GIcon(CupertinoIcons.check_mark, color: violet)
+                ? const GIcon(CupertinoIcons.check_mark, color: auraBlue)
                 : null,
             onTap: () {
               setState(() => audience = choice.$1);
@@ -1142,7 +1142,7 @@ class _InstantComposerState extends State<InstantComposer> {
   );
   @override
   Widget build(BuildContext c) => Theme(
-    data: ThemeData.dark(useMaterial3: true),
+    data: gpixTheme(Brightness.dark),
     child: Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -1800,7 +1800,7 @@ class _InstantViewerState extends State<InstantViewer>
     width: 44,
     height: 44,
     child: Material(
-      color: reaction == emoji ? violet : Colors.white12,
+      color: reaction == emoji ? auraBlue : Colors.white12,
       shape: const CircleBorder(),
       child: InkWell(
         customBorder: const CircleBorder(),
@@ -2652,7 +2652,7 @@ class _InstantArchiveState extends State<InstantArchive> {
                 children: [
                   const GIcon(
                     CupertinoIcons.lock_shield,
-                    color: violet,
+                    color: auraBlue,
                     size: 23,
                   ),
                   const SizedBox(width: 12),
@@ -2731,7 +2731,7 @@ class _InstantArchiveState extends State<InstantArchive> {
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(25),
                               gradient: const LinearGradient(
-                                colors: [Color(0xff9d68f5), Color(0xffed75aa)],
+                                colors: [Color(0xff3478f6), Color(0xffed75aa)],
                               ),
                             ),
                             child: const Icon(
@@ -2855,7 +2855,7 @@ class _InstantArchiveState extends State<InstantArchive> {
                                                     .checkmark_circle_fill
                                               : CupertinoIcons.circle,
                                           color: selected.contains(id)
-                                              ? violet
+                                              ? auraBlue
                                               : Colors.white,
                                           size: 26,
                                         ),
@@ -2932,7 +2932,7 @@ class _InstantArchiveState extends State<InstantArchive> {
           padding: const EdgeInsets.fromLTRB(20, 10, 20, 15),
           child: FilledButton.icon(
             style: FilledButton.styleFrom(
-              backgroundColor: violet,
+              backgroundColor: auraBlue,
               foregroundColor: Colors.white,
               minimumSize: const Size(double.infinity, 48),
               shape: const StadiumBorder(),

@@ -193,7 +193,7 @@ class _WelcomeState extends State<Welcome> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(15),
-          borderSide: const BorderSide(color: violet, width: 1.4),
+          borderSide: const BorderSide(color: auraBlue, width: 1.4),
         ),
         errorMaxLines: 2,
       ),

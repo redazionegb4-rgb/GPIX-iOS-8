@@ -202,7 +202,7 @@ class _InboxState extends State<Inbox> {
                               width: 8,
                               height: 8,
                               decoration: const BoxDecoration(
-                                color: violet,
+                                color: auraBlue,
                                 shape: BoxShape.circle,
                               ),
                             ),
@@ -482,7 +482,7 @@ class _MessageRequestsState extends State<MessageRequests> {
                                         ),
                                         style: FilledButton.styleFrom(
                                           minimumSize: const Size(0, 46),
-                                          backgroundColor: violet,
+                                          backgroundColor: auraBlue,
                                           foregroundColor: Colors.white,
                                           shape: RoundedRectangleBorder(
                                             borderRadius: BorderRadius.circular(
@@ -546,7 +546,7 @@ Widget groupAvatar() => Container(
     shape: BoxShape.circle,
     color: Color(0xffeee8fd),
   ),
-  child: const GIcon(CupertinoIcons.person_2_fill, color: violet, size: 25),
+  child: const GIcon(CupertinoIcons.person_2_fill, color: auraBlue, size: 25),
 );
 String inboxPreview(GpixStore s, J t) {
   final messages = t
@@ -681,7 +681,7 @@ class _NewConversationState extends State<NewConversation> {
                     selected.contains(u.str('id'))
                         ? CupertinoIcons.check_mark_circled_solid
                         : CupertinoIcons.circle,
-                    color: selected.contains(u.str('id')) ? violet : muted,
+                    color: selected.contains(u.str('id')) ? auraBlue : muted,
                   )
                 : null,
           ),
@@ -1156,7 +1156,7 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
                 child: Text(
                   'Nuovi messaggi: eliminazione dopo ${expiryLabel(expiresIn)} · Modifica',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 12, color: violet),
+                  style: const TextStyle(fontSize: 12, color: auraBlue),
                 ),
               ),
             ),
@@ -1222,7 +1222,7 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
               padding: const EdgeInsets.only(left: 18),
               child: Row(
                 children: [
-                  Container(width: 2, height: 32, color: violet),
+                  Container(width: 2, height: 32, color: auraBlue),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -1300,7 +1300,7 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
                             onPressed: voice,
                             icon: const GIcon(
                               CupertinoIcons.paperplane_fill,
-                              color: violet,
+                              color: auraBlue,
                               size: 23,
                             ),
                           ),
@@ -1322,7 +1322,7 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
                               tooltip: 'Fotocamera chat',
                               onPressed: () => photo(camera: true),
                               style: IconButton.styleFrom(
-                                backgroundColor: violet,
+                                backgroundColor: auraBlue,
                                 foregroundColor: Colors.white,
                                 fixedSize: const Size(38, 38),
                                 shape: const CircleBorder(),
@@ -1391,7 +1391,7 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
                             ] else
                               TextButton(
                                 style: TextButton.styleFrom(
-                                  backgroundColor: violet,
+                                  backgroundColor: auraBlue,
                                   foregroundColor: Colors.white,
                                   minimumSize: const Size(54, 36),
                                   shape: const StadiumBorder(),
@@ -1535,7 +1535,7 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
                                 color: subdued(c),
                                 borderRadius: BorderRadius.circular(9),
                                 border: const Border(
-                                  left: BorderSide(color: violet, width: 2),
+                                  left: BorderSide(color: auraBlue, width: 2),
                                 ),
                               ),
                               child: Column(
@@ -1648,7 +1648,7 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
                               color: m.str('kind') == 'sticker' || emojiOnly
                                   ? Colors.transparent
                                   : own
-                                  ? violet
+                                  ? auraBlue
                                   : subdued(c),
                               gradient:
                                   own &&
@@ -1886,7 +1886,7 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
                     style: TextStyle(
                       fontSize: 10,
                       color: m.ids('readBy').any((id) => id != s.myId)
-                          ? violet
+                          ? auraBlue
                           : muted,
                     ),
                   ),
@@ -2394,7 +2394,7 @@ class _MessageExpiryState extends State<MessageExpiry> {
     body: ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        const GIcon(CupertinoIcons.timer, size: 54, color: violet),
+        const GIcon(CupertinoIcons.timer, size: 54, color: auraBlue),
         const SizedBox(height: 20),
         const Text(
           'Per quanto restano i nuovi messaggi?',
@@ -2438,7 +2438,7 @@ class _MessageExpiryState extends State<MessageExpiry> {
               value == seconds
                   ? CupertinoIcons.checkmark_circle_fill
                   : CupertinoIcons.circle,
-              color: value == seconds ? violet : muted,
+              color: value == seconds ? auraBlue : muted,
             ),
             onTap: () => setState(() => value = seconds),
           ),
@@ -2748,7 +2748,7 @@ class _TypingDotsState extends State<TypingDots>
               height: 3,
               margin: const EdgeInsets.symmetric(horizontal: 1),
               decoration: const BoxDecoration(
-                color: violet,
+                color: auraBlue,
                 shape: BoxShape.circle,
               ),
             ),

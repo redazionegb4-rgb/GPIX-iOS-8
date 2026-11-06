@@ -369,7 +369,7 @@ class _FeedState extends State<Feed> {
       ),
       body: RefreshIndicator(
         key: refreshKey,
-        color: violet,
+        color: auraBlue,
         onRefresh: refreshFeed,
         child: ListView.builder(
           key: const PageStorageKey('feed'),
@@ -387,7 +387,7 @@ class _FeedState extends State<Feed> {
                     const GIcon(
                       CupertinoIcons.check_mark_circled,
                       size: 32,
-                      color: violet,
+                      color: auraBlue,
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -700,92 +700,116 @@ class _PostCardState extends State<PostCard>
               borderRadius: BorderRadius.circular(19),
               child: GestureDetector(
                 onDoubleTap: () => like(c, p, force: true),
-                child: AspectRatio(
-                  aspectRatio: p
-                      .obj('style')
-                      .number('aspect', 1)
-                      .clamp(.75, 1.91),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      PageView.builder(
-                        key: PageStorageKey('media-${widget.id}'),
-                        itemCount: media.length,
-                        onPageChanged: (i) => setState(() => page = i),
-                        itemBuilder: (c, i) => InteractiveViewer(
-                          minScale: 1,
-                          maxScale: 3,
-                          child: MediaView(media[i]),
+                child: LayoutBuilder(
+                  builder: (c, constraints) {
+                    final width = constraints.maxWidth;
+                    final aspect = p
+                        .obj('style')
+                        .number('aspect', 1)
+                        .clamp(.75, 1.91);
+                    Widget photo(String ref) => ColoredBox(
+                      color: subdued(c),
+                      child: InteractiveViewer(
+                        minScale: 1,
+                        maxScale: 3,
+                        child: MediaView(
+                          ref,
+                          width: width,
+                          fit: BoxFit.contain,
                         ),
                       ),
-                      if (media.length > 1)
-                        Positioned(
-                          bottom: 10,
-                          right: 10,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 9,
-                              vertical: 5,
+                    );
+                    return Stack(
+                      children: [
+                        if (media.length == 1)
+                          ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: width / 2.5,
+                              maxHeight: width / .75,
                             ),
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(20),
+                            child: photo(media.first),
+                          )
+                        else
+                          AspectRatio(
+                            aspectRatio: aspect.toDouble(),
+                            child: PageView.builder(
+                              key: PageStorageKey('media-${widget.id}'),
+                              itemCount: media.length,
+                              onPageChanged: (i) => setState(() => page = i),
+                              itemBuilder: (c, i) => photo(media[i]),
                             ),
-                            child: Text(
-                              '${page + 1}/${media.length}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
+                          ),
+                        if (media.length > 1)
+                          Positioned(
+                            bottom: 10,
+                            right: 10,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                '${page + 1}/${media.length}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                ),
                               ),
                             ),
                           ),
+                        Positioned(
+                          top: 9,
+                          left: 9,
+                          right: 62,
+                          child: Align(
+                            alignment: Alignment.topLeft,
+                            child: author,
+                          ),
                         ),
-                      Positioned(
-                        top: 9,
-                        left: 9,
-                        right: 62,
-                        child: Align(
-                          alignment: Alignment.topLeft,
-                          child: author,
+                        Positioned(
+                          top: 7,
+                          right: 7,
+                          child: AuraPanel(
+                            radius: 24,
+                            frosted: true,
+                            child: menu,
+                          ),
                         ),
-                      ),
-                      Positioned(
-                        top: 7,
-                        right: 7,
-                        child: AuraPanel(
-                          radius: 24,
-                          frosted: true,
-                          child: menu,
-                        ),
-                      ),
-                      IgnorePointer(
-                        child: AnimatedBuilder(
-                          animation: heart,
-                          builder: (c, _) => Opacity(
-                            opacity: heart.value == 0
-                                ? 0
-                                : (1 - heart.value).clamp(0, 1),
-                            child: Transform.scale(
-                              scale: .8 + heart.value * .45,
-                              child: const Center(
-                                child: GIcon(
-                                  CupertinoIcons.heart_fill,
-                                  size: 95,
-                                  color: Colors.white,
-                                  shadows: [
-                                    Shadow(
-                                      blurRadius: 12,
-                                      color: Colors.black26,
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: AnimatedBuilder(
+                              animation: heart,
+                              builder: (c, _) => Opacity(
+                                opacity: heart.value == 0
+                                    ? 0
+                                    : (1 - heart.value).clamp(0, 1),
+                                child: Transform.scale(
+                                  scale: .8 + heart.value * .45,
+                                  child: const Center(
+                                    child: GIcon(
+                                      CupertinoIcons.heart_fill,
+                                      size: 95,
+                                      color: Colors.white,
+                                      shadows: [
+                                        Shadow(
+                                          blurRadius: 12,
+                                          color: Colors.black26,
+                                        ),
+                                      ],
                                     ),
-                                  ],
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    );
+                  },
                 ),
               ),
             ),
@@ -872,7 +896,7 @@ class _PostCardState extends State<PostCard>
                           margin: const EdgeInsets.all(2),
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: i == page ? violet : line,
+                            color: i == page ? auraBlue : line,
                           ),
                         ),
                       ),
@@ -1406,7 +1430,7 @@ class _SharePanelState extends State<SharePanel> {
                             child: Container(
                               padding: const EdgeInsets.all(4),
                               decoration: const BoxDecoration(
-                                color: violet,
+                                color: auraBlue,
                                 shape: BoxShape.circle,
                               ),
                               child: const Icon(
@@ -2729,6 +2753,7 @@ class _ProfileState extends State<Profile> {
                       },
                     ),
                   ),
+                if (own || highlights.isNotEmpty) const SizedBox(height: 14),
                 if (own && showSuggestions) _suggestions(c),
                 Row(
                   children: [
@@ -2742,7 +2767,7 @@ class _ProfileState extends State<Profile> {
                               border: Border(
                                 bottom: BorderSide(
                                   color: selected == i
-                                      ? violet
+                                      ? auraBlue
                                       : Theme.of(c).dividerColor,
                                   width: selected == i ? 1.5 : .5,
                                 ),
@@ -2757,7 +2782,7 @@ class _ProfileState extends State<Profile> {
                                   ? CupertinoIcons.repeat
                                   : CupertinoIcons.person_crop_square,
                               size: 23,
-                              color: selected == i ? violet : muted,
+                              color: selected == i ? auraBlue : muted,
                             ),
                           ),
                         ),
@@ -2855,7 +2880,7 @@ class _ProfileState extends State<Profile> {
                 crossAxisCount: 3,
                 crossAxisSpacing: 2,
                 mainAxisSpacing: 2,
-                childAspectRatio: 1,
+                childAspectRatio: 3 / 4,
               ),
             ),
           const SliverToBoxAdapter(child: SizedBox(height: 115)),
@@ -3025,7 +3050,7 @@ class _ProfileState extends State<Profile> {
           onPressed: tap,
           style: FilledButton.styleFrom(
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            backgroundColor: primary ? violet : subdued(context),
+            backgroundColor: primary ? auraBlue : subdued(context),
             foregroundColor: primary ? Colors.white : foreground(context),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
@@ -3276,7 +3301,7 @@ class _EditProfileState extends State<EditProfile> {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: violet),
+                border: Border.all(color: auraBlue),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(2),
@@ -3342,7 +3367,7 @@ class _EditProfileState extends State<EditProfile> {
                         borderSide: BorderSide(color: Theme.of(c).dividerColor),
                       ),
                       focusedBorder: const UnderlineInputBorder(
-                        borderSide: BorderSide(color: violet),
+                        borderSide: BorderSide(color: auraBlue),
                       ),
                       contentPadding: const EdgeInsets.symmetric(vertical: 12),
                     ),
@@ -3411,7 +3436,7 @@ class _EditProfileState extends State<EditProfile> {
                         trailing: fields['gender']!.text == gender
                             ? const GIcon(
                                 CupertinoIcons.check_mark,
-                                color: violet,
+                                color: auraBlue,
                               )
                             : null,
                         onTap: () {
@@ -3657,7 +3682,7 @@ class _ActivityState extends State<Activity> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (requests.isNotEmpty) ...[
-                    dot(violet),
+                    dot(auraBlue),
                     const SizedBox(width: 10),
                   ],
                   const GIcon(CupertinoIcons.chevron_right, size: 18),
@@ -3796,7 +3821,7 @@ class _ActivityState extends State<Activity> {
                             trailing: pending && inline
                                 ? actions
                                 : (!pending && !n.flag('seen')
-                                      ? dot(violet)
+                                      ? dot(auraBlue)
                                       : null),
                             onTap: () => perform(c, () async {
                               await s.act('notificationsRead', {'id': n['id']});
@@ -4138,7 +4163,7 @@ class _RequestsState extends State<Requests> {
                                                   .checkmark_circle_fill
                                             : CupertinoIcons.circle_fill,
                                         color: selected.contains(id)
-                                            ? violet
+                                            ? auraBlue
                                             : muted,
                                         size: 21,
                                       ),
@@ -4268,7 +4293,7 @@ class _RequestsState extends State<Requests> {
                                   selected.contains(id)
                                       ? CupertinoIcons.checkmark_circle_fill
                                       : CupertinoIcons.circle,
-                                  color: violet,
+                                  color: auraBlue,
                                 ),
                               ),
                           ],
@@ -4636,105 +4661,130 @@ class _SettingsState extends State<Settings> {
         title: pageTitle('Impostazioni e attività'),
         centerTitle: true,
       ),
-      body: ListView(
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-            child: TextField(
-              key: const ValueKey('settings-search'),
-              onChanged: (v) => setState(() => query = v),
-              decoration: InputDecoration(
-                hintText: 'Cerca un’impostazione',
-                prefixIcon: const Padding(
-                  padding: EdgeInsets.all(13),
-                  child: GIcon(CupertinoIcons.search, size: 21, color: muted),
+      bottomNavigationBar: filter.isEmpty
+          ? SafeArea(
+              minimum: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Theme.of(c).colorScheme.error,
+                  minimumSize: const Size.fromHeight(48),
+                  side: BorderSide(
+                    color: Theme.of(c).colorScheme.error.withValues(alpha: .42),
+                  ),
                 ),
-                filled: true,
-                fillColor: subdued(c),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(28),
-                  borderSide: BorderSide.none,
+                onPressed: () => _logout(c, s),
+                icon: const GIcon(CupertinoIcons.square_arrow_left, size: 19),
+                label: const Text('Esci'),
+              ),
+            )
+          : null,
+      body: LayoutBuilder(
+        builder: (c, viewport) => ListView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+              child: TextField(
+                key: const ValueKey('settings-search'),
+                onChanged: (v) => setState(() => query = v),
+                decoration: InputDecoration(
+                  hintText: 'Cerca un’impostazione',
+                  prefixIcon: const Padding(
+                    padding: EdgeInsets.all(13),
+                    child: GIcon(CupertinoIcons.search, size: 21, color: muted),
+                  ),
+                  filled: true,
+                  fillColor: subdued(c),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(28),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 11),
                 ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 11),
               ),
             ),
-          ),
-          if (filter.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: LayoutBuilder(
-                builder: (c, constraints) {
-                  final columns =
-                      constraints.maxWidth < 270 ||
-                          MediaQuery.textScalerOf(c).scale(15) > 21
-                      ? 1
-                      : 2;
-                  final width =
-                      (constraints.maxWidth - (columns - 1) * 10) / columns;
-                  return Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      for (final group in groups)
-                        SizedBox(
-                          width: width,
-                          child: Material(
-                            color: subdued(c),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              side: BorderSide(color: Theme.of(c).dividerColor),
-                            ),
-                            clipBehavior: Clip.antiAlias,
-                            child: InkWell(
-                              onTap: () =>
-                                  open(c, Settings._category(group.$1)),
-                              child: Padding(
-                                padding: const EdgeInsets.all(13),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    GIcon(group.$3, size: 22),
-                                    const SizedBox(height: 9),
-                                    Text(
-                                      group.$1,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w800,
+            if (filter.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: LayoutBuilder(
+                  builder: (c, constraints) {
+                    final columns =
+                        constraints.maxWidth < 270 ||
+                            MediaQuery.textScalerOf(c).scale(15) > 21
+                        ? 1
+                        : 2;
+                    final width =
+                        (constraints.maxWidth - (columns - 1) * 10) / columns;
+                    return Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        for (final group in groups)
+                          ConstrainedBox(
+                            constraints: BoxConstraints.tightFor(width: width)
+                                .copyWith(
+                                  minHeight: columns == 1
+                                      ? 0
+                                      : ((viewport.maxHeight - 124) / 3)
+                                            .clamp(100, 210)
+                                            .toDouble(),
+                                ),
+                            child: Material(
+                              color: subdued(c),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: BorderSide(
+                                  color: Theme.of(c).dividerColor,
+                                ),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: InkWell(
+                                onTap: () =>
+                                    open(c, Settings._category(group.$1)),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(13),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      GIcon(group.$3, size: 22),
+                                      const SizedBox(height: 9),
+                                      Text(
+                                        group.$1,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      group.$2,
-                                      style: const TextStyle(
-                                        color: muted,
-                                        fontSize: 11,
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        group.$2,
+                                        style: const TextStyle(
+                                          color: muted,
+                                          fontSize: 11,
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                    ],
-                  );
-                },
-              ),
-            )
-          else if (results.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(20),
-              child: Text('Nessuna impostazione trovata'),
-            )
-          else
-            ...results,
-          if (filter.isEmpty) ...[
-            const SizedBox(height: 16),
-            const Divider(indent: 16, endIndent: 16),
-            row(CupertinoIcons.square_arrow_left, 'Esci', () => _logout(c, s)),
+                      ],
+                    );
+                  },
+                ),
+              )
+            else if (results.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(20),
+                child: Text('Nessuna impostazione trovata'),
+              )
+            else
+              ...results,
+            const SizedBox(height: 14),
           ],
-          const SizedBox(height: 30),
-        ],
+        ),
       ),
     );
   }
@@ -5084,7 +5134,7 @@ class AppearancePage extends StatelessWidget {
                     : CupertinoIcons.device_phone_portrait,
               ),
               trailing: s.appearance == item.key
-                  ? const Icon(CupertinoIcons.check_mark, color: violet)
+                  ? const Icon(CupertinoIcons.check_mark, color: auraBlue)
                   : null,
               onTap: () => s.setAppearance(item.key),
             ),

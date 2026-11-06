@@ -8,8 +8,7 @@ import 'package:flutter/material.dart';
 import '../core/data.dart';
 import '../core/store.dart';
 
-const violet = Color(0xff6d28d9),
-    auraBlue = Color(0xff2563eb),
+const auraBlue = Color(0xff2563eb),
     ink = Color(0xff101828),
     muted = Color(0xff767676),
     soft = Color(0xfff3f3f4),
@@ -19,7 +18,7 @@ const violet = Color(0xff6d28d9),
 const auraAction = LinearGradient(
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
-  colors: [auraBlue, violet],
+  colors: [auraBlue, Color(0xff1749b8)],
 );
 
 ThemeData gpixTheme(Brightness brightness) {
@@ -40,7 +39,13 @@ ThemeData gpixTheme(Brightness brightness) {
     onPrimaryContainer: dark
         ? const Color(0xffe6efff)
         : const Color(0xff113879),
-    secondary: dark ? const Color(0xffc4b5fd) : violet,
+    secondary: dark ? const Color(0xffa9c7ff) : auraBlue,
+    tertiary: dark ? const Color(0xff8ed5ec) : const Color(0xff087b9b),
+    onTertiary: dark ? ink : Colors.white,
+    tertiaryContainer: dark ? const Color(0xff17475a) : const Color(0xffd5f1fa),
+    onTertiaryContainer: dark
+        ? const Color(0xffd5f1fa)
+        : const Color(0xff0e4156),
     surfaceContainerLowest: canvas,
     surfaceContainerLow: dark
         ? const Color(0xff101010)
@@ -636,7 +641,7 @@ class Avatar extends StatelessWidget {
             : const SweepGradient(
                 colors: [
                   auraBlue,
-                  Color(0xffa78bfa),
+                  Color(0xff3b82f6),
                   Color(0xff67e8f9),
                   Color(0xff7dd3fc),
                   auraBlue,

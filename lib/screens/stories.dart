@@ -25,7 +25,7 @@ const storyColors = [
   Colors.white,
   Colors.black,
   Color(0xffffd86f),
-  Color(0xffdf9cef),
+  Color(0xff83ccf0),
   Color(0xff8dd9e7),
 ];
 
@@ -60,9 +60,9 @@ class StoryCanvas extends StatelessWidget {
           children: [
             ColoredBox(
               color: [
-                const Color(0xff201c31),
+                const Color(0xff142235),
                 const Color(0xff2b2d3a),
-                const Color(0xff50304b),
+                const Color(0xff13445b),
                 const Color(0xff283d43),
               ][style.number('background').toInt() % 4],
             ),
@@ -1080,7 +1080,7 @@ class _ComposerState extends State<Composer> {
                   child: Text(
                     busy ? 'Pubblico…' : 'Condividi',
                     style: TextStyle(
-                      color: story ? Colors.white : violet,
+                      color: story ? Colors.white : auraBlue,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -1567,7 +1567,7 @@ class _ComposerState extends State<Composer> {
                         shape: BoxShape.circle,
                         color: storyColors[i],
                         border: Border.all(
-                          color: color == i ? violet : Colors.white38,
+                          color: color == i ? auraBlue : Colors.white38,
                           width: 2,
                         ),
                       ),
