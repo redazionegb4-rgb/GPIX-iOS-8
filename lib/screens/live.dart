@@ -507,32 +507,11 @@ class _LiveRoomState extends State<LiveRoom> with WidgetsBindingObserver {
                             child: TextField(
                               controller: input,
                               onSubmitted: (_) => send(),
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: foreground(c),
                                 fontSize: 13,
                               ),
-                              decoration: InputDecoration(
-                                hintText: 'Commenta…',
-                                hintStyle: const TextStyle(
-                                  color: Colors.white60,
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 15,
-                                  vertical: 10,
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(25),
-                                  borderSide: const BorderSide(
-                                    color: Colors.white38,
-                                  ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(25),
-                                  borderSide: const BorderSide(
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
+                              decoration: mediaInputDecoration(c, 'Commenta…'),
                             ),
                           ),
                           IconButton(

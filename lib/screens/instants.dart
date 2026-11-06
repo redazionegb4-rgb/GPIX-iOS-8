@@ -1237,16 +1237,10 @@ class _InstantComposerState extends State<InstantComposer> {
                         controller: caption,
                         maxLength: 120,
                         onChanged: (_) => setState(() {}),
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          hintText: 'Aggiungi una didascalia…',
-                          hintStyle: const TextStyle(color: Colors.white54),
-                          filled: true,
-                          fillColor: Colors.white10,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(24),
-                            borderSide: BorderSide.none,
-                          ),
+                        style: TextStyle(color: foreground(c)),
+                        decoration: mediaInputDecoration(
+                          c,
+                          'Aggiungi una didascalia…',
                         ),
                       ),
                       TextButton.icon(

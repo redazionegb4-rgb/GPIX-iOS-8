@@ -165,6 +165,29 @@ Color subdued(BuildContext c) =>
 Color accent(BuildContext c) => Theme.of(c).colorScheme.primary;
 Color secondaryText(BuildContext c) => Theme.of(c).colorScheme.onSurfaceVariant;
 
+InputDecoration mediaInputDecoration(BuildContext context, String hint) {
+  final dark = Theme.of(context).brightness == Brightness.dark;
+  final border = OutlineInputBorder(
+    borderRadius: BorderRadius.circular(18),
+    borderSide: BorderSide(
+      color: dark ? const Color(0xff626b7a) : const Color(0xffb0bac8),
+    ),
+  );
+  return InputDecoration(
+    hintText: hint,
+    hintStyle: TextStyle(
+      color: dark ? const Color(0xffc4cad4) : const Color(0xff465369),
+    ),
+    filled: true,
+    fillColor: dark ? const Color(0xff222936) : const Color(0xfff5f7fb),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    enabledBorder: border,
+    focusedBorder: border.copyWith(
+      borderSide: BorderSide(color: accent(context), width: 1.5),
+    ),
+  );
+}
+
 class AuraBackdrop extends StatelessWidget {
   const AuraBackdrop({super.key, required this.child});
 

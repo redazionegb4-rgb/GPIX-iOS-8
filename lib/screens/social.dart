@@ -576,22 +576,66 @@ class _StoryTrayState extends State<StoryTray> {
   }
 }
 
-class _PostCount extends StatelessWidget {
-  const _PostCount({required this.label, this.onTap});
+class _PostAction extends StatelessWidget {
+  const _PostAction({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+    this.count,
+    this.color,
+  });
 
   final String label;
-  final VoidCallback? onTap;
+  final IconData icon;
+  final VoidCallback onTap;
+  final int? count;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
-    final text = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Text(
-        label,
-        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+    final value = count;
+    final display = value != null && value >= 10000
+        ? '${(value / 1000).toStringAsFixed(1).replaceFirst(RegExp(r'\.0$'), '').replaceAll('.', ',')} mila'
+        : value?.toString();
+    return Tooltip(
+      message: label,
+      excludeFromSemantics: true,
+      child: Semantics(
+        button: true,
+        onTap: onTap,
+        label: value == null ? label : '$label, $value',
+        excludeSemantics: true,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            alignment: Alignment.centerLeft,
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GIcon(icon, color: color ?? foreground(context), size: 23),
+                  if (display != null) ...[
+                    const SizedBox(width: 5),
+                    Text(
+                      display,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
-    return onTap == null ? text : InkWell(onTap: onTap, child: text);
   }
 }
 
@@ -639,6 +683,11 @@ class _PostCardState extends State<PostCard>
         u = s.user(uid),
         media = s.media(p),
         liked = p.ids('likes').contains(s.myId);
+    final visibleLikers = p
+        .ids('likes')
+        .where((id) => s.user(id).str('username').isNotEmpty)
+        .take(3)
+        .toList();
     final menu = IconButton(
       tooltip: 'Opzioni del post',
       icon: const GIcon(CupertinoIcons.ellipsis, size: 22),
@@ -831,95 +880,105 @@ class _PostCardState extends State<PostCard>
                 ),
               ),
             ),
-          AuraPanel(
-            margin: const EdgeInsets.fromLTRB(5, 7, 5, 8),
-            radius: 28,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Row(
-                  children: [
-                    IconButton(
-                      tooltip: 'Mi piace',
-                      onPressed: () => like(c, p),
-                      icon: GIcon(
-                        liked
-                            ? CupertinoIcons.heart_fill
-                            : CupertinoIcons.heart,
-                        color: liked ? danger : foreground(c),
-                        size: 27,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Commenti',
-                      onPressed: () => comments(c, widget.id),
-                      icon: const GIcon(CupertinoIcons.chat_bubble, size: 25),
-                    ),
-                    if (p.str('kind') != 'story' &&
-                        !s.user(p.str('author')).flag('private') &&
-                        p.str('audience') != 'close')
-                      IconButton(
-                        tooltip: p.ids('reposts').contains(s.myId)
-                            ? 'Annulla ripubblicazione'
-                            : 'Ripubblica',
-                        onPressed: () => perform(
-                          c,
-                          () => s.act('repost', {
-                            'id': p['id'],
-                            'enabled': !p.ids('reposts').contains(s.myId),
-                          }),
-                        ),
-                        icon: GIcon(
-                          CupertinoIcons.repeat,
-                          color: p.ids('reposts').contains(s.myId)
-                              ? Colors.green
-                              : foreground(c),
-                          size: 25,
-                        ),
-                      ),
-                    IconButton(
-                      tooltip: 'Condividi',
-                      onPressed: () => sharePost(c, p),
-                      icon: const GIcon(CupertinoIcons.paperplane, size: 25),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      tooltip: 'Salva',
-                      onPressed: () => perform(
-                        c,
-                        () => s.act('save', {
-                          'id': widget.id,
-                          'enabled': !p.flag('saved'),
-                        }),
-                      ),
-                      icon: GIcon(
-                        p.flag('saved')
-                            ? CupertinoIcons.bookmark_fill
-                            : CupertinoIcons.bookmark,
-                        size: 25,
-                        color: p.flag('saved') ? accent(c) : foreground(c),
-                      ),
-                    ),
-                  ],
-                ),
-                if (media.length > 1)
-                  IgnorePointer(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: List.generate(
-                        media.length,
-                        (i) => Container(
-                          width: 4.5,
-                          height: 4.5,
-                          margin: const EdgeInsets.all(2),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: i == page ? auraBlue : line,
-                          ),
-                        ),
-                      ),
+          if (media.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(top: 7),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(
+                  media.length,
+                  (i) => Container(
+                    width: i == page ? 6 : 5,
+                    height: i == page ? 6 : 5,
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: i == page
+                          ? accent(c)
+                          : secondaryText(c).withValues(alpha: .35),
                     ),
                   ),
+                ),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 3, 9, 3),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: _PostAction(
+                          label: 'Mi piace',
+                          icon: liked
+                              ? CupertinoIcons.heart_fill
+                              : CupertinoIcons.heart,
+                          color: liked ? danger : foreground(c),
+                          count: p.flag('hideLikes')
+                              ? null
+                              : p.ids('likes').length,
+                          onTap: () => like(c, p),
+                        ),
+                      ),
+                      Flexible(
+                        child: _PostAction(
+                          label: 'Commenti',
+                          icon: CupertinoIcons.chat_bubble,
+                          count: p.rows('comments').length,
+                          onTap: () => comments(c, widget.id),
+                        ),
+                      ),
+                      if (p.str('kind') != 'story' &&
+                          !s.user(p.str('author')).flag('private') &&
+                          p.str('audience') != 'close')
+                        Flexible(
+                          child: _PostAction(
+                            label: p.ids('reposts').contains(s.myId)
+                                ? 'Annulla ripubblicazione'
+                                : 'Ripubblica',
+                            icon: CupertinoIcons.repeat,
+                            color: p.ids('reposts').contains(s.myId)
+                                ? Colors.green
+                                : foreground(c),
+                            count: p.ids('reposts').length,
+                            onTap: () => perform(
+                              c,
+                              () => s.act('repost', {
+                                'id': p['id'],
+                                'enabled': !p.ids('reposts').contains(s.myId),
+                              }),
+                            ),
+                          ),
+                        ),
+                      Flexible(
+                        child: _PostAction(
+                          label: 'Condividi',
+                          icon: CupertinoIcons.paperplane,
+                          count: p.number('shareCount').toInt(),
+                          onTap: () => sharePost(c, p),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Salva',
+                  onPressed: () => perform(
+                    c,
+                    () => s.act('save', {
+                      'id': widget.id,
+                      'enabled': !p.flag('saved'),
+                    }),
+                  ),
+                  icon: GIcon(
+                    p.flag('saved')
+                        ? CupertinoIcons.bookmark_fill
+                        : CupertinoIcons.bookmark,
+                    size: 23,
+                    color: p.flag('saved') ? accent(c) : foreground(c),
+                  ),
+                ),
               ],
             ),
           ),
@@ -956,31 +1015,54 @@ class _PostCardState extends State<PostCard>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Wrap(
-                  spacing: 14,
-                  runSpacing: 2,
-                  children: [
-                    if (!p.flag('hideLikes'))
-                      _PostCount(
-                        label: '${p.ids('likes').length} Mi piace',
-                        onTap: () => people(c, p.ids('likes'), 'Mi piace'),
-                      ),
-                    _PostCount(
-                      label:
-                          '${p.rows('comments').length} '
-                          '${p.rows('comments').length == 1 ? 'commento' : 'commenti'}',
-                      onTap: p.flag('commentsOff')
-                          ? null
-                          : () => comments(c, widget.id),
+                if (!p.flag('hideLikes') && visibleLikers.isNotEmpty)
+                  InkWell(
+                    onTap: () => people(c, p.ids('likes'), 'Mi piace'),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 20 + (visibleLikers.length - 1) * 14.0,
+                          height: 22,
+                          child: Stack(
+                            children: [
+                              for (
+                                var i = visibleLikers.length - 1;
+                                i >= 0;
+                                i--
+                              )
+                                Positioned(
+                                  left: i * 14.0,
+                                  child: Avatar(visibleLikers[i], size: 20),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 7),
+                        Flexible(
+                          child: Text.rich(
+                            TextSpan(
+                              text: 'Piace a ',
+                              children: [
+                                TextSpan(
+                                  text: s
+                                      .user(visibleLikers.first)
+                                      .str('username'),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                if (p.ids('likes').length > 1)
+                                  const TextSpan(text: ' e altri'),
+                              ],
+                            ),
+                            style: const TextStyle(fontSize: 12.5),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
-                    _PostCount(
-                      label:
-                          '${p.number('shareCount').toInt()} '
-                          '${p.number('shareCount') == 1 ? 'condivisione' : 'condivisioni'}',
-                      onTap: () => sharePost(c, p),
-                    ),
-                  ],
-                ),
+                  ),
                 if (p.str('text').isNotEmpty) ...[
                   const SizedBox(height: 6),
                   Text.rich(
@@ -1004,6 +1086,13 @@ class _PostCardState extends State<PostCard>
                       'Aggiungi un commento…',
                       style: TextStyle(fontSize: 12.5, color: secondaryText(c)),
                     ),
+                  ),
+                ],
+                if (p.number('created') > 0) ...[
+                  const SizedBox(height: 5),
+                  Text(
+                    relative(p['created']),
+                    style: TextStyle(fontSize: 11, color: secondaryText(c)),
                   ),
                 ],
                 if (p.str('location').isNotEmpty) ...[

@@ -683,31 +683,8 @@ class _StoryViewerState extends State<StoryViewer>
                         onChanged: (_) => setState(() {}),
                         minLines: 1,
                         maxLines: 3,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Invia messaggio…',
-                          filled: true,
-                          fillColor: const Color(0xff242424),
-                          hintStyle: const TextStyle(
-                            color: Color(0xffcccccc),
-                            fontSize: 14,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 17,
-                            vertical: 13,
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(29),
-                            borderSide: const BorderSide(color: Colors.white38),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(29),
-                            borderSide: const BorderSide(color: Colors.white60),
-                          ),
-                        ),
+                        style: TextStyle(color: foreground(c), fontSize: 15),
+                        decoration: mediaInputDecoration(c, 'Invia messaggio…'),
                       ),
                     ),
                     if (focus.hasFocus || recording)
@@ -1483,15 +1460,10 @@ class _ComposerState extends State<Composer> {
                     onChanged: (_) => setState(() {}),
                     maxLines: 2,
                     minLines: 1,
-                    style: const TextStyle(color: Colors.white, fontSize: 13),
-                    decoration: const InputDecoration(
-                      hintText: 'Aggiungi una didascalia…',
-                      hintStyle: TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      border: InputBorder.none,
+                    style: TextStyle(color: foreground(c), fontSize: 13),
+                    decoration: mediaInputDecoration(
+                      c,
+                      'Aggiungi una didascalia…',
                     ),
                   ),
                 ),

@@ -1,4 +1,4 @@
-# GPIX Aura Glass · 2.24.0 build 62
+# GPIX Aura Glass · 2.24.0 build 63
 
 Progetto Flutter di GPIX per iOS e Android. Include il codice Dart, gli asset, i progetti nativi e i test.
 
@@ -42,7 +42,7 @@ Su una macchina configurata con Android SDK, esegui `bash build-android.sh` dall
 
 ## iOS e Xcode Cloud
 
-Apri `GPIX.xcworkspace` e seleziona lo schema Runner. Usa il Team e il bundle ID esistenti. Per Xcode Cloud, aggiorna il repository con il contenuto della cartella GPIX e mantieni i punti di ingresso `ci_scripts` e `ios/ci_scripts`. Il bootstrap prepara Flutter 3.38.9 e CocoaPods. Per TestFlight, usa 62 come prossimo numero di build Cloud, oppure un numero superiore se 62 è già stato caricato su App Store Connect. Per la build locale serve macOS con Xcode e CocoaPods.
+Apri `GPIX.xcworkspace` e seleziona lo schema Runner. Usa il Team e il bundle ID esistenti. Per Xcode Cloud, aggiorna il repository con il contenuto della cartella GPIX e mantieni i punti di ingresso `ci_scripts` e `ios/ci_scripts`. Il bootstrap prepara Flutter 3.38.9 e CocoaPods. Per TestFlight, usa 63 come prossimo numero di build Cloud, oppure un numero superiore se 63 è già stato caricato su App Store Connect. Per la build locale serve macOS con Xcode e CocoaPods.
 
 ### File Firebase richiesto in Xcode Cloud
 
@@ -56,3 +56,7 @@ Il JSON privato del service account e la chiave APNs .p8 restano separati.
 La build 62 richiede esplicitamente il token APNs su iOS e mostra gli errori
 restituiti da Apple. Nel feed mostra Mi piace, commenti e condivisioni nelle
 chat GPIX. Per il conteggio delle condivisioni installa il backend 2.24.5.
+
+La build 63 mette i contatori accanto alle icone nel feed e aggiorna i
+campi di didascalia, risposta alle storie e commento live nei temi chiaro
+e scuro. Il conteggio delle condivisioni usa il backend 2.24.5.
