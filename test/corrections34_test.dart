@@ -203,9 +203,18 @@ void main() {
         expect(find.text('demix.87'), findsOneWidget);
         await shot('profile');
         await mount(const SocialLinkEditor());
+        await t.tap(find.byKey(const ValueKey('social-platform-picker')));
+        await t.pumpAndSettle();
         await t.tap(find.text('WhatsApp'));
         await t.pumpAndSettle();
         expect(find.text('Numero WhatsApp'), findsOneWidget);
+        await t.enterText(
+          find.byKey(const ValueKey('social-handle')),
+          '+39 333 1234567',
+        );
+        await t.pumpAndSettle();
+        expect(find.text('Anteprima sul profilo'), findsOneWidget);
+        expect(find.text('+393331234567'), findsOneWidget);
         await shot('social-editor');
         await t.pumpWidget(const SizedBox());
         s.dispose();

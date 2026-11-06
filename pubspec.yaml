@@ -1,7 +1,7 @@
 name: gpix
 description: GPIX social beta per la community LGBTQ+.
 publish_to: none
-version: 2.24.0+54
+version: 2.24.0+55
 environment:
   sdk: '>=3.9.0 <4.0.0'
 dependencies:

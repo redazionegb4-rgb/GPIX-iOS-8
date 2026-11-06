@@ -2465,52 +2465,54 @@ class _ProfileState extends State<Profile> {
                                       fontSize: 12,
                                     ),
                                   ),
-                                if (u.str('bio').isNotEmpty) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    u.str('bio').replaceAll(r'\n', '\n'),
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      height: 1.35,
+                                const SizedBox(height: 9),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    stat(
+                                      u.str(
+                                        'postCount',
+                                        '${s.allPosts.where((p) => p.str('author') == widget.user && p.str('kind') != 'story' && !p.flag('archived')).length}',
+                                      ),
+                                      'post',
+                                      null,
                                     ),
-                                  ),
-                                ],
+                                    stat(
+                                      u.str('followers', '0'),
+                                      'follower',
+                                      () => open(
+                                        c,
+                                        Connections(
+                                          user: widget.user,
+                                          initial: 0,
+                                        ),
+                                      ),
+                                    ),
+                                    stat(
+                                      u.str('following', '0'),
+                                      'seguiti',
+                                      () => open(
+                                        c,
+                                        Connections(
+                                          user: widget.user,
+                                          initial: 1,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ],
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 11,
-                        runSpacing: 3,
-                        children: [
-                          stat(
-                            u.str(
-                              'postCount',
-                              '${s.allPosts.where((p) => p.str('author') == widget.user && p.str('kind') != 'story' && !p.flag('archived')).length}',
-                            ),
-                            'post',
-                            null,
-                          ),
-                          stat(
-                            u.str('followers', '0'),
-                            'follower',
-                            () => open(
-                              c,
-                              Connections(user: widget.user, initial: 0),
-                            ),
-                          ),
-                          stat(
-                            u.str('following', '0'),
-                            'seguiti',
-                            () => open(
-                              c,
-                              Connections(user: widget.user, initial: 1),
-                            ),
-                          ),
-                        ],
-                      ),
+                      if (u.str('bio').isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          u.str('bio').replaceAll(r'\n', '\n'),
+                          style: const TextStyle(fontSize: 13, height: 1.35),
+                        ),
+                      ],
                       const SizedBox(height: 10),
                       ProfileLinkChips(links: u.rows('links'), own: own),
                       const SizedBox(height: 16),
@@ -2988,24 +2990,34 @@ class _ProfileState extends State<Profile> {
     );
   }
 
-  Widget stat(String value, String label, VoidCallback? tap) => InkWell(
-    onTap: tap,
-    child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Text.rich(
-        TextSpan(
-          style: const TextStyle(fontSize: 13),
+  Widget stat(String value, String label, VoidCallback? tap) => Expanded(
+    child: InkWell(
+      onTap: tap,
+      borderRadius: BorderRadius.circular(8),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 44),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            TextSpan(
-              text: value,
-              style: const TextStyle(fontWeight: FontWeight.w800),
+            Text(
+              value,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
             ),
-            TextSpan(text: ' $label'),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
       ),
     ),
   );
+
   Widget smallButton(String text, VoidCallback tap, {bool primary = false}) =>
       ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 40),
