@@ -17,6 +17,7 @@ import 'package:path_provider/path_provider.dart';
 import '../core/data.dart';
 import '../core/store.dart';
 import '../ui/kit.dart';
+import '../ui/creation.dart';
 
 Future<String> renderPostPhoto(J args) async {
   var img = im.decodeImage(await processPhoto(args))!;
@@ -299,7 +300,7 @@ class _PostComposerState extends State<PostComposer> {
   final copied = <String, String>{};
   final tagged = <String>{};
   final photos = PageController(keepPage: false);
-  final publishPhotos = PageController(viewportFraction: .76, keepPage: false);
+  final publishPhotos = PageController(viewportFraction: .93, keepPage: false);
 
   void goToStep(int value) {
     setState(() => step = value);
@@ -358,6 +359,7 @@ class _PostComposerState extends State<PostComposer> {
     draftTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (mounted) saveDraft();
     });
+    if (d == null && files.isNotEmpty) originalRatio(files.first);
     loadGallery();
   }
 
@@ -538,10 +540,15 @@ class _PostComposerState extends State<PostComposer> {
 
   static const blue = auraBlue;
   Widget preview({bool finalStep = false}) {
-    if (files.isEmpty)
-      return const Center(
-        child: GIcon(CupertinoIcons.photo, color: Colors.white38, size: 45),
+    if (files.isEmpty) {
+      return CreationEmpty(
+        icon: CupertinoIcons.photo_on_rectangle,
+        title: 'Il tuo prossimo post',
+        description: 'Scegli una foto oppure scattane una nuova.',
+        action: 'Scegli foto',
+        onPressed: busy ? null : pick,
       );
+    }
     return PageView.builder(
       key: ValueKey(files.join('|')),
       controller: finalStep && files.length > 1 ? publishPhotos : photos,
@@ -684,17 +691,19 @@ class _PostComposerState extends State<PostComposer> {
   }
 
   Widget circle(IconData icon, VoidCallback action, {String? label}) =>
-      IconButton(
-        tooltip: label,
+      MediaToolButton(
+        icon: icon,
+        label: label ?? 'Modifica foto',
         onPressed: action,
-        icon: GIcon(icon, color: Colors.white, size: 22),
       );
   @override
   Widget build(BuildContext c) {
     return Scaffold(
+      backgroundColor: Theme.of(c).canvasColor,
       appBar: AppBar(
         foregroundColor: foreground(c),
         centerTitle: true,
+        leadingWidth: 48,
         leading: IconButton(
           tooltip: step == 0 ? 'Annulla' : 'Indietro',
           onPressed: busy
@@ -727,11 +736,6 @@ class _PostComposerState extends State<PostComposer> {
               ),
               label: Text('Bozza', style: TextStyle(color: foreground(c))),
             ),
-          if (step == 2)
-            TextButton(
-              onPressed: busy ? null : publish,
-              child: const Text('Pubblica'),
-            ),
           if (step == 0)
             Padding(
               padding: const EdgeInsets.only(right: 12),
@@ -741,10 +745,7 @@ class _PostComposerState extends State<PostComposer> {
                     : () {
                         goToStep(1);
                       },
-                style: TextButton.styleFrom(
-                  backgroundColor: subdued(c),
-                  foregroundColor: accent(c),
-                ),
+                style: TextButton.styleFrom(foregroundColor: accent(c)),
                 child: const Text(
                   'Avanti',
                   style: TextStyle(fontWeight: FontWeight.w700),
@@ -757,10 +758,22 @@ class _PostComposerState extends State<PostComposer> {
           ? SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-                child: PrimaryButton(
-                  'Pubblica post',
-                  busy: busy,
-                  onTap: publish,
+                child: FilledButton(
+                  onPressed: busy ? null : publish,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: auraBlue,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                  ),
+                  child: busy
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Condividi'),
                 ),
               ),
             )
@@ -798,20 +811,23 @@ class _PostComposerState extends State<PostComposer> {
             box.maxHeight * .56,
             MediaQuery.sizeOf(c).width * 1.1,
           ),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              preview(),
-              Positioned(
-                left: 12,
-                bottom: 12,
-                child: circle(
-                  CupertinoIcons.arrow_up_left_arrow_down_right,
-                  () => setState(() => aspect = aspect == 1 ? .8 : 1),
-                  label: 'Proporzioni',
+          child: ColoredBox(
+            color: Theme.of(c).colorScheme.surfaceContainerLow,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                preview(),
+                Positioned(
+                  left: 12,
+                  bottom: 12,
+                  child: circle(
+                    CupertinoIcons.arrow_up_left_arrow_down_right,
+                    () => setState(() => aspect = aspect == 1 ? .8 : 1),
+                    label: 'Proporzioni',
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         Padding(
@@ -1103,8 +1119,8 @@ class _PostComposerState extends State<PostComposer> {
                           shape: BoxShape.circle,
                           border: Border.all(
                             color: textColor == color
-                                ? Colors.white
-                                : Colors.white24,
+                                ? accent(c)
+                                : Theme.of(c).dividerColor,
                             width: textColor == color ? 3 : 1,
                           ),
                         ),
@@ -1162,19 +1178,17 @@ class _PostComposerState extends State<PostComposer> {
         ),
       ),
       Expanded(
-        child: Center(
-          child: AspectRatio(
-            aspectRatio: aspect,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: preview(),
-            ),
+        child: ColoredBox(
+          color: Theme.of(c).colorScheme.surfaceContainerLow,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 5),
+            child: preview(),
           ),
         ),
       ),
       const SizedBox(height: 14),
       SizedBox(
-        height: 93,
+        height: 92,
         child: ListView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1246,7 +1260,7 @@ class _PostComposerState extends State<PostComposer> {
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
                                   color: index == i
-                                      ? Colors.white
+                                      ? auraBlue
                                       : Colors.transparent,
                                   width: 2,
                                 ),
@@ -1294,8 +1308,8 @@ class _PostComposerState extends State<PostComposer> {
       onTap: action,
       borderRadius: BorderRadius.circular(15),
       child: Container(
-        width: 74,
-        padding: const EdgeInsets.all(10),
+        width: 82,
+        padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: subdued(context),
           borderRadius: BorderRadius.circular(15),
@@ -1303,7 +1317,7 @@ class _PostComposerState extends State<PostComposer> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            GIcon(icon, color: accent(context), size: 25),
+            GIcon(icon, color: foreground(context), size: 25),
             const SizedBox(height: 8),
             Text(
               title,
@@ -1584,15 +1598,40 @@ class _PostComposerState extends State<PostComposer> {
     ),
   );
   Widget share(BuildContext c) {
-    final store = GpixScope.of(c);
     return ListView(
       padding: const EdgeInsets.only(bottom: 16),
       children: [
         const SizedBox(height: 12),
-        LayoutBuilder(
-          builder: (c, box) => SizedBox(
-            height: math.min(box.maxWidth * .82, 330),
-            child: preview(finalStep: true),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: LayoutBuilder(
+              builder: (c, box) => SizedBox(
+                height: (box.maxWidth / aspect).clamp(
+                  180.0,
+                  MediaQuery.sizeOf(c).height * .46,
+                ),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ColoredBox(
+                      color: Theme.of(c).colorScheme.surfaceContainerLow,
+                      child: preview(finalStep: true),
+                    ),
+                    Positioned(
+                      top: 10,
+                      left: 10,
+                      child: MediaToolButton(
+                        icon: CupertinoIcons.pencil,
+                        label: 'Modifica foto',
+                        onPressed: busy ? null : () => goToStep(1),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
         if (files.length > 1)
@@ -1616,60 +1655,22 @@ class _PostComposerState extends State<PostComposer> {
           ),
         Container(
           margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-          padding: const EdgeInsets.fromLTRB(10, 6, 10, 5),
-          decoration: BoxDecoration(
-            border: Border.all(color: Theme.of(c).dividerColor),
-            borderRadius: BorderRadius.circular(14),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(color: Theme.of(c).canvasColor),
+          child: TextField(
+            controller: caption,
+            maxLength: 2200,
+            minLines: 2,
+            maxLines: 5,
+            decoration: const InputDecoration(
+              hintText: 'Scrivi una didascalia…',
+              filled: false,
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              contentPadding: EdgeInsets.symmetric(vertical: 8),
+            ),
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 7),
-                child: Avatar(store.myId, size: 34),
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: TextField(
-                  controller: caption,
-                  maxLength: 2200,
-                  minLines: 1,
-                  maxLines: 4,
-                  decoration: const InputDecoration(
-                    hintText: 'Scrivi una didascalia…',
-                    filled: false,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(vertical: 10),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        row(
-          c,
-          CupertinoIcons.person_crop_rectangle,
-          'Tagga persone',
-          tagged.isEmpty ? null : '${tagged.length} persone',
-          () => tagPeople(c),
-        ),
-        row(
-          c,
-          CupertinoIcons.placemark,
-          'Aggiungi luogo',
-          location.text.isEmpty ? null : location.text,
-          () async {
-            final value = await textDialog(c, 'Aggiungi luogo', location.text);
-            if (value != null && mounted) setState(() => location.text = value);
-          },
-        ),
-        row(
-          c,
-          CupertinoIcons.music_note_2,
-          'Aggiungi musica',
-          audioName.isEmpty ? null : audioName,
-          chooseAudio,
         ),
         row(
           c,
@@ -1692,64 +1693,101 @@ class _PostComposerState extends State<PostComposer> {
             ),
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Wrap(
-            spacing: 10,
-            children: [
-              ActionChip(
-                avatar: const GIcon(CupertinoIcons.list_bullet, size: 18),
-                label: Text(poll == null ? 'Sondaggio' : 'Sondaggio aggiunto'),
-                onPressed: () async {
-                  final value = await showDialog<J>(
-                    context: c,
-                    builder: (_) => PollEditor(initial: poll),
-                  );
-                  if (value != null && mounted)
-                    setState(() => poll = value.isEmpty ? null : value);
-                },
-              ),
-              ActionChip(
-                avatar: const GIcon(CupertinoIcons.chat_bubble, size: 18),
-                label: Text(topic.isEmpty ? 'Tema' : topic),
-                onPressed: () async {
-                  final value = await textDialog(c, 'Tema del post', topic);
-                  if (value != null && mounted)
-                    setState(() => topic = value.trim());
-                },
-              ),
-            ],
-          ),
+        row(
+          c,
+          CupertinoIcons.placemark,
+          'Aggiungi luogo',
+          location.text.isEmpty ? null : location.text,
+          () async {
+            final value = await textDialog(c, 'Aggiungi luogo', location.text);
+            if (value != null && mounted) setState(() => location.text = value);
+          },
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          child: Wrap(
-            spacing: 7,
-            children: [
-              for (final place in ['Roma', 'Milano', 'Reggio di Calabria'])
-                ActionChip(
-                  label: Text(place),
-                  onPressed: () => setState(() => location.text = place),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-        const Divider(thickness: 6, height: 18),
-        SwitchListTile.adaptive(
-          secondary: const GIcon(CupertinoIcons.sparkles),
+        ExpansionTile(
           title: const Text(
-            'Aggiungi etichetta IA',
-            style: TextStyle(fontSize: 15),
+            'Personalizza post',
+            style: TextStyle(fontSize: 14),
           ),
-          subtitle: const Text(
-            'Segnala contenuti realistici creati o modificati con l’IA.',
-            style: TextStyle(fontSize: 12, color: muted),
-          ),
-          value: aiLabel,
-          onChanged: (value) => setState(() => aiLabel = value),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+          shape: const Border(),
+          collapsedShape: const Border(),
+          children: [
+            row(
+              c,
+              CupertinoIcons.person_crop_rectangle,
+              'Tagga persone',
+              tagged.isEmpty ? null : '${tagged.length} persone',
+              () => tagPeople(c),
+            ),
+            row(
+              c,
+              CupertinoIcons.music_note_2,
+              'Aggiungi musica',
+              audioName.isEmpty ? null : audioName,
+              chooseAudio,
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Wrap(
+                spacing: 10,
+                children: [
+                  ActionChip(
+                    avatar: const GIcon(CupertinoIcons.list_bullet, size: 18),
+                    label: Text(
+                      poll == null ? 'Sondaggio' : 'Sondaggio aggiunto',
+                    ),
+                    onPressed: () async {
+                      final value = await sheet<J>(
+                        c,
+                        PollEditor(initial: poll),
+                      );
+                      if (value != null && mounted)
+                        setState(() => poll = value.isEmpty ? null : value);
+                    },
+                  ),
+                  ActionChip(
+                    avatar: const GIcon(CupertinoIcons.chat_bubble, size: 18),
+                    label: Text(topic.isEmpty ? 'Tema' : topic),
+                    onPressed: () async {
+                      final value = await textDialog(c, 'Tema del post', topic);
+                      if (value != null && mounted)
+                        setState(() => topic = value.trim());
+                    },
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              child: Wrap(
+                spacing: 7,
+                children: [
+                  for (final place in ['Roma', 'Milano', 'Reggio di Calabria'])
+                    ActionChip(
+                      label: Text(place),
+                      onPressed: () => setState(() => location.text = place),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Divider(height: 18),
+            SwitchListTile.adaptive(
+              secondary: const GIcon(CupertinoIcons.sparkles),
+              title: const Text(
+                'Aggiungi etichetta IA',
+                style: TextStyle(fontSize: 15),
+              ),
+              subtitle: const Text(
+                'Segnala contenuti realistici creati o modificati con l’IA.',
+                style: TextStyle(fontSize: 12, color: muted),
+              ),
+              value: aiLabel,
+              onChanged: (value) => setState(() => aiLabel = value),
+            ),
+            const Divider(height: 18),
+          ],
         ),
-        const Divider(thickness: 6, height: 18),
         row(
           c,
           CupertinoIcons.ellipsis,
@@ -1848,6 +1886,7 @@ class PollEditor extends StatefulWidget {
 }
 
 class _PollEditorState extends State<PollEditor> {
+  String error = '';
   late final question = TextEditingController(
     text: widget.initial?.str('question') ?? '',
   );
@@ -1868,52 +1907,111 @@ class _PollEditorState extends State<PollEditor> {
   }
 
   @override
-  Widget build(BuildContext c) => AlertDialog(
-    title: const Text('Sondaggio'),
-    content: SingleChildScrollView(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: question,
-            maxLength: 120,
-            decoration: const InputDecoration(labelText: 'Domanda'),
-          ),
-          TextField(
-            controller: a,
-            maxLength: 60,
-            decoration: const InputDecoration(labelText: 'Opzione 1'),
-          ),
-          TextField(
-            controller: b,
-            maxLength: 60,
-            decoration: const InputDecoration(labelText: 'Opzione 2'),
-          ),
-        ],
-      ),
-    ),
-    actions: [
-      if (widget.initial != null)
-        TextButton(
-          onPressed: () => Navigator.pop(c, <String, dynamic>{}),
-          child: const Text('Rimuovi'),
+  Widget build(BuildContext c) => Padding(
+    padding: const EdgeInsets.fromLTRB(22, 4, 22, 22),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: auraBlue.withValues(alpha: .1),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: GIcon(CupertinoIcons.chart_bar, color: accent(c)),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Sondaggio',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Chiudi sondaggio',
+              onPressed: () => Navigator.pop(c),
+              icon: const GIcon(CupertinoIcons.xmark, size: 19),
+            ),
+          ],
         ),
-      TextButton(
-        onPressed: () => Navigator.pop(c),
-        child: const Text('Annulla'),
-      ),
-      FilledButton(
-        onPressed: () {
-          if (question.text.trim().isNotEmpty &&
-              a.text.trim().isNotEmpty &&
-              b.text.trim().isNotEmpty)
-            Navigator.pop(c, {
-              'question': question.text.trim(),
-              'options': [a.text.trim(), b.text.trim()],
-            });
-        },
-        child: const Text('Aggiungi'),
-      ),
-    ],
+        const SizedBox(height: 10),
+        Text(
+          'Una domanda, due possibilità. Coinvolgi chi ti segue.',
+          style: TextStyle(color: secondaryText(c), height: 1.4),
+        ),
+        const SizedBox(height: 20),
+        TextField(
+          controller: question,
+          maxLength: 120,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Domanda',
+            hintText: 'Cosa vuoi chiedere?',
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: a,
+          maxLength: 60,
+          decoration: const InputDecoration(
+            labelText: 'Opzione 1',
+            prefixIcon: GIcon(CupertinoIcons.circle, size: 18),
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: b,
+          maxLength: 60,
+          decoration: const InputDecoration(
+            labelText: 'Opzione 2',
+            prefixIcon: GIcon(CupertinoIcons.circle, size: 18),
+          ),
+        ),
+        if (error.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(error, style: const TextStyle(color: danger)),
+          ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            if (widget.initial != null)
+              TextButton(
+                onPressed: () => Navigator.pop(c, <String, dynamic>{}),
+                child: const Text('Rimuovi'),
+              ),
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => Navigator.pop(c),
+                child: const Text('Annulla'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton(
+                onPressed: () {
+                  if (question.text.trim().isEmpty ||
+                      a.text.trim().isEmpty ||
+                      b.text.trim().isEmpty) {
+                    setState(
+                      () => error = 'Completa la domanda e le due opzioni.',
+                    );
+                    return;
+                  }
+                  Navigator.pop(c, {
+                    'question': question.text.trim(),
+                    'options': [a.text.trim(), b.text.trim()],
+                  });
+                },
+                child: const Text('Aggiungi'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
   );
 }

@@ -73,6 +73,8 @@ void main() {
       );
       await t.pumpAndSettle();
       expect(find.text('1'), findsOneWidget);
+      await t.ensureVisible(find.text('1'));
+      await t.pumpAndSettle();
       await t.tap(find.text('1'));
       await t.pumpAndSettle();
       expect(find.text('1 visualizzazione'), findsOneWidget);

@@ -31,6 +31,7 @@ class Inbox extends StatefulWidget {
 class _InboxState extends State<Inbox> {
   String query = '';
   bool unreadOnly = false;
+  bool groupsOnly = false;
   @override
   Widget build(BuildContext c) {
     final s = GpixScope.of(c),
@@ -40,33 +41,21 @@ class _InboxState extends State<Inbox> {
                   ('${s.threadName(t)} ${inboxPreview(s, t)}')
                       .toLowerCase()
                       .contains(query.toLowerCase()) &&
-                  (!unreadOnly || s.chatHasUnread(t)),
+                  (!unreadOnly || s.chatHasUnread(t)) &&
+                  (!groupsOnly || t.str('owner').isNotEmpty),
             )
             .toList();
     return Scaffold(
       appBar: AppBar(
-        centerTitle: true,
+        centerTitle: false,
         automaticallyImplyLeading: true,
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(
-              child: Text(
-                s.me.str('username'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 25,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            if (s.requestedThreads.isNotEmpty)
-              const Padding(
-                padding: EdgeInsets.only(left: 7),
-                child: Icon(CupertinoIcons.circle_fill, size: 7, color: danger),
-              ),
-          ],
+        title: const Text(
+          'Messaggi',
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -.8,
+          ),
         ),
         actions: [
           if (s.preferences.flag('hideInstantBubble'))
@@ -92,19 +81,47 @@ class _InboxState extends State<Inbox> {
                 child: TextField(
                   onChanged: (v) => setState(() => query = v),
                   decoration: InputDecoration(
-                    hintText: 'Cerca persone e messaggi',
+                    hintText: 'Cerca messaggi…',
                     prefixIcon: const GIcon(CupertinoIcons.search, size: 19),
                     filled: true,
                     fillColor: subdued(c),
                     isDense: true,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(28),
+                      borderRadius: BorderRadius.circular(18),
                       borderSide: BorderSide.none,
                     ),
                   ),
                 ),
               ),
               const NotesTray(),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final value in ['Tutti', 'Da leggere', 'Gruppi'])
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            label: Text(value),
+                            selected:
+                                value ==
+                                (groupsOnly
+                                    ? 'Gruppi'
+                                    : unreadOnly
+                                    ? 'Da leggere'
+                                    : 'Tutti'),
+                            onSelected: (_) => setState(() {
+                              groupsOnly = value == 'Gruppi';
+                              unreadOnly = value == 'Da leggere';
+                            }),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
                 child: Row(
@@ -137,84 +154,119 @@ class _InboxState extends State<Inbox> {
                   'Inizia a scrivere a qualcuno della community.',
                 ),
               for (final t in threads)
-                AuraPanel(
-                  margin: const EdgeInsets.fromLTRB(12, 3, 12, 7),
-                  child: InkWell(
-                    onTap: () => open(c, Chat(id: t.str('id'))),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 13,
-                      ),
-                      child: Row(
-                        children: [
-                          if (t.str('owner').isNotEmpty)
-                            groupAvatar()
-                          else
-                            GestureDetector(
-                              onTap: () => s.stories(s.other(t)).isNotEmpty
-                                  ? open(c, StoryViewer(user: s.other(t)))
-                                  : open(c, Profile(user: s.other(t))),
-                              child: ChatPresenceAvatar(
-                                s.other(t),
-                                size: 64,
-                                ring: s.hasUnseenStories(s.other(t)),
-                              ),
-                            ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  s.threadName(t),
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: s.chatHasUnread(t)
-                                        ? FontWeight.w700
-                                        : FontWeight.w500,
+                Container(
+                  margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                  decoration: BoxDecoration(
+                    color: s.chatHasUnread(t)
+                        ? auraBlue.withValues(alpha: .065)
+                        : subdued(c).withValues(alpha: .55),
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  child: Column(
+                    children: [
+                      InkWell(
+                        onTap: () => open(c, Chat(id: t.str('id'))),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 15,
+                          ),
+                          child: Row(
+                            children: [
+                              if (t.str('owner').isNotEmpty)
+                                groupAvatar()
+                              else
+                                GestureDetector(
+                                  onTap: () => s.stories(s.other(t)).isNotEmpty
+                                      ? open(c, StoryViewer(user: s.other(t)))
+                                      : open(c, Profile(user: s.other(t))),
+                                  child: ChatPresenceAvatar(
+                                    s.other(t),
+                                    size: 56,
+                                    ring: s.hasUnseenStories(s.other(t)),
                                   ),
                                 ),
-                                const SizedBox(height: 6),
-                                if (s.typingPeers(t.str('id')).isNotEmpty)
-                                  ConversationActivity(thread: t)
-                                else
-                                  Text(
-                                    inboxPreview(s, t),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: s.chatHasUnread(t)
-                                          ? foreground(c)
-                                          : muted,
-                                      fontWeight: s.chatHasUnread(t)
-                                          ? FontWeight.w600
-                                          : FontWeight.w400,
-                                      fontSize: 13,
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      s.threadName(t),
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: s.chatHasUnread(t)
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                      ),
                                     ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          if (s.chatHasUnread(t))
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: const BoxDecoration(
-                                color: auraBlue,
-                                shape: BoxShape.circle,
+                                    const SizedBox(height: 6),
+                                    if (s.typingPeers(t.str('id')).isNotEmpty)
+                                      ConversationActivity(thread: t)
+                                    else
+                                      Text(
+                                        inboxPreview(s, t),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: s.chatHasUnread(t)
+                                              ? foreground(c)
+                                              : muted,
+                                          fontWeight: s.chatHasUnread(t)
+                                              ? FontWeight.w600
+                                              : FontWeight.w400,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               ),
-                            ),
-                        ],
+                              const SizedBox(width: 12),
+                              Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  if (t.rows('messages').isNotEmpty)
+                                    Text(
+                                      relative(
+                                        t.rows('messages').last['created'],
+                                      ),
+                                      style: TextStyle(
+                                        color: secondaryText(c),
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  const SizedBox(height: 9),
+                                  if (s.chatHasUnread(t))
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: const BoxDecoration(
+                                        color: auraBlue,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
             ],
           ),
           if (!s.preferences.flag('hideInstantBubble'))
-            const Positioned(right: 10, bottom: 110, child: InstantPile()),
+            const Positioned(
+              right: -14,
+              bottom: 12,
+              child: SafeArea(
+                top: false,
+                left: false,
+                child: InstantPile(docked: true),
+              ),
+            ),
         ],
       ),
     );
@@ -544,7 +596,7 @@ Widget groupAvatar() => Container(
   height: 54,
   decoration: const BoxDecoration(
     shape: BoxShape.circle,
-    color: Color(0xffeee8fd),
+    color: Color(0xffe8f1ff),
   ),
   child: const GIcon(CupertinoIcons.person_2_fill, color: auraBlue, size: 25),
 );
@@ -1650,14 +1702,6 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
                                   : own
                                   ? auraBlue
                                   : subdued(c),
-                              gradient:
-                                  own &&
-                                      m.str('kind') != 'sticker' &&
-                                      !emojiOnly
-                                  ? auraAction
-                                  : m.str('kind') == 'sticker' || emojiOnly
-                                  ? null
-                                  : crystalGradient(c),
                               borderRadius: BorderRadius.only(
                                 topLeft: const Radius.circular(20),
                                 topRight: const Radius.circular(20),

@@ -187,304 +187,443 @@ class _WelcomeState extends State<Welcome> {
       child: LayoutBuilder(
         builder: (c, box) => SingleChildScrollView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: const EdgeInsets.fromLTRB(25, 16, 25, 25),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minHeight: (box.maxHeight - 41).clamp(0, double.infinity),
-            ),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 430),
-                child: EntranceMotion(
-                  stage: form ? (register ? 'register' : 'login') : 'welcome',
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Center(child: BrandLogo(width: form ? 160 : 235)),
-                      const SizedBox(height: 20),
-                      AuraPanel(
-                        radius: 28,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 19,
-                            vertical: 23,
+          padding: const EdgeInsets.fromLTRB(24, 14, 24, 28),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: EntranceMotion(
+                stage: form
+                    ? (register ? 'register74' : 'login74')
+                    : 'welcome74',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        if (form)
+                          IconButton(
+                            tooltip: 'Indietro',
+                            onPressed: busy
+                                ? null
+                                : () {
+                                    FocusScope.of(c).unfocus();
+                                    setState(() {
+                                      form = false;
+                                      error = '';
+                                    });
+                                  },
+                            icon: const GIcon(
+                              CupertinoIcons.chevron_left,
+                              size: 23,
+                            ),
                           ),
+                        const BrandLogo(width: 105),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: auraBlue.withValues(alpha: .09),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Text(
+                            'Il tuo spazio.',
+                            style: TextStyle(
+                              color: auraBlue,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (!form) ...[
+                      const SizedBox(height: 25),
+                      const _AuthArtwork(),
+                      const SizedBox(height: 25),
+                      Text(
+                        'Le tue persone.\nI tuoi momenti.',
+                        style: TextStyle(
+                          fontSize: 39,
+                          height: 1.05,
+                          letterSpacing: -1.6,
+                          fontWeight: FontWeight.w800,
+                          color: foreground(c),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Quello che vivi, con chi vuoi.\nStorie, messaggi e piccoli istanti da condividere.',
+                        style: TextStyle(
+                          fontSize: 15,
+                          height: 1.5,
+                          color: secondaryText(c),
+                        ),
+                      ),
+                      const SizedBox(height: 30),
+                      PrimaryButton('Accedi', onTap: () => switchForm(false)),
+                      const SizedBox(height: 12),
+                      PrimaryButton(
+                        'Crea un account',
+                        secondary: true,
+                        onTap: () => switchForm(true),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Un posto dove essere te stesso.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: secondaryText(c), fontSize: 12),
+                      ),
+                    ] else ...[
+                      const SizedBox(height: 30),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          padding: const EdgeInsets.all(13),
+                          decoration: BoxDecoration(
+                            color: auraBlue.withValues(alpha: .09),
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: GIcon(
+                            register
+                                ? CupertinoIcons.person_badge_plus
+                                : CupertinoIcons.person_crop_circle,
+                            color: auraBlue,
+                            size: 26,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Text(
+                        register
+                            ? 'Il primo passo,\nverso il tuo mondo.'
+                            : 'Bello ritrovarti.',
+                        style: TextStyle(
+                          color: foreground(c),
+                          fontSize: 34,
+                          height: 1.12,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -1,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        register
+                            ? 'Crea il tuo account e fai spazio alle tue persone.'
+                            : 'Le tue conversazioni e i tuoi momenti ti aspettano.',
+                        style: TextStyle(
+                          color: secondaryText(c),
+                          height: 1.5,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 27),
+                      AutofillGroup(
+                        child: Form(
+                          key: formKey,
                           child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              if (form)
-                                Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: IconButton(
-                                    tooltip: 'Indietro',
-                                    onPressed: busy
-                                        ? null
-                                        : () {
-                                            FocusScope.of(c).unfocus();
-                                            setState(() {
-                                              form = false;
-                                              error = '';
-                                            });
-                                          },
-                                    icon: const GIcon(
-                                      CupertinoIcons.chevron_left,
-                                      size: 24,
+                              if (register) ...[
+                                input(
+                                  name,
+                                  'Nome',
+                                  icon: CupertinoIcons.person,
+                                  keyboard: TextInputType.name,
+                                  capitalization: TextCapitalization.words,
+                                  autofillHints: const [AutofillHints.name],
+                                  validator: (v) => (v ?? '').trim().isEmpty
+                                      ? 'Inserisci il tuo nome'
+                                      : (v ?? '').trim().length > 60
+                                      ? 'Usa al massimo 60 caratteri'
+                                      : null,
+                                ),
+                                input(
+                                  username,
+                                  'Nome utente',
+                                  hint: 'es. nome.cognome',
+                                  icon: CupertinoIcons.at,
+                                  autofillHints: const [
+                                    AutofillHints.newUsername,
+                                  ],
+                                  validator: (v) =>
+                                      RegExp(
+                                        r'^[a-zA-Z0-9_.]{3,30}$',
+                                      ).hasMatch((v ?? '').trim())
+                                      ? null
+                                      : 'Da 3 a 30 caratteri: lettere, numeri, punti o trattini bassi',
+                                ),
+                                input(
+                                  email,
+                                  'Email',
+                                  icon: CupertinoIcons.mail,
+                                  keyboard: TextInputType.emailAddress,
+                                  autofillHints: const [AutofillHints.email],
+                                  validator: (v) =>
+                                      RegExp(
+                                        r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
+                                      ).hasMatch((v ?? '').trim())
+                                      ? null
+                                      : 'Inserisci un indirizzo email valido',
+                                ),
+                              ] else
+                                input(
+                                  login,
+                                  'Email o nome utente',
+                                  icon: CupertinoIcons.person,
+                                  autofillHints: const [AutofillHints.username],
+                                  validator: (v) => (v ?? '').trim().isEmpty
+                                      ? 'Inserisci email o nome utente'
+                                      : null,
+                                ),
+                              input(
+                                password,
+                                'Password',
+                                icon: CupertinoIcons.lock,
+                                secret: true,
+                                action: register
+                                    ? TextInputAction.next
+                                    : TextInputAction.done,
+                                autofillHints: register
+                                    ? const [AutofillHints.newPassword]
+                                    : const [AutofillHints.password],
+                                validator: (v) {
+                                  if ((v ?? '').isEmpty)
+                                    return 'Inserisci la password';
+                                  if (register && (v ?? '').length < 10)
+                                    return 'Usa almeno 10 caratteri';
+                                  if ((v ?? '').length > 256)
+                                    return 'Usa al massimo 256 caratteri';
+                                  return null;
+                                },
+                              ),
+                              if (register)
+                                input(
+                                  confirmation,
+                                  'Conferma password',
+                                  icon: CupertinoIcons.lock,
+                                  secret: true,
+                                  confirm: true,
+                                  action: TextInputAction.done,
+                                  autofillHints: const [
+                                    AutofillHints.newPassword,
+                                  ],
+                                  validator: (v) => v != password.text
+                                      ? 'Le password non coincidono'
+                                      : null,
+                                ),
+                              if (register)
+                                const Padding(
+                                  padding: EdgeInsets.only(bottom: 16),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      'Scegli una password di almeno 10 caratteri.',
+                                      style: TextStyle(
+                                        color: muted,
+                                        fontSize: 12,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              SizedBox(height: form ? 8 : 4),
-                              if (!form) ...[
-                                Text(
-                                  'Il tuo mondo,\nin ogni sfumatura.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 34,
-                                    height: 1.13,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: -1.2,
-                                    color: foreground(c),
+                              if (error.isNotEmpty)
+                                Container(
+                                  key: const ValueKey('auth-error'),
+                                  width: double.infinity,
+                                  margin: const EdgeInsets.only(bottom: 16),
+                                  padding: const EdgeInsets.all(13),
+                                  decoration: BoxDecoration(
+                                    color: danger.withValues(alpha: .08),
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
-                                ),
-                                const SizedBox(height: 18),
-                                const Text(
-                                  'Storie da condividere. Persone da scoprire.\nUn posto dove essere te stesso.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: muted,
-                                    fontSize: 15,
-                                    height: 1.6,
-                                  ),
-                                ),
-                                const SizedBox(height: 38),
-                                PrimaryButton(
-                                  'Accedi',
-                                  onTap: busy ? null : () => switchForm(false),
-                                ),
-                                const SizedBox(height: 12),
-                                PrimaryButton(
-                                  'Crea un account',
-                                  secondary: true,
-                                  onTap: busy ? null : () => switchForm(true),
-                                ),
-                              ] else ...[
-                                Text(
-                                  register
-                                      ? 'Crea il tuo account'
-                                      : 'Bentornato su GPIX',
-                                  style: TextStyle(
-                                    fontSize: 27,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: -.7,
-                                    color: foreground(c),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  register
-                                      ? 'Bastano pochi dati per iniziare a condividere.'
-                                      : 'Accedi e ritrova le tue persone e le tue storie.',
-                                  style: const TextStyle(
-                                    color: muted,
-                                    fontSize: 14,
-                                    height: 1.5,
-                                  ),
-                                ),
-                                const SizedBox(height: 25),
-                                AutofillGroup(
-                                  child: Form(
-                                    key: formKey,
-                                    child: Column(
-                                      children: [
-                                        if (register) ...[
-                                          input(
-                                            name,
-                                            'Nome',
-                                            icon: CupertinoIcons.person,
-                                            keyboard: TextInputType.name,
-                                            capitalization:
-                                                TextCapitalization.words,
-                                            autofillHints: const [
-                                              AutofillHints.name,
-                                            ],
-                                            validator: (v) =>
-                                                (v ?? '').trim().isEmpty
-                                                ? 'Inserisci il tuo nome'
-                                                : (v ?? '').trim().length > 60
-                                                ? 'Usa al massimo 60 caratteri'
-                                                : null,
-                                          ),
-                                          input(
-                                            username,
-                                            'Nome utente',
-                                            hint: 'es. nome.cognome',
-                                            icon: CupertinoIcons.at,
-                                            autofillHints: const [
-                                              AutofillHints.newUsername,
-                                            ],
-                                            validator: (v) =>
-                                                RegExp(
-                                                  r'^[a-zA-Z0-9_.]{3,30}$',
-                                                ).hasMatch((v ?? '').trim())
-                                                ? null
-                                                : 'Da 3 a 30 caratteri: lettere, numeri, punti o trattini bassi',
-                                          ),
-                                          input(
-                                            email,
-                                            'Email',
-                                            icon: CupertinoIcons.mail,
-                                            keyboard:
-                                                TextInputType.emailAddress,
-                                            autofillHints: const [
-                                              AutofillHints.email,
-                                            ],
-                                            validator: (v) =>
-                                                RegExp(
-                                                  r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
-                                                ).hasMatch((v ?? '').trim())
-                                                ? null
-                                                : 'Inserisci un indirizzo email valido',
-                                          ),
-                                        ] else
-                                          input(
-                                            login,
-                                            'Email o nome utente',
-                                            icon: CupertinoIcons.person,
-                                            autofillHints: const [
-                                              AutofillHints.username,
-                                            ],
-                                            validator: (v) =>
-                                                (v ?? '').trim().isEmpty
-                                                ? 'Inserisci email o nome utente'
-                                                : null,
-                                          ),
-                                        input(
-                                          password,
-                                          'Password',
-                                          icon: CupertinoIcons.lock,
-                                          secret: true,
-                                          action: register
-                                              ? TextInputAction.next
-                                              : TextInputAction.done,
-                                          autofillHints: register
-                                              ? const [
-                                                  AutofillHints.newPassword,
-                                                ]
-                                              : const [AutofillHints.password],
-                                          validator: (v) {
-                                            if ((v ?? '').isEmpty)
-                                              return 'Inserisci la password';
-                                            if (register &&
-                                                (v ?? '').length < 10)
-                                              return 'Usa almeno 10 caratteri';
-                                            if ((v ?? '').length > 256)
-                                              return 'Usa al massimo 256 caratteri';
-                                            return null;
-                                          },
-                                        ),
-                                        if (register)
-                                          input(
-                                            confirmation,
-                                            'Conferma password',
-                                            icon: CupertinoIcons.lock,
-                                            secret: true,
-                                            confirm: true,
-                                            action: TextInputAction.done,
-                                            autofillHints: const [
-                                              AutofillHints.newPassword,
-                                            ],
-                                            validator: (v) => v != password.text
-                                                ? 'Le password non coincidono'
-                                                : null,
-                                          ),
-                                        if (register)
-                                          const Padding(
-                                            padding: EdgeInsets.only(
-                                              bottom: 16,
-                                            ),
-                                            child: Align(
-                                              alignment: Alignment.centerLeft,
-                                              child: Text(
-                                                'Scegli una password di almeno 10 caratteri.',
-                                                style: TextStyle(
-                                                  color: muted,
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        if (error.isNotEmpty)
-                                          Container(
-                                            key: const ValueKey('auth-error'),
-                                            width: double.infinity,
-                                            margin: const EdgeInsets.only(
-                                              bottom: 16,
-                                            ),
-                                            padding: const EdgeInsets.all(13),
-                                            decoration: BoxDecoration(
-                                              color: danger.withValues(
-                                                alpha: .08,
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                            ),
-                                            child: Semantics(
-                                              liveRegion: true,
-                                              child: Text(
-                                                error,
-                                                style: const TextStyle(
-                                                  color: danger,
-                                                  fontSize: 13,
-                                                  height: 1.4,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        PrimaryButton(
-                                          register ? 'Crea account' : 'Accedi',
-                                          busy: busy,
-                                          onTap: submit,
-                                        ),
-                                      ],
+                                  child: Semantics(
+                                    liveRegion: true,
+                                    child: Text(
+                                      error,
+                                      style: const TextStyle(
+                                        color: danger,
+                                        fontSize: 13,
+                                        height: 1.4,
+                                      ),
                                     ),
                                   ),
                                 ),
-                                const SizedBox(height: 13),
-                                TextButton(
-                                  onPressed: busy
-                                      ? null
-                                      : () => switchForm(!register),
-                                  child: Text(
-                                    register
-                                        ? 'Hai già un account? Accedi'
-                                        : 'Non hai un account? Registrati',
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
-                              ],
-                              if (form && !register)
-                                TextButton(
-                                  onPressed: busy
-                                      ? null
-                                      : () => open(
-                                          c,
-                                          const AccountSecurity(mode: 'forgot'),
-                                        ),
-                                  child: const Text('Password dimenticata?'),
-                                ),
-                              const SizedBox(height: 22),
+                              PrimaryButton(
+                                register ? 'Crea account' : 'Accedi',
+                                busy: busy,
+                                onTap: submit,
+                              ),
                             ],
                           ),
                         ),
                       ),
+
+                      if (!register)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: busy
+                                ? null
+                                : () => open(
+                                    c,
+                                    const AccountSecurity(mode: 'forgot'),
+                                  ),
+                            child: const Text('Password dimenticata?'),
+                          ),
+                        ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Divider(color: Theme.of(c).dividerColor),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            child: Text(
+                              'GPIX',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: secondaryText(c),
+                                letterSpacing: 2,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: Divider(color: Theme.of(c).dividerColor),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: busy ? null : () => switchForm(!register),
+                        child: Text(
+                          register
+                              ? 'Hai già un account? Accedi'
+                              : 'Non hai un account? Registrati',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
                     ],
-                  ),
+                  ],
                 ),
               ),
             ),
           ),
         ),
       ),
+    ),
+  );
+}
+
+/// Finite reveal respects Reduce Motion and never runs a background ticker.
+class _AuthArtwork extends StatelessWidget {
+  const _AuthArtwork();
+  @override
+  Widget build(BuildContext c) => TweenAnimationBuilder<double>(
+    tween: Tween(begin: 0, end: 1),
+    duration: MediaQuery.disableAnimationsOf(c)
+        ? Duration.zero
+        : const Duration(milliseconds: 1000),
+    curve: Curves.easeOutCubic,
+    builder: (c, value, _) => SizedBox(
+      height: 245,
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 230,
+            height: 230,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  auraBlue.withValues(alpha: .18),
+                  auraBlue.withValues(alpha: 0),
+                ],
+              ),
+            ),
+          ),
+          Transform.translate(
+            offset: Offset(-64 * value, 12 + (1 - value) * 30),
+            child: Transform.rotate(
+              angle: -.14 * value,
+              child: _photo(c, 'assets/media/post3.jpg', 128, 175),
+            ),
+          ),
+          Transform.translate(
+            offset: Offset(40 * value, -(1 - value) * 30),
+            child: Transform.rotate(
+              angle: .1 * value,
+              child: _photo(c, 'assets/media/post0.jpg', 145, 204),
+            ),
+          ),
+          Positioned(
+            bottom: 4,
+            right: 6,
+            child: Opacity(
+              opacity: value,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: surface(c),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: Theme.of(c).dividerColor),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: .08),
+                      blurRadius: 20,
+                      offset: const Offset(0, 7),
+                    ),
+                  ],
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GIcon(
+                      CupertinoIcons.heart_fill,
+                      size: 18,
+                      color: Color(0xFFFF5269),
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'I momenti che contano',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+  Widget _photo(BuildContext c, String path, double w, double h) => Container(
+    width: w,
+    height: h,
+    padding: const EdgeInsets.all(5),
+    decoration: BoxDecoration(
+      color: surface(c),
+      borderRadius: BorderRadius.circular(24),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: .15),
+          blurRadius: 24,
+          offset: const Offset(0, 10),
+        ),
+      ],
+    ),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(19),
+      child: Image.asset(path, fit: BoxFit.cover),
     ),
   );
 }

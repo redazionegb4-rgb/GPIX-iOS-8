@@ -149,9 +149,7 @@ void main() {
       s.dispose();
     },
   );
-  testWidgets('Bottom navigation compacts down and expands on reverse scroll', (
-    t,
-  ) async {
+  testWidgets('Bottom navigation stays fixed while scrolling', (t) async {
     t.view.physicalSize = const Size(390, 844);
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.resetPhysicalSize);
@@ -159,13 +157,11 @@ void main() {
     final s = GpixStore()..startTestDemo();
     await t.pumpWidget(GpixApp(store: s));
     await t.pumpAndSettle();
-    final bar = find.byKey(const ValueKey('floating-navigation'));
+    final bar = find.byKey(const ValueKey('home-navigation'));
     final full = t.getSize(bar);
     await t.dragFrom(const Offset(190, 650), const Offset(0, -350));
     await t.pumpAndSettle();
-    final small = t.getSize(bar);
-    expect(small.width, lessThan(full.width));
-    expect(small.height, 54);
+    expect(t.getSize(bar), full);
     await t.dragFrom(const Offset(190, 350), const Offset(0, 130));
     await t.pumpAndSettle();
     expect(t.getSize(bar), full);

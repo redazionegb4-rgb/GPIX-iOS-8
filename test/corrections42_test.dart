@@ -79,6 +79,7 @@ void main() {
       ),
     );
     await t.enterText(find.byType(TextField), 'univoca');
+    await t.pumpAndSettle();
     await t.tap(find.widgetWithText(ChoiceChip, 'Reel'));
     await t.pumpAndSettle();
     expect(find.text('Ricerca reel univoca'), findsOneWidget);

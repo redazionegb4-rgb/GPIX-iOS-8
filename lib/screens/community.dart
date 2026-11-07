@@ -110,6 +110,74 @@ class _CloseFriendsState extends State<CloseFriends> {
   }
 }
 
+/// Shared by profile and inbox, including the two thought-bubble dots.
+class NoteBubble extends StatelessWidget {
+  final String text;
+  final bool placeholder;
+  const NoteBubble({super.key, required this.text, this.placeholder = false});
+  @override
+  Widget build(BuildContext c) {
+    final fill = Theme.of(c).brightness == Brightness.dark
+        ? subdued(c)
+        : surface(c);
+    return SizedBox(
+      height: 65,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            key: const ValueKey('note-bubble-body'),
+            height: 48,
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: fill,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x16000000),
+                  blurRadius: 12,
+                  offset: Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Text(
+              text,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.15,
+                color: placeholder ? secondaryText(c) : foreground(c),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 49,
+            left: 22,
+            child: Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(color: fill, shape: BoxShape.circle),
+            ),
+          ),
+          Positioned(
+            top: 59,
+            left: 28,
+            child: Container(
+              width: 5,
+              height: 5,
+              decoration: BoxDecoration(color: fill, shape: BoxShape.circle),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class NotesTray extends StatefulWidget {
   const NotesTray({super.key});
   @override
@@ -182,63 +250,9 @@ class _NotesTrayState extends State<NotesTray> {
                     top: 3,
                     left: 3,
                     right: 3,
-                    child: Container(
-                      constraints: const BoxConstraints(
-                        minHeight: 48,
-                        maxHeight: 65,
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Theme.of(c).brightness == Brightness.dark
-                            ? subdued(c)
-                            : surface(c),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x16000000),
-                            blurRadius: 12,
-                            offset: Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: Text(
-                        note?.str('text') ?? 'Lascia una nota…',
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 12,
-                          height: 1.15,
-                          color: note == null ? muted : foreground(c),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 62,
-                    left: 22,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: surface(c),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 54,
-                    left: 27,
-                    child: Container(
-                      width: 5,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: surface(c),
-                        shape: BoxShape.circle,
-                      ),
+                    child: NoteBubble(
+                      text: note?.str('text') ?? 'Lascia una nota…',
+                      placeholder: note == null,
                     ),
                   ),
                   if (note?.flag('likedByMe') == true ||

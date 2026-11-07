@@ -42,6 +42,7 @@ void main() {
     await t.pumpWidget(GpixApp(store: s));
     await t.pumpAndSettle();
     expect(find.text('Esplora la demo'), findsNothing);
+    await t.ensureVisible(find.text('Crea un account'));
     await t.tap(find.text('Crea un account'));
     await t.pumpAndSettle();
   }

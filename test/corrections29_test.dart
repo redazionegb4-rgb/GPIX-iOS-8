@@ -146,8 +146,8 @@ void main() {
     expect(find.byType(MediaView), findsOneWidget);
     await t.tap(find.byKey(const ValueKey('gif-demo-1')));
     expect(selected, 'gif1.gif');
-      await s.act('message',{'id':'t0','kind':'gif','media':selected});
-      expect(s.thread('t0').rows('messages').last.str('media'),'gif1.gif');
+    await s.act('message', {'id': 't0', 'kind': 'gif', 'media': selected});
+    expect(s.thread('t0').rows('messages').last.str('media'), 'gif1.gif');
     final bytes = await rootBundle.load('assets/media/gif1.gif');
     final codec = await ui.instantiateImageCodec(bytes.buffer.asUint8List());
     expect(codec.frameCount, greaterThan(1));
@@ -187,7 +187,7 @@ void main() {
         await t.pumpAndSettle();
         await t.tap(find.byTooltip('Messaggi'));
         await t.pumpAndSettle();
-        expect(find.text('Tutti'), findsNothing);
+        expect(find.text('Tutti'), findsOneWidget);
         expect(find.text('Non letti'), findsNothing);
         expect(find.byTooltip('Fotocamera'), findsNothing);
         expect(find.text('Richieste (1)'), findsOneWidget);
@@ -243,16 +243,19 @@ void main() {
       await t.pumpAndSettle();
       final label = find.byKey(const ValueKey('post-draggable-text'));
       expect(t.getSize(label).width, lessThan(100));
+      final frame = t.getRect(
+        find.ancestor(of: label, matching: find.byType(AspectRatio)).first,
+      );
       final start = t.getCenter(label);
       await t.drag(label, const Offset(450, -450));
       await t.pumpAndSettle();
       final topRight = t.getRect(label);
-      expect(topRight.right, closeTo(390, 2));
+      expect(topRight.right, closeTo(frame.right, 2));
       expect(topRight.center.dx - start.dx, greaterThan(120));
       await t.drag(label, const Offset(-450, 450));
       await t.pumpAndSettle();
       final bottomLeft = t.getRect(label);
-      expect(bottomLeft.left, closeTo(0, 2));
+      expect(bottomLeft.left, closeTo(frame.left, 2));
       expect(bottomLeft.top - topRight.top, greaterThan(200));
       await capture(t, key, 'text-bottom-left');
       expect(t.takeException(), isNull);

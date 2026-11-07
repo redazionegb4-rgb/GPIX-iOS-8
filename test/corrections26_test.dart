@@ -160,8 +160,7 @@ void main() {
       if (width == 390) await capture(tester, key, 'post-edit');
       await tester.tap(find.text('Avanti'));
       await tester.pumpAndSettle();
-      expect(find.text('Pubblica post'), findsOneWidget);
-      expect(find.text('Pubblica'), findsOneWidget);
+      expect(find.text('Condividi'), findsOneWidget);
       if (width == 390) await capture(tester, key, 'post-publish');
       await tester.scrollUntilVisible(
         find.text('Pubblico'),

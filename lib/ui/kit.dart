@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import '../core/data.dart';
 import '../core/store.dart';
 
-const auraBlue = Color(0xff2563eb),
+const auraBlue = Color(0xff0866ff),
     ink = Color(0xff101828),
     muted = Color(0xff767676),
     soft = Color(0xfff3f3f4),
@@ -18,7 +18,7 @@ const auraBlue = Color(0xff2563eb),
 const auraAction = LinearGradient(
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
-  colors: [auraBlue, Color(0xff1749b8)],
+  colors: [auraBlue, auraBlue],
 );
 
 ThemeData gpixTheme(Brightness brightness) {
@@ -30,10 +30,10 @@ ThemeData gpixTheme(Brightness brightness) {
   final scheme = ColorScheme.fromSeed(
     seedColor: auraBlue,
     brightness: brightness,
-    surface: dark ? const Color(0xff161616) : Colors.white,
+    surface: canvas,
     onSurface: dark ? const Color(0xfffafafa) : ink,
     onSurfaceVariant: dark ? const Color(0xffbdbdbd) : muted,
-    primary: dark ? const Color(0xffa9c7ff) : const Color(0xff1d54c5),
+    primary: dark ? const Color(0xff78abff) : auraBlue,
     onPrimary: dark ? ink : Colors.white,
     primaryContainer: dark ? const Color(0xff334c79) : const Color(0xffd5e7ff),
     onPrimaryContainer: dark
@@ -88,6 +88,8 @@ ThemeData gpixTheme(Brightness brightness) {
     dividerTheme: DividerThemeData(color: scheme.outlineVariant, thickness: 1),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
+        backgroundColor: auraBlue,
+        foregroundColor: Colors.white,
         shape: rounded,
         minimumSize: const Size(48, 48),
       ),
@@ -317,7 +319,7 @@ Future<bool> gpixAlert(
           borderRadius: BorderRadius.circular(24),
           side: BorderSide(color: Theme.of(context).dividerColor),
         ),
-        insetPadding: const EdgeInsets.symmetric(horizontal: 40),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -327,6 +329,23 @@ Future<bool> gpixAlert(
                   padding: const EdgeInsets.fromLTRB(24, 27, 24, 23),
                   child: Column(
                     children: [
+                      Container(
+                        padding: const EdgeInsets.all(15),
+                        decoration: BoxDecoration(
+                          color: (destructive ? danger : auraBlue).withValues(
+                            alpha: .1,
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: GIcon(
+                          destructive
+                              ? CupertinoIcons.exclamationmark_triangle
+                              : CupertinoIcons.info_circle,
+                          color: destructive ? danger : accent(context),
+                          size: 27,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
                       Text(
                         title,
                         textAlign: TextAlign.center,
@@ -420,7 +439,7 @@ Future<T?> sheet<T>(BuildContext c, Widget child, {bool scroll = true}) =>
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.black38,
+      barrierColor: Colors.black54,
       builder: (context) => Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.viewInsetsOf(context).bottom,
@@ -430,7 +449,7 @@ Future<T?> sheet<T>(BuildContext c, Widget child, {bool scroll = true}) =>
             maxHeight: MediaQuery.sizeOf(context).height * .88,
           ),
           decoration: BoxDecoration(
-            gradient: crystalGradient(context),
+            color: Theme.of(context).canvasColor,
             border: Border.all(color: Theme.of(context).dividerColor),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
           ),

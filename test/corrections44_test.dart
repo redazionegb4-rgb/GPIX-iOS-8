@@ -123,7 +123,7 @@ void main() {
     expect(find.byType(InstantViewer), findsOneWidget);
     Navigator.of(t.element(find.byType(InstantViewer))).pop();
     await t.pumpAndSettle();
-    await t.tap(find.text('Seleziona'));
+    await t.tap(find.byTooltip('Seleziona foto'));
     await t.pump();
     await t.tap(find.byKey(const ValueKey('archive-own44')));
     await t.pump();

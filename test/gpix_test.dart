@@ -145,7 +145,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     final size = tester.getSize(photo);
-    expect(size.width, closeTo(390 - 12, .1));
+    expect(size.width, closeTo(354, .1));
     expect(size.height / size.width, closeTo(1.5, .01));
     await tester.pumpWidget(const SizedBox());
     s.dispose();
@@ -164,7 +164,9 @@ void main() {
     await tester.pumpAndSettle();
     final list = tester.widget<ListView>(feed);
     final offset = list.controller!.offset;
-    final card = find.byType(PostCard).last;
+    final card = find.byKey(
+      tester.widget<PostCard>(find.byType(PostCard).last).key!,
+    );
     await tester.ensureVisible(card);
     await tester.pumpAndSettle();
     final stable = list.controller!.offset;
@@ -176,7 +178,10 @@ void main() {
           ),
         )
         .first;
-    final point = tester.getCenter(photo);
+    final point = tester
+        .getRect(photo)
+        .intersect(const Rect.fromLTWH(0, 24, 390, 740))
+        .center;
     await tester.tapAt(point);
     await tester.pump(const Duration(milliseconds: 60));
     await tester.tapAt(point);
@@ -949,7 +954,7 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     s.dispose();
   });
-  testWidgets('live creation is available from the creation studio', (
+  testWidgets('live creation is available from the create menu', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -962,12 +967,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Crea'));
     await tester.pumpAndSettle();
-    final modes = find.byType(PageView);
-    for (var index = 0; index < 4; index++) {
-      await tester.drag(modes, const Offset(-90, 0));
-      await tester.pumpAndSettle();
-    }
-    expect(find.text('Titolo della diretta'), findsOneWidget);
+    await tester.tap(find.text('Diretta').hitTestable());
+    await tester.pumpAndSettle();
+    expect(find.text('Dai un titolo alla diretta'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     s.dispose();
   });
@@ -1336,7 +1338,11 @@ void main() {
     await tester.tap(find.text('Avanti'));
     await tester.pumpAndSettle();
     expect(
-      find.widgetWithText(TextField, 'Scrivi una didascalia…'),
+      find.byWidgetPredicate(
+        (w) =>
+            w is TextField &&
+            w.decoration?.hintText == 'Scrivi una didascalia…',
+      ),
       findsOneWidget,
     );
     await tester.scrollUntilVisible(

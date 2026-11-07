@@ -99,7 +99,7 @@ void main() {
               find.byKey(const ValueKey('edit-profile-bio')),
               'Biografia salvata',
             );
-            await t.tap(find.text('Fine'));
+            await t.tap(find.text('Salva'));
             await t.pumpAndSettle();
             expect(s.me['bio'], 'Biografia salvata');
             continue;

@@ -16,7 +16,7 @@ import 'live.dart';
 import 'community.dart';
 import 'giphy.dart';
 import 'post_extras.dart';
-import 'creation_studio.dart';
+import 'moments.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -26,123 +26,81 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int tab = 0;
-  bool compact = false;
-  double scrollTravel = 0;
-  bool watchScroll(ScrollNotification n) {
-    if (n.depth != 0 || n.metrics.axis != Axis.vertical || tab == 2)
-      return false;
-    if (n is ScrollUpdateNotification) {
-      final delta = n.scrollDelta ?? 0;
-      if (delta.abs() < .1) return false;
-      if (scrollTravel.sign != delta.sign) scrollTravel = 0;
-      scrollTravel += delta;
-      final next = n.metrics.pixels <= 8
-          ? false
-          : scrollTravel > 20
-          ? true
-          : scrollTravel < -12
-          ? false
-          : compact;
-      if (next != compact) setState(() => compact = next);
-    }
-    return false;
-  }
-
   final feedKey = GlobalKey<_FeedState>();
   @override
   Widget build(BuildContext c) {
     final s = GpixScope.of(c);
     return Scaffold(
-      extendBody: true,
-      body: NotificationListener<ScrollNotification>(
-        onNotification: watchScroll,
-        child: IndexedStack(
-          index: tab,
-          children: [
-            Feed(key: feedKey),
-            const Explore(),
-            Reels(active: tab == 2),
-            Profile(user: s.myId, root: true),
-          ],
-        ),
+      backgroundColor: Theme.of(c).canvasColor,
+      body: IndexedStack(
+        index: tab,
+        children: [
+          Feed(key: feedKey),
+          const Explore(),
+          Reels(active: tab == 2),
+          Profile(user: s.myId, root: true),
+        ],
       ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        minimum: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-        child: Center(
-          heightFactor: 1,
-          child: AnimatedContainer(
-            key: ValueKey('floating-navigation'),
-            duration: MediaQuery.disableAnimationsOf(c)
-                ? Duration.zero
-                : const Duration(milliseconds: 240),
-            curve: Curves.easeOutCubic,
-            width: compact
-                ? (MediaQuery.sizeOf(c).width - 68).clamp(258.0, 480.0)
-                : (MediaQuery.sizeOf(c).width - 24).clamp(258.0, 520.0),
-            height: compact ? 54 : 60,
-            child: AuraPanel(
-              radius: 30,
-              frosted: true,
-              child: Row(
-                children: [
-                  nav(
-                    CupertinoIcons.house,
-                    CupertinoIcons.house_fill,
-                    0,
-                    'Home',
-                  ),
-                  nav(CupertinoIcons.search, CupertinoIcons.search, 1, 'Cerca'),
-                  Expanded(
-                    child: Center(
+      bottomNavigationBar: ColoredBox(
+        key: const ValueKey('home-navigation'),
+        color: Theme.of(c).canvasColor,
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Divider(height: 1),
+              SizedBox(
+                height: 52,
+                child: Row(
+                  children: [
+                    nav(
+                      CupertinoIcons.house,
+                      CupertinoIcons.house_fill,
+                      0,
+                      'Home',
+                    ),
+                    nav(
+                      CupertinoIcons.search,
+                      CupertinoIcons.search,
+                      1,
+                      'Cerca',
+                    ),
+                    Expanded(
                       child: IconButton(
                         tooltip: 'Crea',
                         onPressed: () => createMenu(c),
-                        icon: const DecoratedBox(
+                        icon: Container(
+                          width: 34,
+                          height: 34,
                           decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [Color(0xff247eff), Color(0xff0641c3)],
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Color(0x442563eb),
-                                blurRadius: 7,
-                                offset: Offset(0, 2),
-                              ),
-                            ],
+                            color: auraBlue,
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          child: SizedBox.square(
-                            dimension: 38,
-                            child: Center(
-                              child: GIcon(
-                                CupertinoIcons.plus,
-                                size: 22,
-                                color: Colors.white,
-                              ),
-                            ),
+                          child: const Icon(
+                            CupertinoIcons.plus,
+                            size: 21,
+                            color: Colors.white,
                           ),
                         ),
                       ),
                     ),
-                  ),
-                  nav(
-                    CupertinoIcons.play_rectangle,
-                    CupertinoIcons.play_rectangle_fill,
-                    2,
-                    'Reel',
-                  ),
-                  nav(
-                    CupertinoIcons.person,
-                    CupertinoIcons.person_fill,
-                    3,
-                    'Profilo',
-                  ),
-                ],
+                    nav(
+                      CupertinoIcons.play_rectangle,
+                      CupertinoIcons.play_rectangle_fill,
+                      2,
+                      'Reel',
+                    ),
+                    nav(
+                      CupertinoIcons.person,
+                      CupertinoIcons.person_fill,
+                      3,
+                      'Profilo',
+                    ),
+                  ],
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ),
@@ -165,31 +123,16 @@ class _HomeShellState extends State<HomeShell> {
               minimumSize: const Size(48, 48),
             ),
             onPressed: () {
-              setState(() {
-                tab = index;
-                compact = false;
-                scrollTravel = 0;
-              });
+              setState(() => tab = index);
               if (index == 0) feedKey.currentState?.toTop();
             },
-            icon: DecoratedBox(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: selected
-                    ? accent(context).withValues(alpha: .15)
-                    : Colors.transparent,
-              ),
-              child: SizedBox.square(
-                dimension: 36,
-                child: Center(
-                  child: GIcon(
+            icon: index == 3
+                ? Avatar(GpixScope.of(context).myId, size: 26)
+                : GIcon(
                     selected ? activeIcon : icon,
-                    size: compact ? 22 : 24,
+                    size: 25,
                     color: selected ? accent(context) : foreground(context),
                   ),
-                ),
-              ),
-            ),
           ),
         ),
       ),
@@ -204,9 +147,20 @@ class Feed extends StatefulWidget {
 }
 
 class _FeedState extends State<Feed> {
-  final scroll = ScrollController();
-  final storyKey = GlobalKey<_StoryTrayState>();
-  final refreshKey = GlobalKey<RefreshIndicatorState>();
+  static const sections = ['Per te', 'Seguiti', 'Gruppi'];
+  final pages = PageController();
+  final scrolls = {for (final tab in sections.take(2)) tab: ScrollController()};
+  final storyKeys = {
+    for (final tab in sections.take(2)) tab: GlobalKey<_StoryTrayState>(),
+  };
+  final refreshKeys = {
+    for (final tab in sections.take(2)) tab: GlobalKey<RefreshIndicatorState>(),
+  };
+  ScrollController get scroll => scrolls[filter] ?? scrolls['Per te']!;
+  GlobalKey<_StoryTrayState> get storyKey =>
+      storyKeys[filter] ?? storyKeys['Per te']!;
+  GlobalKey<RefreshIndicatorState> get refreshKey =>
+      refreshKeys[filter] ?? refreshKeys['Per te']!;
   String filter = 'Per te';
   bool refreshing = false;
   Future<void> toTop() async {
@@ -243,7 +197,8 @@ class _FeedState extends State<Feed> {
 
   @override
   void dispose() {
-    scroll.dispose();
+    pages.dispose();
+    for (final controller in scrolls.values) controller.dispose();
     super.dispose();
   }
 
@@ -251,74 +206,43 @@ class _FeedState extends State<Feed> {
   Widget build(BuildContext c) {
     final s = GpixScope.of(c);
     final posts = s.posts
-        .where(
-          (p) =>
-              !s.preferences.ids('muted').contains(p.str('author')) &&
-              (filter != 'Seguiti' ||
-                  s.follows(p.str('author')) ||
-                  p.str('author') == s.myId),
-        )
+        .where((p) => !s.preferences.ids('muted').contains(p.str('author')))
         .toList();
+    final entries = <J>[
+      for (final p in posts) {...p, '_entry': 'post'},
+      for (final m in s.state.rows('socialItems'))
+        if (m.str('kind') == 'moment' &&
+            !s.blocked(m.str('author')) &&
+            !s.preferences.ids('muted').contains(m.str('author')) &&
+            !posts.any((p) => p.str('id') == m.str('post')))
+          {...m, '_entry': 'moment'},
+      for (final g in s.state.rows('socialGroups'))
+        if (!s.blocked(g.str('owner')) &&
+            !s.preferences.ids('muted').contains(g.str('owner')))
+          {...g, '_entry': 'group'},
+    ]..sort((a, b) => b.number('created').compareTo(a.number('created')));
     return Scaffold(
       appBar: AppBar(
         centerTitle: false,
         titleSpacing: 12,
         toolbarHeight: 54,
         title: const Text(
-          'Feed',
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+          'Home',
+          style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
         ),
         bottom: PreferredSize(
-          preferredSize: Size.fromHeight(refreshing ? 53 : 50),
+          preferredSize: Size.fromHeight(refreshing ? 48 : 45),
           child: Column(
             children: [
-              Container(
-                key: const ValueKey('feed-filter-title'),
-                margin: const EdgeInsets.fromLTRB(14, 0, 14, 6),
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  color: subdued(c),
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Row(
-                  children: [
-                    for (final option in ['Per te', 'Seguiti'])
-                      Expanded(
-                        child: Semantics(
-                          selected: filter == option,
-                          child: TextButton(
-                            onPressed: () {
-                              if (filter != option)
-                                setState(() => filter = option);
-                            },
-                            style: TextButton.styleFrom(
-                              minimumSize: const Size(0, 40),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                              ),
-                              backgroundColor: filter == option
-                                  ? accent(c).withValues(alpha: .17)
-                                  : null,
-                              foregroundColor: filter == option
-                                  ? accent(c)
-                                  : secondaryText(c),
-                              shape: const StadiumBorder(),
-                            ),
-                            child: Text(
-                              option,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
+              CommunityTabs(const ['Per te', 'Seguiti', 'Gruppi'], filter, (
+                value,
+              ) {
+                pages.animateToPage(
+                  sections.indexOf(value),
+                  duration: const Duration(milliseconds: 260),
+                  curve: Curves.easeOutCubic,
+                );
+              }),
               if (refreshing)
                 const LinearProgressIndicator(
                   key: ValueKey('home-refresh-indicator'),
@@ -330,9 +254,6 @@ class _FeedState extends State<Feed> {
         actions: [
           IconButton(
             tooltip: 'Attività',
-            style: IconButton.styleFrom(
-              backgroundColor: accent(c).withValues(alpha: .10),
-            ),
             icon: Stack(
               clipBehavior: Clip.none,
               children: [
@@ -343,7 +264,7 @@ class _FeedState extends State<Feed> {
                     right: -3,
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        color: Colors.red,
+                        color: auraBlue,
                         shape: BoxShape.circle,
                       ),
                       child: SizedBox(width: 8, height: 8),
@@ -355,56 +276,81 @@ class _FeedState extends State<Feed> {
           ),
           IconButton(
             tooltip: 'Messaggi',
-            style: IconButton.styleFrom(
-              backgroundColor: accent(c).withValues(alpha: .10),
-            ),
             onPressed: () => open(c, const Inbox()),
             icon: Badge(
               isLabelVisible: s.threads.any(s.chatHasUnread),
-              child: const GIcon(CupertinoIcons.chat_bubble, size: 24),
+              backgroundColor: auraBlue,
+              child: const GIcon(CupertinoIcons.paperplane, size: 24),
             ),
           ),
           const SizedBox(width: 7),
         ],
       ),
-      body: RefreshIndicator(
-        key: refreshKey,
-        color: auraBlue,
-        onRefresh: refreshFeed,
-        child: ListView.builder(
-          key: const PageStorageKey('feed'),
-          controller: scroll,
-          padding: const EdgeInsets.only(bottom: 115),
-          physics: const AlwaysScrollableScrollPhysics(),
-          itemCount: posts.length + 2,
-          itemBuilder: (c, i) {
-            if (i == 0) return StoryTray(key: storyKey);
-            if (i == posts.length + 1)
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 32),
-                child: Column(
-                  children: [
-                    const GIcon(
-                      CupertinoIcons.check_mark_circled,
-                      size: 32,
-                      color: auraBlue,
+      backgroundColor: Theme.of(c).canvasColor,
+      body: PageView.builder(
+        key: const ValueKey('home-sections'),
+        controller: pages,
+        itemCount: sections.length,
+        onPageChanged: (index) => setState(() => filter = sections[index]),
+        itemBuilder: (context, index) {
+          final section = sections[index];
+          if (section == 'Gruppi') return const CommunityDirectory();
+          final visible = entries.where((entry) {
+            final author = entry.str('_entry') == 'group'
+                ? entry.str('owner')
+                : entry.str('author');
+            return section != 'Seguiti' ||
+                s.follows(author) ||
+                author == s.myId;
+          }).toList();
+          return RefreshIndicator(
+            key: refreshKeys[section],
+            color: auraBlue,
+            onRefresh: refreshFeed,
+            child: ListView.builder(
+              key: PageStorageKey(
+                section == 'Per te' ? 'feed' : 'feed-following',
+              ),
+              controller: scrolls[section],
+              padding: const EdgeInsets.only(bottom: 16),
+              physics: const AlwaysScrollableScrollPhysics(),
+              itemCount: visible.length + 2,
+              itemBuilder: (c, i) {
+                if (i == 0) return StoryTray(key: storyKeys[section]);
+                if (i == visible.length + 1)
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 32),
+                    child: Column(
+                      children: [
+                        const GIcon(
+                          CupertinoIcons.check_mark_circled,
+                          size: 32,
+                          color: auraBlue,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          visible.isEmpty
+                              ? 'Qui iniziano le tue storie.'
+                              : 'Sei al passo con le novità',
+                          style: const TextStyle(color: muted, fontSize: 12),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      posts.isEmpty
-                          ? 'Qui iniziano le tue storie.'
-                          : 'Sei al passo con le novità',
-                      style: const TextStyle(color: muted, fontSize: 12),
-                    ),
-                  ],
-                ),
-              );
-            return PostCard(
-              key: ValueKey(posts[i - 1].str('id')),
-              id: posts[i - 1].str('id'),
-            );
-          },
-        ),
+                  );
+                final entry = visible[i - 1];
+                if (entry.str('_entry') != 'post')
+                  return CommunityFeedCard(
+                    item: entry,
+                    group: entry.str('_entry') == 'group',
+                  );
+                return PostCard(
+                  key: ValueKey(entry.str('id')),
+                  id: entry.str('id'),
+                );
+              },
+            ),
+          );
+        },
       ),
     );
   }
@@ -481,7 +427,7 @@ class _StoryTrayState extends State<StoryTray> {
           ),
         Container(
           height:
-              124 +
+              112 +
               (MediaQuery.textScalerOf(c).scale(12) - 12).clamp(0.0, 32.0),
           margin: const EdgeInsets.fromLTRB(10, 4, 10, 6),
           child: ListView.separated(
@@ -502,8 +448,8 @@ class _StoryTrayState extends State<StoryTray> {
                     ? () => open(c, const Composer(kind: 'story'))
                     : null,
                 child: SizedBox(
-                  width: ((MediaQuery.sizeOf(c).width - 52) / 4).clamp(
-                    65.0,
+                  width: ((MediaQuery.sizeOf(c).width - 36) / 5.2).clamp(
+                    56.0,
                     88.0,
                   ),
                   child: Column(
@@ -513,10 +459,9 @@ class _StoryTrayState extends State<StoryTray> {
                         children: [
                           Avatar(
                             uid,
-                            roundedSquare: true,
-                            size: ((MediaQuery.sizeOf(c).width - 52) / 4 - 13)
-                                .clamp(54.0, 72.0),
-                            ring: stories.isNotEmpty || i == 0,
+                            size: ((MediaQuery.sizeOf(c).width - 36) / 5.2 - 13)
+                                .clamp(48.0, 58.0),
+                            ring: stories.isNotEmpty,
                             viewed:
                                 i != 0 &&
                                 stories.every(
@@ -683,6 +628,18 @@ class _PostCardState extends State<PostCard>
         u = s.user(uid),
         media = s.media(p),
         liked = p.ids('likes').contains(s.myId);
+    final moment = s.state
+        .rows('socialItems')
+        .where(
+          (item) =>
+              item.str('kind') == 'moment' && item.str('post') == widget.id,
+        )
+        .firstOrNull;
+    final participants = <String>{
+      if (moment != null) moment.str('author'),
+      if (moment != null)
+        ...moment.rows('contributions').map((r) => r.str('author')),
+    }.take(4).toList();
     final visibleLikers = p
         .ids('likes')
         .where((id) => s.user(id).str('username').isNotEmpty)
@@ -691,27 +648,58 @@ class _PostCardState extends State<PostCard>
     final menu = IconButton(
       tooltip: 'Opzioni del post',
       icon: const GIcon(CupertinoIcons.ellipsis, size: 22),
-      onPressed: () => postMenu(c, p),
+      onPressed: () {
+        if (uid == s.myId &&
+            moment == null &&
+            s.state.number('communityVersion') > 0 &&
+            p.str('kind') == 'post') {
+          sheet(
+            c,
+            Builder(
+              builder: (menu) => Column(
+                children: [
+                  ListTile(
+                    leading: const GIcon(CupertinoIcons.person_2),
+                    title: const Text('Crea un Momento da questo post'),
+                    onTap: () {
+                      Navigator.pop(menu);
+                      composeCommunity(c, 'communityMoment', post: widget.id);
+                    },
+                  ),
+                  ListTile(
+                    leading: const GIcon(CupertinoIcons.ellipsis),
+                    title: const Text('Altre opzioni del post'),
+                    onTap: () {
+                      Navigator.pop(menu);
+                      postMenu(c, p);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          );
+        } else {
+          postMenu(c, p);
+        }
+      },
     );
     final location = p.str('location');
-    final audience = p.str('audience') == 'close'
-        ? 'Amici più stretti'
-        : p.str('audience') == 'followers' || u.flag('private')
-        ? 'Follower'
-        : 'Pubblico';
-    final postSubtitle = widget.detail
-        ? relative(p['created'])
-        : location.isEmpty
-        ? audience
-        : '$location · $audience';
+    final name = u.str('name').trim().isEmpty
+        ? u.str('username')
+        : u.str('name');
+    final postSubtitle = [
+      if (p.number('created') > 0) relative(p['created']),
+      if (p.str('audience') == 'close') 'Amici più stretti',
+      if (location.isNotEmpty) location,
+    ].join(' · ');
     final authorInfo = InkWell(
       onTap: () => open(c, Profile(user: uid)),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 5, 12, 5),
+        padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Avatar(uid, size: widget.detail ? 34 : 38),
+            Avatar(uid, size: 38),
             const SizedBox(width: 8),
             Flexible(
               child: Column(
@@ -719,7 +707,7 @@ class _PostCardState extends State<PostCard>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    u.str('username'),
+                    name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -731,7 +719,7 @@ class _PostCardState extends State<PostCard>
                     postSubtitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 11, color: secondaryText(c)),
+                    style: TextStyle(fontSize: 12, color: secondaryText(c)),
                   ),
                 ],
               ),
@@ -740,9 +728,7 @@ class _PostCardState extends State<PostCard>
         ),
       ),
     );
-    final author = widget.detail
-        ? AuraPanel(radius: 27, frosted: media.isNotEmpty, child: authorInfo)
-        : authorInfo;
+    final author = authorInfo;
     final canFollow = uid != s.myId && !s.follows(uid);
     final followButton = TextButton(
       key: ValueKey('feed-follow-$uid-${widget.id}'),
@@ -760,14 +746,34 @@ class _PostCardState extends State<PostCard>
         style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
       ),
     );
-    return Padding(
-      padding: widget.detail
-          ? const EdgeInsets.fromLTRB(12, 5, 12, 13)
-          : const EdgeInsets.fromLTRB(6, 4, 6, 12),
+    return Container(
+      key: ValueKey('feed-post-${widget.id}'),
+      margin: EdgeInsets.fromLTRB(
+        widget.detail ? 0 : 10,
+        6,
+        widget.detail ? 0 : 10,
+        14,
+      ),
+      padding: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: surface(c),
+        border: Border.all(
+          color: Theme.of(c).dividerColor.withValues(alpha: .6),
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(
+              alpha: Theme.of(c).brightness == Brightness.dark ? .18 : .055,
+            ),
+            blurRadius: 20,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (!widget.detail) const Divider(height: 1, indent: 6, endIndent: 6),
           if (p.ids('reposts').isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(17, 10, 17, 0),
@@ -784,141 +790,119 @@ class _PostCardState extends State<PostCard>
                 ],
               ),
             ),
-          if (!widget.detail || media.isEmpty)
-            Padding(
-              padding: EdgeInsets.only(bottom: widget.detail ? 0 : 5),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: author,
-                    ),
-                  ),
-                  if (!widget.detail && canFollow) followButton,
-                  menu,
-                ],
-              ),
+          Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Align(alignment: Alignment.centerLeft, child: author),
+                ),
+                if (canFollow) followButton,
+                menu,
+              ],
             ),
+          ),
           if (media.isNotEmpty)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(19),
-              child: GestureDetector(
-                onTap: () =>
-                    openPhotoPreview(c, media[page.clamp(0, media.length - 1)]),
-                onDoubleTap: () => like(c, p, force: true),
-                child: LayoutBuilder(
-                  builder: (c, constraints) {
-                    final width = constraints.maxWidth;
-                    final aspect = p
-                        .obj('style')
-                        .number('aspect', 1)
-                        .clamp(.35, 2.5)
-                        .toDouble();
-                    Widget photo(String ref) => ColoredBox(
-                      color: subdued(c),
-                      child: InteractiveViewer(
-                        minScale: 1,
-                        maxScale: 3,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 7),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(18),
+                child: GestureDetector(
+                  onTap: () => openPhotoPreview(
+                    c,
+                    media[page.clamp(0, media.length - 1)],
+                  ),
+                  onDoubleTap: () => like(c, p, force: true),
+                  child: LayoutBuilder(
+                    builder: (c, constraints) {
+                      final width = constraints.maxWidth;
+                      final aspect = p
+                          .obj('style')
+                          .number('aspect', 1)
+                          .clamp(.35, 2.5)
+                          .toDouble();
+                      Widget photo(String ref) => ColoredBox(
+                        color: subdued(c),
                         child: MediaView(
                           ref,
                           width: width,
                           fit: BoxFit.contain,
                           placeholderHeight: width / aspect,
                         ),
-                      ),
-                    );
-                    return Stack(
-                      children: [
-                        if (media.length == 1)
-                          ConstrainedBox(
-                            constraints: BoxConstraints(minHeight: width / 2.5),
-                            child: photo(media.first),
-                          )
-                        else
-                          AspectRatio(
-                            aspectRatio: aspect,
-                            child: PageView.builder(
-                              key: PageStorageKey('media-${widget.id}'),
-                              itemCount: media.length,
-                              onPageChanged: (i) => setState(() => page = i),
-                              itemBuilder: (c, i) => photo(media[i]),
+                      );
+                      return Stack(
+                        children: [
+                          if (media.length == 1)
+                            ConstrainedBox(
+                              constraints: BoxConstraints(
+                                minHeight: width / 2.5,
+                              ),
+                              child: photo(media.first),
+                            )
+                          else
+                            AspectRatio(
+                              aspectRatio: aspect,
+                              child: PageView.builder(
+                                key: PageStorageKey('media-${widget.id}'),
+                                itemCount: media.length,
+                                onPageChanged: (i) => setState(() => page = i),
+                                itemBuilder: (c, i) => photo(media[i]),
+                              ),
                             ),
-                          ),
-                        if (media.length > 1)
-                          Positioned(
-                            top: widget.detail ? null : 10,
-                            bottom: widget.detail ? 10 : null,
-                            right: 10,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 9,
-                                vertical: 5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.black54,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                '${page + 1}/${media.length}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 11,
+                          if (media.length > 1)
+                            Positioned(
+                              top: 10,
+                              right: 10,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 9,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  '${page + 1}/${media.length}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        if (widget.detail)
-                          Positioned(
-                            top: 9,
-                            left: 9,
-                            right: 62,
-                            child: Align(
-                              alignment: Alignment.topLeft,
-                              child: author,
-                            ),
-                          ),
-                        if (widget.detail)
-                          Positioned(
-                            top: 7,
-                            right: 7,
-                            child: AuraPanel(
-                              radius: 24,
-                              frosted: true,
-                              child: menu,
-                            ),
-                          ),
-                        Positioned.fill(
-                          child: IgnorePointer(
-                            child: AnimatedBuilder(
-                              animation: heart,
-                              builder: (c, _) => Opacity(
-                                opacity: heart.value == 0
-                                    ? 0
-                                    : (1 - heart.value).clamp(0, 1),
-                                child: Transform.scale(
-                                  scale: .8 + heart.value * .45,
-                                  child: const Center(
-                                    child: GIcon(
-                                      CupertinoIcons.heart_fill,
-                                      size: 95,
-                                      color: Colors.white,
-                                      shadows: [
-                                        Shadow(
-                                          blurRadius: 12,
-                                          color: Colors.black26,
-                                        ),
-                                      ],
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: AnimatedBuilder(
+                                animation: heart,
+                                builder: (c, _) => Opacity(
+                                  opacity: heart.value == 0
+                                      ? 0
+                                      : (1 - heart.value).clamp(0, 1),
+                                  child: Transform.scale(
+                                    scale: .8 + heart.value * .45,
+                                    child: const Center(
+                                      child: GIcon(
+                                        CupertinoIcons.heart_fill,
+                                        size: 95,
+                                        color: Colors.white,
+                                        shadows: [
+                                          Shadow(
+                                            blurRadius: 12,
+                                            color: Colors.black26,
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
-                    );
-                  },
+                        ],
+                      );
+                    },
+                  ),
                 ),
               ),
             ),
@@ -1034,7 +1018,7 @@ class _PostCardState extends State<PostCard>
             ),
           PostExtras(post: p),
           Padding(
-            padding: const EdgeInsets.fromLTRB(15, 0, 15, 15),
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 2),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1092,16 +1076,18 @@ class _PostCardState extends State<PostCard>
                     TextSpan(
                       children: [
                         TextSpan(
-                          text: '${u.str('username')} ',
+                          text: '$name ',
                           style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                         TextSpan(text: p.str('text')),
                       ],
                     ),
-                    style: const TextStyle(fontSize: 13, height: 1.4),
+                    style: const TextStyle(fontSize: 14, height: 1.35),
                   ),
                 ],
-                if (!p.flag('commentsOff') && p.rows('comments').isEmpty) ...[
+                if (widget.detail &&
+                    !p.flag('commentsOff') &&
+                    p.rows('comments').isEmpty) ...[
                   const SizedBox(height: 7),
                   InkWell(
                     onTap: () => comments(c, widget.id),
@@ -1111,7 +1097,7 @@ class _PostCardState extends State<PostCard>
                     ),
                   ),
                 ],
-                if (p.number('created') > 0) ...[
+                if (widget.detail && p.number('created') > 0) ...[
                   const SizedBox(height: 5),
                   Text(
                     relative(p['created']),
@@ -1128,6 +1114,66 @@ class _PostCardState extends State<PostCard>
               ],
             ),
           ),
+          if (moment != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 3),
+              child: Material(
+                color: auraBlue.withValues(alpha: .06),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  side: BorderSide(color: auraBlue.withValues(alpha: .12)),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width:
+                            30 + (participants.length - 1).clamp(0, 3) * 18.0,
+                        height: 32,
+                        child: Stack(
+                          children: [
+                            for (var i = participants.length - 1; i >= 0; i--)
+                              Positioned(
+                                left: i * 18.0,
+                                child: Avatar(participants[i], size: 30),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${participants.length} persone hanno aggiunto uno scatto',
+                          style: const TextStyle(fontSize: 12, height: 1.2),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 34),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          side: const BorderSide(color: auraBlue),
+                          foregroundColor: accent(c),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onPressed: () =>
+                            open(c, CommunityDetail(id: moment.str('id'))),
+                        child: const Text(
+                          'Apri momento',
+                          style: TextStyle(fontSize: 11),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -1391,10 +1437,9 @@ Future<String?> textDialog(
   String value, {
   String hint = '',
   bool obscure = false,
-}) => showDialog<String>(
-  context: c,
-  builder: (_) =>
-      _TextDialog(title: title, initial: value, hint: hint, obscure: obscure),
+}) => sheet<String>(
+  c,
+  _TextDialog(title: title, initial: value, hint: hint, obscure: obscure),
 );
 
 class _TextDialog extends StatefulWidget {
@@ -1419,28 +1464,87 @@ class _TextDialogState extends State<_TextDialog> {
   }
 
   @override
-  Widget build(BuildContext c) => AlertDialog(
-    title: Text(widget.title, style: const TextStyle(fontSize: 18)),
-    content: TextField(
-      controller: controller,
-      autofocus: true,
-      maxLines: widget.obscure ? 1 : 3,
-      obscureText: widget.obscure,
-      decoration: InputDecoration(hintText: widget.hint),
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(c),
-        child: const Text('Annulla'),
-      ),
-      TextButton(
-        onPressed: () => Navigator.pop(
-          c,
-          widget.obscure ? controller.text : controller.text.trim(),
+  Widget build(BuildContext c) => Padding(
+    padding: const EdgeInsets.fromLTRB(22, 4, 22, 22),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: auraBlue.withValues(alpha: .1),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: GIcon(
+                widget.obscure
+                    ? CupertinoIcons.lock
+                    : CupertinoIcons.square_pencil,
+                color: accent(c),
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                widget.title,
+                style: const TextStyle(
+                  fontSize: 21,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -.5,
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Chiudi',
+              onPressed: () => Navigator.pop(c),
+              icon: const GIcon(CupertinoIcons.xmark, size: 19),
+            ),
+          ],
         ),
-        child: const Text('Salva'),
-      ),
-    ],
+        const SizedBox(height: 20),
+        TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: widget.obscure ? 1 : 3,
+          maxLines: widget.obscure ? 1 : 6,
+          obscureText: widget.obscure,
+          textCapitalization: widget.obscure
+              ? TextCapitalization.none
+              : TextCapitalization.sentences,
+          style: const TextStyle(fontSize: 17, height: 1.5),
+          decoration: InputDecoration(
+            hintText: widget.hint.isEmpty
+                ? (widget.obscure ? 'Password' : 'Scrivi qui…')
+                : widget.hint,
+            contentPadding: const EdgeInsets.all(18),
+          ),
+        ),
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => Navigator.pop(c),
+                child: const Text('Annulla'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton(
+                onPressed: () => Navigator.pop(
+                  c,
+                  widget.obscure ? controller.text : controller.text.trim(),
+                ),
+                child: const Text('Salva'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
   );
 }
 
@@ -2057,6 +2161,8 @@ class Explore extends StatefulWidget {
 class _ExploreState extends State<Explore> {
   String query = '';
   String category = 'Tutti';
+  bool showAll = false;
+  String mediaFilter = 'Tutti';
   final searchInput = TextEditingController();
   @override
   void dispose() {
@@ -2086,7 +2192,7 @@ class _ExploreState extends State<Explore> {
               ),
         )
         .toList();
-    final source = switch (category) {
+    final source = switch (mediaFilter) {
       'Reel' => s.reels,
       'Post' => s.posts,
       _ => [...s.posts, ...s.reels],
@@ -2100,9 +2206,15 @@ class _ExploreState extends State<Explore> {
           !s.preferences.ids('muted').contains(author) &&
           match.contains(accountTerm);
     }).toList();
+    final featured = term.isEmpty && !showAll;
+    final visiblePosts = featured ? posts.take(4).toList() : posts;
+    final suggestedGroups = s.state
+        .rows('socialGroups')
+        .where((g) => g.str('title').toLowerCase().contains(term))
+        .take(3);
     final showAccounts =
-        category == 'Account' || (category == 'Tutti' && term.isNotEmpty);
-    final showPosts = category != 'Account';
+        category == 'Persone' || (category == 'Tutti' && term.isNotEmpty);
+    final showPosts = category == 'Tutti';
     return Material(
       type: MaterialType.transparency,
       child: SafeArea(
@@ -2122,6 +2234,13 @@ class _ExploreState extends State<Explore> {
               ),
             ),
             SliverToBoxAdapter(
+              child: CommunityTabs(
+                const ['Tutti', 'Persone', 'Gruppi'],
+                category,
+                (label) => setState(() => category = label),
+              ),
+            ),
+            SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(17, 12, 17, 16),
                 child: TextField(
@@ -2130,7 +2249,7 @@ class _ExploreState extends State<Explore> {
                   onSubmitted: searchFor,
                   onChanged: (v) => setState(() => query = v),
                   decoration: InputDecoration(
-                    hintText: 'Cerca persone e momenti',
+                    hintText: 'Cerca persone, gruppi, eventi…',
                     suffixIcon: query.isEmpty
                         ? null
                         : IconButton(
@@ -2158,23 +2277,29 @@ class _ExploreState extends State<Explore> {
                 ),
               ),
             ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                child: Wrap(
-                  spacing: 8,
-                  children: [
-                    for (final label in ['Tutti', 'Account', 'Post', 'Reel'])
-                      ChoiceChip(
-                        label: Text(label),
-                        selected: category == label,
-                        onSelected: (_) => setState(() => category = label),
-                      ),
-                  ],
+            if (category == 'Gruppi')
+              SliverFillRemaining(child: CommunityDirectory(query: query)),
+            if (category == 'Tutti' && term.isNotEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Wrap(
+                    spacing: 8,
+                    children: [
+                      for (final option in const ['Tutti', 'Post', 'Reel'])
+                        ChoiceChip(
+                          label: Text(option),
+                          selected: mediaFilter == option,
+                          onSelected: (_) =>
+                              setState(() => mediaFilter = option),
+                        ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            if (query.isEmpty && s.searchHistory.isNotEmpty)
+            if (category != 'Gruppi' &&
+                query.isEmpty &&
+                s.searchHistory.isNotEmpty)
               SliverToBoxAdapter(
                 child: Column(
                   children: [
@@ -2240,6 +2365,19 @@ class _ExploreState extends State<Explore> {
                     .toList(),
               ),
             ],
+            if (showPosts && term.isEmpty && posts.isNotEmpty)
+              SliverToBoxAdapter(
+                child: ListTile(
+                  title: const Text(
+                    'Popolari',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  trailing: TextButton(
+                    onPressed: () => setState(() => showAll = !showAll),
+                    child: Text(showAll ? 'Mostra meno' : 'Vedi tutto'),
+                  ),
+                ),
+              ),
             if (showPosts && posts.isNotEmpty)
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -2248,24 +2386,24 @@ class _ExploreState extends State<Explore> {
                     (c, i) => InkWell(
                       onTap: () {
                         s.rememberSearch(query);
-                        open(c, PostPage(id: posts[i].str('id')));
+                        open(c, PostPage(id: visiblePosts[i].str('id')));
                       },
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(10),
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            if (posts[i].str('kind') == 'reel')
+                            if (visiblePosts[i].str('kind') == 'reel')
                               ColoredBox(
                                 color: subdued(c),
                                 child: Center(
                                   child: Padding(
                                     padding: const EdgeInsets.all(10),
                                     child: Text(
-                                      posts[i].str(
+                                      visiblePosts[i].str(
                                         'text',
                                         s
-                                            .user(posts[i].str('author'))
+                                            .user(visiblePosts[i].str('author'))
                                             .str('username'),
                                       ),
                                       maxLines: 3,
@@ -2277,8 +2415,8 @@ class _ExploreState extends State<Explore> {
                                 ),
                               )
                             else
-                              MediaView(posts[i].str('media')),
-                            if (posts[i].str('kind') == 'reel')
+                              MediaView(visiblePosts[i].str('media')),
+                            if (visiblePosts[i].str('kind') == 'reel')
                               const Positioned(
                                 bottom: 8,
                                 right: 8,
@@ -2288,7 +2426,7 @@ class _ExploreState extends State<Explore> {
                                   size: 20,
                                 ),
                               ),
-                            if (s.media(posts[i]).length > 1)
+                            if (s.media(visiblePosts[i]).length > 1)
                               const Positioned(
                                 top: 9,
                                 right: 9,
@@ -2302,17 +2440,50 @@ class _ExploreState extends State<Explore> {
                         ),
                       ),
                     ),
-                    childCount: posts.length,
+                    childCount: visiblePosts.length,
                   ),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: featured ? 2 : 3,
                     mainAxisSpacing: 5,
                     crossAxisSpacing: 5,
-                    childAspectRatio: .78,
+                    childAspectRatio: featured ? 1.3 : .78,
                   ),
                 ),
               ),
-            if ((!showPosts || posts.isEmpty) &&
+            if (category == 'Tutti' && suggestedGroups.isNotEmpty)
+              SliverToBoxAdapter(
+                child: Column(
+                  children: [
+                    const ListTile(
+                      title: Text(
+                        'Gruppi',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    for (final group in suggestedGroups)
+                      ListTile(
+                        leading: Avatar(
+                          group.str('owner'),
+                          image: group.str('cover').isEmpty
+                              ? null
+                              : group.str('cover'),
+                        ),
+                        title: Text(group.str('title')),
+                        subtitle: Text(
+                          'Gruppo pubblico · ${group.number('members').toInt()} membri',
+                        ),
+                        trailing: const GIcon(
+                          CupertinoIcons.chevron_right,
+                          size: 15,
+                        ),
+                        onTap: () =>
+                            open(c, CommunityGroup(id: group.str('id'))),
+                      ),
+                  ],
+                ),
+              ),
+            if (category != 'Gruppi' &&
+                (!showPosts || posts.isEmpty) &&
                 (!showAccounts || users.isEmpty))
               const SliverToBoxAdapter(
                 child: EmptyState(
@@ -2507,7 +2678,8 @@ class _ProfileState extends State<Profile> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  key: const ValueKey('profile-identity'),
+                  padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -2515,7 +2687,13 @@ class _ProfileState extends State<Profile> {
                         children: [
                           SizedBox(
                             width: 94,
-                            height: 106,
+                            height:
+                                own ||
+                                    s.notes.any(
+                                      (n) => n.str('owner') == widget.user,
+                                    )
+                                ? 142
+                                : 92,
                             child: Stack(
                               alignment: Alignment.bottomCenter,
                               clipBehavior: Clip.none,
@@ -2532,6 +2710,44 @@ class _ProfileState extends State<Profile> {
                                     ring: s.hasUnseenStories(widget.user),
                                   ),
                                 ),
+                                if (own ||
+                                    s.notes.any(
+                                      (n) => n.str('owner') == widget.user,
+                                    ))
+                                  Positioned(
+                                    key: const ValueKey('profile-note'),
+                                    top: 0,
+                                    left: -4,
+                                    right: -4,
+                                    child: GestureDetector(
+                                      behavior: HitTestBehavior.opaque,
+                                      onTap: () => own
+                                          ? manageOwnNote(c)
+                                          : replyNote(
+                                              c,
+                                              s.notes.firstWhere(
+                                                (n) =>
+                                                    n.str('owner') ==
+                                                    widget.user,
+                                              ),
+                                            ),
+                                      child: NoteBubble(
+                                        text:
+                                            s.notes
+                                                .where(
+                                                  (n) =>
+                                                      n.str('owner') ==
+                                                      widget.user,
+                                                )
+                                                .firstOrNull
+                                                ?.str('text') ??
+                                            'Lascia una nota…',
+                                        placeholder: !s.notes.any(
+                                          (n) => n.str('owner') == widget.user,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                 if (own)
                                   Positioned(
                                     right: 0,
@@ -2560,54 +2776,6 @@ class _ProfileState extends State<Profile> {
                                       ),
                                     ),
                                   ),
-                                if (own)
-                                  Positioned(
-                                    top: -7,
-                                    left: -2,
-                                    right: -2,
-                                    child: InkWell(
-                                      onTap: () => manageOwnNote(c),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 9,
-                                          vertical: 8,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: surface(c),
-                                          borderRadius: BorderRadius.circular(
-                                            18,
-                                          ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black.withValues(
-                                                alpha: .09,
-                                              ),
-                                              blurRadius: 14,
-                                              offset: const Offset(0, 3),
-                                            ),
-                                          ],
-                                        ),
-                                        child: Text(
-                                          s.notes
-                                                  .where(
-                                                    (n) =>
-                                                        n.str('owner') ==
-                                                        s.myId,
-                                                  )
-                                                  .firstOrNull
-                                                  ?.str('text') ??
-                                              'Lascia una nota…',
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          textAlign: TextAlign.center,
-                                          style: const TextStyle(
-                                            fontSize: 10,
-                                            height: 1.1,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
                               ],
                             ),
                           ),
@@ -2631,8 +2799,9 @@ class _ProfileState extends State<Profile> {
                                       fontSize: 12,
                                     ),
                                   ),
-                                const SizedBox(height: 9),
+                                const SizedBox(height: 14),
                                 Row(
+                                  key: const ValueKey('profile-stats'),
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     stat(
@@ -2679,7 +2848,7 @@ class _ProfileState extends State<Profile> {
                           style: const TextStyle(fontSize: 13, height: 1.35),
                         ),
                       ],
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 8),
                       ProfileLinkChips(links: u.rows('links'), own: own),
                       const SizedBox(height: 16),
                       Row(
@@ -2789,8 +2958,24 @@ class _ProfileState extends State<Profile> {
                   ),
                 ),
                 if (own || highlights.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+                    child: Text(
+                      'In evidenza',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                if (own || highlights.isNotEmpty)
                   SizedBox(
-                    height: 112,
+                    height:
+                        86 +
+                        (MediaQuery.textScalerOf(c).scale(11) - 11).clamp(
+                          0.0,
+                          35.0,
+                        ),
                     child: ListView.separated(
                       padding: const EdgeInsets.symmetric(horizontal: 19),
                       scrollDirection: Axis.horizontal,
@@ -2800,16 +2985,18 @@ class _ProfileState extends State<Profile> {
                         if (own && i == 0)
                           return InkWell(
                             onTap: () => createHighlight(c),
-                            child: Container(
-                              width: 78,
-                              decoration: BoxDecoration(
-                                color: subdued(c),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
+                            child: const SizedBox(
+                              width: 65,
+                              child: Column(
                                 children: [
-                                  GIcon(CupertinoIcons.plus, size: 24),
+                                  CircleAvatar(
+                                    radius: 27,
+                                    backgroundColor: Colors.transparent,
+                                    child: GIcon(
+                                      CupertinoIcons.plus_circle,
+                                      size: 42,
+                                    ),
+                                  ),
                                   SizedBox(height: 5),
                                   Text('Nuova', style: TextStyle(fontSize: 11)),
                                 ],
@@ -2847,55 +3034,36 @@ class _ProfileState extends State<Profile> {
                                   ),
                                 )
                               : null,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: SizedBox(
-                              width: 78,
-                              child: Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  MediaView(
-                                    ids.isEmpty
-                                        ? ''
-                                        : s.post(ids.first).str('media'),
-                                  ),
-                                  const DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                        colors: [
-                                          Colors.transparent,
-                                          Colors.black87,
-                                        ],
-                                        stops: [.46, 1],
-                                      ),
+                          child: SizedBox(
+                            width: 65,
+                            child: Column(
+                              children: [
+                                ClipOval(
+                                  child: SizedBox.square(
+                                    dimension: 54,
+                                    child: MediaView(
+                                      ids.isEmpty
+                                          ? ''
+                                          : s.post(ids.first).str('media'),
+                                      fit: BoxFit.cover,
                                     ),
                                   ),
-                                  Positioned(
-                                    left: 6,
-                                    right: 6,
-                                    bottom: 7,
-                                    child: Text(
-                                      h.str('title'),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                ),
+                                const SizedBox(height: 5),
+                                Text(
+                                  h.str('title'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                              ],
                             ),
                           ),
                         );
                       },
                     ),
                   ),
-                if (own || highlights.isNotEmpty) const SizedBox(height: 14),
+                if (own || highlights.isNotEmpty) const SizedBox(height: 24),
                 if (own && showSuggestions) _suggestions(c),
                 Row(
                   children: [
@@ -3164,12 +3332,12 @@ class _ProfileState extends State<Profile> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 44),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               value,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 2),
             Text(
@@ -3187,7 +3355,7 @@ class _ProfileState extends State<Profile> {
 
   Widget smallButton(String text, VoidCallback tap, {bool primary = false}) =>
       ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 40),
+        constraints: const BoxConstraints(minHeight: 46),
         child: FilledButton(
           onPressed: tap,
           style: FilledButton.styleFrom(
@@ -3195,7 +3363,7 @@ class _ProfileState extends State<Profile> {
             backgroundColor: primary ? auraBlue : subdued(context),
             foregroundColor: primary ? Colors.white : foreground(context),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(14),
             ),
           ),
           child: Text(
@@ -3400,39 +3568,34 @@ class _EditProfileState extends State<EditProfile> {
   Widget build(BuildContext c) {
     final s = GpixScope.of(c);
     return Scaffold(
-      appBar: AppBar(
-        centerTitle: true,
-        title: pageTitle('Modifica profilo'),
-        actions: [
-          TextButton(
-            onPressed: busy
-                ? null
-                : () => perform(c, () async {
-                    if (fields['name']!.text.trim().isEmpty ||
-                        fields['username']!.text.trim().isEmpty)
-                      throw Exception('Nome e nome utente sono obbligatori.');
-                    final site = fields['website']!.text.trim();
-                    if (site.isNotEmpty && !site.startsWith('https://'))
-                      throw Exception('Il sito deve iniziare con https://');
-                    setState(() => busy = true);
-                    try {
-                      await s.act('profile', {
-                        for (final e in fields.entries)
-                          e.key: e.value.text.trim(),
-                        'avatar': avatar,
-                        'private': s.me.flag('private'),
-                      });
-                      if (c.mounted) Navigator.pop(c);
-                    } finally {
-                      if (mounted) setState(() => busy = false);
-                    }
-                  }),
-            child: Text(
-              busy ? 'Salvo…' : 'Fine',
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
+      appBar: AppBar(centerTitle: true, title: pageTitle('Modifica profilo')),
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        child: FilledButton(
+          onPressed: busy
+              ? null
+              : () => perform(c, () async {
+                  if (fields['name']!.text.trim().isEmpty ||
+                      fields['username']!.text.trim().isEmpty)
+                    throw Exception('Nome e nome utente sono obbligatori.');
+                  final site = fields['website']!.text.trim();
+                  if (site.isNotEmpty && !site.startsWith('https://'))
+                    throw Exception('Il sito deve iniziare con https://');
+                  setState(() => busy = true);
+                  try {
+                    await s.act('profile', {
+                      for (final e in fields.entries)
+                        e.key: e.value.text.trim(),
+                      'avatar': avatar,
+                      'private': s.me.flag('private'),
+                    });
+                    if (c.mounted) Navigator.pop(c);
+                  } finally {
+                    if (mounted) setState(() => busy = false);
+                  }
+                }),
+          child: Text(busy ? 'Salvo…' : 'Salva'),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 30),
@@ -3477,62 +3640,38 @@ class _EditProfileState extends State<EditProfile> {
           for (final field in const [
             (key: 'name', label: 'Nome', max: 60),
             (key: 'username', label: 'Nome utente', max: 30),
-            (key: 'pronouns', label: 'Pronomi', max: 40),
             (key: 'bio', label: 'Biografia', max: 150),
+            (key: 'website', label: 'Sito web', max: 200),
+            (key: 'pronouns', label: 'Pronomi', max: 40),
           ])
-            LayoutBuilder(
-              builder: (c, constraints) {
-                final wide =
-                    constraints.maxWidth >= 280 &&
-                    MediaQuery.textScalerOf(c).scale(15) <= 19;
-                final label = Text(
-                  field.label,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                );
-                final input = Semantics(
-                  label: field.label,
-                  child: TextField(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    field.label,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 5),
+                  TextField(
                     key: ValueKey('edit-profile-${field.key}'),
                     controller: fields[field.key],
-                    maxLines: field.key == 'bio' ? 5 : 1,
-                    minLines: 1,
                     maxLength: field.max,
-                    textCapitalization: ['name', 'bio'].contains(field.key)
-                        ? TextCapitalization.sentences
-                        : TextCapitalization.none,
-                    style: const TextStyle(fontSize: 15, height: 1.4),
+                    minLines: field.key == 'bio' ? 2 : 1,
+                    maxLines: field.key == 'bio' ? 5 : 1,
+                    keyboardType: field.key == 'website'
+                        ? TextInputType.url
+                        : null,
                     decoration: InputDecoration(
-                      hintText: field.key == 'pronouns' ? 'Aggiungi' : null,
+                      hintText: field.key == 'website' ? 'https://' : null,
                       counterText: '',
                       filled: false,
-                      enabledBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: Theme.of(c).dividerColor),
-                      ),
-                      focusedBorder: const UnderlineInputBorder(
-                        borderSide: BorderSide(color: auraBlue),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                      isDense: true,
                     ),
                   ),
-                );
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: wide
-                      ? Row(
-                          children: [
-                            SizedBox(
-                              width: constraints.maxWidth * .33,
-                              child: label,
-                            ),
-                            Expanded(child: input),
-                          ],
-                        )
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [label, input],
-                        ),
-                );
-              },
+                ],
+              ),
             ),
           const SizedBox(height: 20),
           const Divider(height: 1),
@@ -3662,6 +3801,7 @@ class Activity extends StatefulWidget {
 
 class _ActivityState extends State<Activity> {
   bool unreadOnly = false;
+  String activityFilter = 'Tutte';
   final deciding = <String>{};
 
   Future<void> decide(GpixStore store, String id, bool accept) async {
@@ -3680,7 +3820,20 @@ class _ActivityState extends State<Activity> {
     final notifications = s.socialNotifications
       ..sort((a, b) => b.number('created').compareTo(a.number('created')));
     final unread = notifications.any((n) => !n.flag('seen'));
-    final visible = notifications.where((n) => !unreadOnly || !n.flag('seen'));
+    final visible = notifications.where(
+      (n) =>
+          (!unreadOnly || !n.flag('seen')) &&
+          (activityFilter == 'Tutte' ||
+              (activityFilter == 'Mi piace' &&
+                  ['like', 'storyLike', 'noteLike'].contains(n.str('type'))) ||
+              (activityFilter == 'Commenti' && n.str('type') == 'comment') ||
+              (activityFilter == 'Follower' &&
+                  [
+                    'follow',
+                    'followRequest',
+                    'followAccepted',
+                  ].contains(n.str('type')))),
+    );
     final requests = s.state.ids('requests');
     final date = DateTime.now();
     double midnight(int offset) =>
@@ -3713,55 +3866,26 @@ class _ActivityState extends State<Activity> {
         backgroundColor: surface,
         surfaceTintColor: Colors.transparent,
         centerTitle: false,
-        titleSpacing: 8,
-        leading: Padding(
-          padding: const EdgeInsets.all(7),
-          child: IconButton.outlined(
-            tooltip: 'Indietro',
-            onPressed: () => Navigator.maybePop(c),
-            icon: const GIcon(CupertinoIcons.chevron_left),
-          ),
-        ),
-        title: PopupMenuButton<bool>(
-          tooltip: 'Mostra attività',
-          onSelected: (value) => setState(() => unreadOnly = value),
-          itemBuilder: (_) => [
-            CheckedPopupMenuItem(
-              value: false,
-              checked: !unreadOnly,
-              child: const Text('Tutte le attività'),
-            ),
-            CheckedPopupMenuItem(
-              value: true,
-              checked: unreadOnly,
-              child: const Text('Da leggere'),
-            ),
-          ],
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: Text(
-                  s.me.str('username'),
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 23,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              const GIcon(CupertinoIcons.chevron_down, size: 15),
-              if (unread) ...[const SizedBox(width: 6), dot(Colors.redAccent)],
-            ],
-          ),
+        title: const Text(
+          'Attività',
+          style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
         ),
         actions: [
           PopupMenuButton<String>(
             tooltip: 'Opzioni attività',
-            icon: const GIcon(CupertinoIcons.bell),
-            onSelected: (_) => perform(c, () => s.act('notificationsRead')),
+            icon: const GIcon(CupertinoIcons.ellipsis),
+            onSelected: (value) {
+              if (value == 'read') {
+                perform(c, () => s.act('notificationsRead'));
+              } else {
+                setState(() => unreadOnly = !unreadOnly);
+              }
+            },
             itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'filter',
+                child: Text(unreadOnly ? 'Tutte le attività' : 'Da leggere'),
+              ),
               PopupMenuItem(
                 value: 'read',
                 enabled: unread,
@@ -3777,60 +3901,98 @@ class _ActivityState extends State<Activity> {
           padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
           physics: const AlwaysScrollableScrollPhysics(),
           children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: SizedBox.square(
-                dimension: 54,
-                child: requests.isEmpty
-                    ? CircleAvatar(
-                        backgroundColor: subdued(c),
-                        child: const GIcon(CupertinoIcons.person_add),
-                      )
-                    : Stack(
-                        children: [
-                          Avatar(
-                            requests.first,
-                            size: requests.length > 1 ? 40 : 54,
-                          ),
-                          if (requests.length > 1)
-                            Align(
-                              alignment: Alignment.bottomRight,
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: surface,
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(2),
-                                  child: Avatar(requests[1], size: 40),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 18),
+              child: Text(
+                'Le persone, le interazioni, le tue novità.',
+                style: TextStyle(color: secondaryText(c)),
               ),
-              title: const Text(
-                'Richieste di seguirti',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-              subtitle: Text(
-                requests.isEmpty
-                    ? 'Nessuna richiesta in attesa'
-                    : "${s.user(requests.first).str('username')}${requests.length > 1 ? ' + altri ${requests.length - 1}' : ''}",
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
+            ),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
                 children: [
-                  if (requests.isNotEmpty) ...[
-                    dot(auraBlue),
-                    const SizedBox(width: 10),
-                  ],
-                  const GIcon(CupertinoIcons.chevron_right, size: 18),
+                  for (final value in [
+                    'Tutte',
+                    'Mi piace',
+                    'Commenti',
+                    'Follower',
+                  ])
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(value),
+                        selected: activityFilter == value,
+                        onSelected: (_) =>
+                            setState(() => activityFilter = value),
+                      ),
+                    ),
                 ],
               ),
-              onTap: () => open(c, const Requests()),
+            ),
+            const SizedBox(height: 18),
+            Container(
+              decoration: BoxDecoration(
+                color: subdued(c),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: Theme.of(c).dividerColor),
+              ),
+              padding: const EdgeInsets.all(14),
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: SizedBox.square(
+                  dimension: 54,
+                  child: requests.isEmpty
+                      ? CircleAvatar(
+                          backgroundColor: subdued(c),
+                          child: const GIcon(CupertinoIcons.person_add),
+                        )
+                      : Stack(
+                          children: [
+                            Avatar(
+                              requests.first,
+                              size: requests.length > 1 ? 40 : 54,
+                            ),
+                            if (requests.length > 1)
+                              Align(
+                                alignment: Alignment.bottomRight,
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: surface,
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(2),
+                                    child: Avatar(requests[1], size: 40),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                ),
+                title: const Text(
+                  'Richieste di seguirti',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                subtitle: Text(
+                  requests.isEmpty
+                      ? 'Nessuna richiesta in attesa'
+                      : "${s.user(requests.first).str('username')}${requests.length > 1 ? ' + altri ${requests.length - 1}' : ''}",
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (requests.isNotEmpty) ...[
+                      dot(auraBlue),
+                      const SizedBox(width: 10),
+                    ],
+                    const GIcon(CupertinoIcons.chevron_right, size: 18),
+                  ],
+                ),
+                onTap: () => open(c, const Requests()),
+              ),
             ),
             if (visible.isEmpty)
               EmptyState(
@@ -3894,9 +4056,7 @@ class _ActivityState extends State<Activity> {
                                   ? null
                                   : () => decide(s, actor, accept),
                               style: FilledButton.styleFrom(
-                                backgroundColor: accept
-                                    ? const Color(0xff4d55f5)
-                                    : subdued(c),
+                                backgroundColor: accept ? auraBlue : subdued(c),
                                 foregroundColor: accept
                                     ? Colors.white
                                     : foreground(c),
@@ -3920,102 +4080,145 @@ class _ActivityState extends State<Activity> {
                           final inline =
                               constraints.maxWidth >= 355 &&
                               MediaQuery.textScalerOf(c).scale(12) < 15;
-                          return ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            minVerticalPadding: 10,
-                            horizontalTitleGap: 12,
-                            leading: actor.isEmpty
-                                ? CircleAvatar(
-                                    radius: 26,
-                                    backgroundColor: subdued(c),
-                                    child: const GIcon(CupertinoIcons.bell),
-                                  )
-                                : Avatar(actor, size: 52),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text.rich(
-                                  TextSpan(
-                                    children: [
-                                      if (actor.isNotEmpty)
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: !n.flag('seen')
+                                  ? auraBlue.withValues(alpha: .055)
+                                  : subdued(c).withValues(alpha: .4),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              minVerticalPadding: 10,
+                              horizontalTitleGap: 12,
+                              leading: actor.isEmpty
+                                  ? CircleAvatar(
+                                      radius: 26,
+                                      backgroundColor: subdued(c),
+                                      child: const GIcon(CupertinoIcons.bell),
+                                    )
+                                  : Avatar(actor, size: 52),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text.rich(
+                                    TextSpan(
+                                      children: [
+                                        if (actor.isNotEmpty)
+                                          TextSpan(
+                                            text:
+                                                "${s.user(actor).str('username')} ",
+                                            style: TextStyle(
+                                              color: foreground(c),
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
                                         TextSpan(
-                                          text:
-                                              "${s.user(actor).str('username')} ",
+                                          text: label,
                                           style: TextStyle(
                                             color: foreground(c),
-                                            fontWeight: FontWeight.w700,
                                           ),
                                         ),
-                                      TextSpan(
-                                        text: label,
-                                        style: TextStyle(color: foreground(c)),
-                                      ),
-                                      TextSpan(
-                                        text: '  ${relative(n['created'])}',
-                                        style: const TextStyle(color: muted),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                if (pending && !inline) actions,
-                              ],
-                            ),
-                            trailing: pending && inline
-                                ? actions
-                                : (!pending && !n.flag('seen')
-                                      ? dot(auraBlue)
-                                      : null),
-                            onTap: () => perform(c, () async {
-                              await s.act('notificationsRead', {'id': n['id']});
-                              if (!c.mounted) return;
-                              if (n.str('type') == 'followRequest') {
-                                open(c, const Requests());
-                              } else if (n.str('type') == 'messageReaction') {
-                                final thread = s.threads
-                                    .where(
-                                      (t) => t
-                                          .rows('messages')
-                                          .any(
-                                            (m) => m.str('id') == n.str('ref'),
-                                          ),
-                                    )
-                                    .firstOrNull;
-                                if (thread != null) {
-                                  open(c, Chat(id: thread.str('id')));
-                                } else {
-                                  notice(
-                                    c,
-                                    'Il messaggio non è più disponibile',
-                                  );
-                                }
-                              } else if (n.str('type') == 'noteLike') {
-                                manageOwnNote(c);
-                              } else if (n.str('type') == 'storyLike' ||
-                                  (n.str('type') == 'like' &&
-                                      s.post(n.str('ref')).str('kind') ==
-                                          'story')) {
-                                final story = s.post(n.str('ref'));
-                                if (story.isNotEmpty &&
-                                    story.number('expires') > now) {
-                                  open(
-                                    c,
-                                    StoryViewer(
-                                      user: story.str('author'),
-                                      ids: [story.str('id')],
+                                        TextSpan(
+                                          text: '  ${relative(n['created'])}',
+                                          style: const TextStyle(color: muted),
+                                        ),
+                                      ],
                                     ),
-                                  );
-                                } else {
-                                  notice(
-                                    c,
-                                    'Questa storia non è più disponibile',
-                                  );
+                                  ),
+                                  if (pending && !inline) actions,
+                                ],
+                              ),
+                              trailing: pending && inline
+                                  ? actions
+                                  : Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (s.post(n.str('ref')).isNotEmpty &&
+                                            s
+                                                .media(s.post(n.str('ref')))
+                                                .isNotEmpty)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              right: 10,
+                                            ),
+                                            child: ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(9),
+                                              child: MediaView(
+                                                s
+                                                    .media(s.post(n.str('ref')))
+                                                    .first,
+                                                width: 42,
+                                                height: 52,
+                                                fit: BoxFit.cover,
+                                              ),
+                                            ),
+                                          ),
+                                        if (!pending && !n.flag('seen'))
+                                          dot(auraBlue),
+                                      ],
+                                    ),
+                              onTap: () => perform(c, () async {
+                                await s.act('notificationsRead', {
+                                  'id': n['id'],
+                                });
+                                if (!c.mounted) return;
+                                if (n.str('type') == 'followRequest') {
+                                  open(c, const Requests());
+                                } else if (n.str('type') == 'messageReaction') {
+                                  final thread = s.threads
+                                      .where(
+                                        (t) => t
+                                            .rows('messages')
+                                            .any(
+                                              (m) =>
+                                                  m.str('id') == n.str('ref'),
+                                            ),
+                                      )
+                                      .firstOrNull;
+                                  if (thread != null) {
+                                    open(c, Chat(id: thread.str('id')));
+                                  } else {
+                                    notice(
+                                      c,
+                                      'Il messaggio non è più disponibile',
+                                    );
+                                  }
+                                } else if (n.str('type') == 'noteLike') {
+                                  manageOwnNote(c);
+                                } else if (n.str('type') == 'storyLike' ||
+                                    (n.str('type') == 'like' &&
+                                        s.post(n.str('ref')).str('kind') ==
+                                            'story')) {
+                                  final story = s.post(n.str('ref'));
+                                  if (story.isNotEmpty &&
+                                      story.number('expires') > now) {
+                                    open(
+                                      c,
+                                      StoryViewer(
+                                        user: story.str('author'),
+                                        ids: [story.str('id')],
+                                      ),
+                                    );
+                                  } else {
+                                    notice(
+                                      c,
+                                      'Questa storia non è più disponibile',
+                                    );
+                                  }
+                                } else if (s.post(n.str('ref')).isNotEmpty) {
+                                  open(c, PostPage(id: n.str('ref')));
+                                } else if (actor.isNotEmpty) {
+                                  open(c, Profile(user: actor));
                                 }
-                              } else if (s.post(n.str('ref')).isNotEmpty) {
-                                open(c, PostPage(id: n.str('ref')));
-                              } else if (actor.isNotEmpty) {
-                                open(c, Profile(user: actor));
-                              }
-                            }),
+                              }),
+                            ),
                           );
                         },
                       );
@@ -4783,8 +4986,39 @@ class _SettingsState extends State<Settings> {
       return Scaffold(
         appBar: AppBar(title: pageTitle(area)),
         body: ListView(
+          padding: const EdgeInsets.all(16),
           children: [
-            for (final entry in group.$4) entry.$2,
+            Container(
+              padding: const EdgeInsets.all(22),
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: subdued(c),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  GIcon(group.$3, size: 30, color: accent(c)),
+                  const SizedBox(height: 14),
+                  Text(
+                    group.$2,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            for (final entry in group.$4)
+              Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                decoration: BoxDecoration(
+                  color: subdued(c),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: entry.$2,
+              ),
             if (area == 'Account') access,
           ],
         ),
@@ -4803,130 +5037,175 @@ class _SettingsState extends State<Settings> {
         title: pageTitle('Impostazioni e attività'),
         centerTitle: true,
       ),
-      bottomNavigationBar: filter.isEmpty
-          ? SafeArea(
-              minimum: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Theme.of(c).colorScheme.error,
-                  minimumSize: const Size.fromHeight(48),
-                  side: BorderSide(
-                    color: Theme.of(c).colorScheme.error.withValues(alpha: .42),
-                  ),
+      body: ListView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+            child: TextField(
+              key: const ValueKey('settings-search'),
+              onChanged: (v) => setState(() => query = v),
+              decoration: InputDecoration(
+                hintText: 'Cerca un’impostazione',
+                prefixIcon: const Padding(
+                  padding: EdgeInsets.all(13),
+                  child: GIcon(CupertinoIcons.search, size: 21, color: muted),
                 ),
-                onPressed: () => _logout(c, s),
-                icon: const GIcon(CupertinoIcons.square_arrow_left, size: 19),
-                label: const Text('Esci'),
+                filled: true,
+                fillColor: subdued(c),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(28),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(vertical: 11),
               ),
-            )
-          : null,
-      body: LayoutBuilder(
-        builder: (c, viewport) => ListView(
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-              child: TextField(
-                key: const ValueKey('settings-search'),
-                onChanged: (v) => setState(() => query = v),
-                decoration: InputDecoration(
-                  hintText: 'Cerca un’impostazione',
-                  prefixIcon: const Padding(
-                    padding: EdgeInsets.all(13),
-                    child: GIcon(CupertinoIcons.search, size: 21, color: muted),
-                  ),
-                  filled: true,
-                  fillColor: subdued(c),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(28),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 11),
+            ),
+          ),
+          if (filter.isEmpty) ...[
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 22),
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: subdued(c),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: InkWell(
+                onTap: () => open(c, const EditProfile()),
+                child: Row(
+                  children: [
+                    Avatar(s.myId, size: 48),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            s.me.str('name'),
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          Text(
+                            '@${s.me.str('username')}',
+                            style: TextStyle(
+                              color: secondaryText(c),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const GIcon(CupertinoIcons.chevron_right, size: 17),
+                  ],
                 ),
               ),
             ),
-            if (filter.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: LayoutBuilder(
-                  builder: (c, constraints) {
-                    final columns =
-                        constraints.maxWidth < 270 ||
-                            MediaQuery.textScalerOf(c).scale(15) > 21
-                        ? 1
-                        : 2;
-                    final width =
-                        (constraints.maxWidth - (columns - 1) * 10) / columns;
-                    return Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-                        for (final group in groups)
-                          ConstrainedBox(
-                            constraints: BoxConstraints.tightFor(width: width)
-                                .copyWith(
-                                  minHeight: columns == 1
-                                      ? 0
-                                      : ((viewport.maxHeight - 124) / 3)
-                                            .clamp(100, 210)
-                                            .toDouble(),
-                                ),
-                            child: Material(
-                              color: subdued(c),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                side: BorderSide(
-                                  color: Theme.of(c).dividerColor,
-                                ),
-                              ),
-                              clipBehavior: Clip.antiAlias,
-                              child: InkWell(
-                                onTap: () =>
-                                    open(c, Settings._category(group.$1)),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(13),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      GIcon(group.$3, size: 22),
-                                      const SizedBox(height: 9),
-                                      Text(
-                                        group.$1,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 3),
-                                      Text(
-                                        group.$2,
-                                        style: const TextStyle(
-                                          color: muted,
-                                          fontSize: 11,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    );
-                  },
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+              child: Text(
+                'Il tuo spazio, le tue regole',
+                style: const TextStyle(
+                  fontSize: 21,
+                  fontWeight: FontWeight.w800,
                 ),
-              )
-            else if (results.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(20),
-                child: Text('Nessuna impostazione trovata'),
-              )
-            else
-              ...results,
-            const SizedBox(height: 14),
-          ],
-        ),
+              ),
+            ),
+            for (final group in groups)
+              Container(
+                margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                decoration: BoxDecoration(
+                  color: surface(c),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Theme.of(c).dividerColor),
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 7,
+                  ),
+                  leading: Container(
+                    padding: const EdgeInsets.all(11),
+                    decoration: BoxDecoration(
+                      color: subdued(c),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: GIcon(group.$3, size: 22),
+                  ),
+                  title: Text(
+                    group.$1,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: Text(
+                    group.$2,
+                    style: TextStyle(fontSize: 12, color: secondaryText(c)),
+                  ),
+                  trailing: const GIcon(CupertinoIcons.chevron_right, size: 15),
+                  onTap: () => open(c, Settings._category(group.$1)),
+                ),
+              ),
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              decoration: BoxDecoration(
+                color: subdued(c),
+                borderRadius: BorderRadius.circular(22),
+              ),
+              child: Column(
+                children: [
+                  row(
+                    CupertinoIcons.bell,
+                    'La tua attività',
+                    () => open(c, const Activity()),
+                  ),
+                  row(
+                    CupertinoIcons.bookmark,
+                    'Elementi salvati',
+                    () => open(c, const CollectionPage(kind: 'saved')),
+                  ),
+                  row(
+                    CupertinoIcons.calendar,
+                    'Eventi e momenti',
+                    () => open(
+                      c,
+                      const Scaffold(
+                        body: SafeArea(child: CommunityDirectory()),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+              decoration: BoxDecoration(
+                color: danger.withValues(alpha: .06),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: ListTile(
+                leading: const GIcon(
+                  CupertinoIcons.square_arrow_left,
+                  color: danger,
+                ),
+                title: const Text(
+                  'Esci',
+                  style: TextStyle(color: danger, fontWeight: FontWeight.w700),
+                ),
+                subtitle: Text(
+                  '@${s.me.str('username')}',
+                  style: TextStyle(fontSize: 12, color: secondaryText(c)),
+                ),
+                onTap: () => _logout(c, s),
+              ),
+            ),
+          ] else if (results.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(20),
+              child: Text('Nessuna impostazione trovata'),
+            )
+          else
+            ...results,
+          const SizedBox(height: 14),
+        ],
       ),
     );
   }
@@ -5246,7 +5525,92 @@ class _AccountSettings extends StatelessWidget {
   }
 }
 
-void createMenu(BuildContext c) => open(c, const CreationStudio());
+Future<void> createMenu(BuildContext c) async {
+  final selected = await sheet<String>(
+    c,
+    Builder(
+      builder: (menu) {
+        Widget tile(String label, IconData icon) => Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(0, 72),
+                foregroundColor: foreground(menu),
+              ),
+              onPressed: () => Navigator.pop(menu, label),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [GIcon(icon), const SizedBox(height: 5), Text(label)],
+              ),
+            ),
+          ),
+        );
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          child: Column(
+            children: [
+              ListTile(
+                title: const Text(
+                  'Crea',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 22),
+                ),
+                trailing: PopupMenuButton<String>(
+                  tooltip: 'Altre creazioni',
+                  icon: const GIcon(CupertinoIcons.ellipsis),
+                  onSelected: (value) => Navigator.pop(menu, value),
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: 'Istantanee',
+                      child: Text('Istantanee'),
+                    ),
+                    PopupMenuItem(value: 'Bozze', child: Text('Bozze')),
+                  ],
+                ),
+              ),
+              Row(
+                children: [
+                  tile('Post', CupertinoIcons.square_pencil),
+                  tile('Storia', CupertinoIcons.camera),
+                ],
+              ),
+              Row(
+                children: [
+                  tile('Reel', CupertinoIcons.play_rectangle),
+                  tile('Diretta', CupertinoIcons.dot_radiowaves_left_right),
+                ],
+              ),
+              const Divider(),
+              ListTile(
+                leading: const GIcon(CupertinoIcons.person_2),
+                title: const Text('Momento'),
+                trailing: const GIcon(CupertinoIcons.chevron_right, size: 16),
+                onTap: () => Navigator.pop(menu, 'Momento'),
+              ),
+            ],
+          ),
+        );
+      },
+    ),
+  );
+  if (selected == null || !c.mounted) return;
+  switch (selected) {
+    case 'Post':
+      open(c, const Composer(kind: 'post'));
+    case 'Storia':
+      open(c, const Composer(kind: 'story'));
+    case 'Reel':
+      open(c, const Composer(kind: 'reel'));
+    case 'Diretta':
+      open(c, const LiveSetup());
+    case 'Bozze':
+      open(c, const DraftList());
+    case 'Momento':
+      await composeCommunity(c, 'communityMoment');
+    case 'Istantanee':
+      open(c, const InstantComposer(autoCapture: true));
+  }
+}
 
 class AppearancePage extends StatelessWidget {
   const AppearancePage({super.key});

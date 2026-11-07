@@ -152,7 +152,7 @@ void main() {
     s.dispose();
   });
   testWidgets(
-    'Inbox instant pile enters viewing deck; grid opens own archive, no hub',
+    'Inbox instant pile opens friend cards before the private archive',
     (t) async {
       final s = GpixStore()..startTestDemo();
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -183,7 +183,6 @@ void main() {
       expect(find.byType(InstantViewer), findsOneWidget);
       expect(find.byType(InstantCollectionPage), findsNothing);
       expect(find.byType(InstantComposer), findsNothing);
-      expect(find.byKey(const ValueKey('instant-deck')), findsOneWidget);
       await t.tap(find.byTooltip('Le tue istantanee'));
       await t.pumpAndSettle();
       expect(find.byType(InstantArchive), findsOneWidget);

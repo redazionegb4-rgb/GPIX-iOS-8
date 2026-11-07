@@ -9,6 +9,7 @@ import 'package:image/image.dart' as im;
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import '../ui/kit.dart';
+import '../ui/creation.dart';
 
 Future<String> storyComposite(
   List<String> paths,
@@ -280,331 +281,338 @@ class _StoryCameraState extends State<StoryCamera> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    backgroundColor: surface(c),
-    body: SafeArea(
-      child: Column(
-        children: [
-          Expanded(
-            child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(
-                bottom: Radius.circular(24),
-              ),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (controller?.value.isInitialized == true)
-                    FittedBox(
-                      fit: BoxFit.cover,
-                      child: SizedBox(
-                        width: controller!.value.previewSize!.height,
-                        height: controller!.value.previewSize!.width,
-                        child: CameraPreview(controller!),
-                      ),
-                    )
-                  else
-                    const DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Color(0xff26242b), Color(0xff0b111a)],
+    backgroundColor: Colors.black,
+    body: Theme(
+      data: gpixTheme(Brightness.dark),
+      child: Builder(
+        builder: (c) => Stack(
+          fit: StackFit.expand,
+          children: [
+            Positioned.fill(
+              child: ClipRRect(
+                borderRadius: BorderRadius.zero,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (controller?.value.isInitialized == true)
+                      FittedBox(
+                        fit: BoxFit.cover,
+                        child: SizedBox(
+                          width: controller!.value.previewSize!.height,
+                          height: controller!.value.previewSize!.width,
+                          child: CameraPreview(controller!),
                         ),
+                      )
+                    else
+                      CreationEmpty(
+                        icon: CupertinoIcons.camera,
+                        title: 'Crea una storia',
+                        description: error.isEmpty
+                            ? 'Apertura fotocamera…'
+                            : 'Scegli dalla galleria oppure consenti l’accesso alla fotocamera.',
+                        action: 'Apri galleria',
+                        onPressed: gallery,
                       ),
-                    ),
-                  if (grid || mode == 'Layout')
-                    IgnorePointer(
-                      child: CustomPaint(
-                        painter: _CameraGrid(mode == 'Layout' ? cells : 9),
-                      ),
-                    ),
-                  Positioned(
-                    top: 9,
-                    left: 7,
-                    right: 7,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        IconButton(
-                          tooltip: 'Chiudi fotocamera',
-                          onPressed: () => Navigator.pop(c),
-                          icon: const GIcon(
-                            CupertinoIcons.xmark,
-                            color: Colors.white,
-                            size: 29,
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: flash ? 'Disattiva flash' : 'Attiva flash',
-                          onPressed: () => perform(c, () async {
-                            final next = !flash;
-                            await controller?.setFlashMode(
-                              next ? FlashMode.torch : FlashMode.off,
-                            );
-                            setState(() => flash = next);
-                          }),
+                    if (controller?.value.isInitialized != true)
+                      Positioned(
+                        left: 20,
+                        right: 20,
+                        bottom: 110 + MediaQuery.paddingOf(c).bottom,
+                        child: TextButton.icon(
+                          onPressed: widget.onCreate,
                           icon: GIcon(
-                            flash
-                                ? CupertinoIcons.bolt_fill
-                                : CupertinoIcons.bolt_slash_fill,
-                            color: Colors.white,
-                            size: 27,
+                            CupertinoIcons.textformat,
+                            color: foreground(c),
                           ),
-                        ),
-                        IconButton(
-                          tooltip: 'Impostazioni fotocamera',
-                          onPressed: () => sheet(
-                            c,
-                            StatefulBuilder(
-                              builder: (c, update) => Column(
-                                children: [
-                                  const Text(
-                                    'Fotocamera',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 18,
-                                    ),
-                                  ),
-                                  SwitchListTile(
-                                    title: const Text('Griglia'),
-                                    value: grid,
-                                    onChanged: (v) {
-                                      setState(() => grid = v);
-                                      update(() {});
-                                    },
-                                  ),
-                                  SwitchListTile(
-                                    title: const Text('Audio nei video'),
-                                    value: audio,
-                                    onChanged: (v) {
-                                      setState(() => audio = v);
-                                      update(() {});
-                                      initialize();
-                                    },
-                                  ),
-                                  const SizedBox(height: 20),
-                                ],
-                              ),
+                          label: Text(
+                            'Crea',
+                            style: TextStyle(
+                              color: foreground(c),
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
-                          icon: const GIcon(
-                            CupertinoIcons.gear_alt,
-                            color: Colors.white,
+                        ),
+                      ),
+                    if (grid || mode == 'Layout')
+                      IgnorePointer(
+                        child: CustomPaint(
+                          painter: _CameraGrid(mode == 'Layout' ? cells : 9),
+                        ),
+                      ),
+                    Positioned(
+                      top: MediaQuery.paddingOf(c).top + 9,
+                      left: 7,
+                      right: 7,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          MediaToolButton(
+                            label: 'Chiudi fotocamera',
+                            onPressed: () => Navigator.pop(c),
+                            icon: CupertinoIcons.xmark,
+                          ),
+                          MediaToolButton(
+                            label: flash ? 'Disattiva flash' : 'Attiva flash',
+                            onPressed: () => perform(c, () async {
+                              final next = !flash;
+                              await controller?.setFlashMode(
+                                next ? FlashMode.torch : FlashMode.off,
+                              );
+                              setState(() => flash = next);
+                            }),
+                            icon: flash
+                                ? CupertinoIcons.bolt_fill
+                                : CupertinoIcons.bolt_slash_fill,
+                          ),
+                          MediaToolButton(
+                            label: 'Impostazioni fotocamera',
+                            onPressed: () => sheet(
+                              c,
+                              StatefulBuilder(
+                                builder: (c, update) => Column(
+                                  children: [
+                                    const Text(
+                                      'Fotocamera',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 18,
+                                      ),
+                                    ),
+                                    SwitchListTile(
+                                      title: const Text('Griglia'),
+                                      value: grid,
+                                      onChanged: (v) {
+                                        setState(() => grid = v);
+                                        update(() {});
+                                      },
+                                    ),
+                                    SwitchListTile(
+                                      title: const Text('Audio nei video'),
+                                      value: audio,
+                                      onChanged: (v) {
+                                        setState(() => audio = v);
+                                        update(() {});
+                                        initialize();
+                                      },
+                                    ),
+                                    const SizedBox(height: 20),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            icon: CupertinoIcons.gear_alt,
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (controller?.value.isInitialized == true)
+                      Positioned(
+                        left: 16,
+                        top: MediaQuery.sizeOf(c).height * .26,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            tool(
+                              CupertinoIcons.textformat,
+                              'Crea',
+                              widget.onCreate,
+                            ),
+                            tool(CupertinoIcons.infinite, 'Boomerang', () {
+                              setState(() {
+                                mode = mode == 'Boomerang'
+                                    ? 'Storia'
+                                    : 'Boomerang';
+                                captures.clear();
+                              });
+                            }),
+                            tool(CupertinoIcons.square_split_2x2, 'Layout', () {
+                              setState(() {
+                                mode = 'Layout';
+                                cells = cells == 2 ? 4 : 2;
+                                captures.clear();
+                              });
+                            }),
+                            tool(
+                              CupertinoIcons.stop_circle,
+                              'Senza tenere premuto',
+                              () {
+                                setState(
+                                  () => mode = mode == 'Senza tenere premuto'
+                                      ? 'Storia'
+                                      : 'Senza tenere premuto',
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (controller?.value.isInitialized == true)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 100 + MediaQuery.paddingOf(c).bottom,
+                        child: Column(
+                          children: [
+                            if (status.isNotEmpty || mode != 'Storia')
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 15),
+                                child: Text(
+                                  status.isNotEmpty
+                                      ? status
+                                      : mode == 'Layout'
+                                      ? 'Layout · $cells foto'
+                                      : mode,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            if (recording)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: Text(
+                                  '00:${seconds.toString().padLeft(2, '0')}',
+                                  style: const TextStyle(
+                                    color: danger,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            GestureDetector(
+                              onTap: shoot,
+                              onLongPressStart: (_) {
+                                hold = true;
+                                record();
+                              },
+                              onLongPressEnd: (_) {
+                                hold = false;
+                                stop();
+                              },
+                              child: Semantics(
+                                label: 'Scatta foto o registra video',
+                                button: true,
+                                child: Container(
+                                  width: 78,
+                                  height: 78,
+                                  padding: const EdgeInsets.all(5),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.white,
+                                      width: 3,
+                                    ),
+                                  ),
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: recording
+                                          ? danger
+                                          : Colors.white.withValues(alpha: .85),
+                                    ),
+                                    child: busy
+                                        ? const Center(
+                                            child: CircularProgressIndicator(
+                                              color: ink,
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : recording
+                                        ? const GIcon(
+                                            CupertinoIcons.stop_fill,
+                                            color: Colors.white,
+                                            size: 30,
+                                          )
+                                        : null,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: SafeArea(
+                top: false,
+                child: SizedBox(
+                  height: 88,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          tooltip: 'Galleria',
+                          onPressed: gallery,
+                          icon: GIcon(
+                            CupertinoIcons.photo,
+                            color: foreground(c),
                             size: 28,
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                  Positioned(
-                    left: 16,
-                    top: MediaQuery.sizeOf(c).height * .34,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        tool(
-                          CupertinoIcons.textformat,
-                          'Crea',
-                          widget.onCreate,
-                        ),
-                        tool(CupertinoIcons.infinite, 'Boomerang', () {
-                          setState(() {
-                            mode = mode == 'Boomerang' ? 'Storia' : 'Boomerang';
-                            captures.clear();
-                          });
-                        }),
-                        tool(CupertinoIcons.square_split_2x2, 'Layout', () {
-                          setState(() {
-                            mode = 'Layout';
-                            cells = cells == 2 ? 4 : 2;
-                            captures.clear();
-                          });
-                        }),
-                        tool(
-                          CupertinoIcons.stop_circle,
-                          'Senza tenere premuto',
-                          () {
-                            setState(
-                              () => mode = mode == 'Senza tenere premuto'
-                                  ? 'Storia'
-                                  : 'Senza tenere premuto',
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (error.isNotEmpty)
-                    Positioned(
-                      left: 30,
-                      right: 30,
-                      bottom: 150,
-                      child: Text(
-                        error,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 12,
-                          height: 1.5,
-                        ),
-                      ),
-                    ),
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 21,
-                    child: Column(
-                      children: [
-                        if (status.isNotEmpty || mode != 'Storia')
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 15),
-                            child: Text(
-                              status.isNotEmpty
-                                  ? status
-                                  : mode == 'Layout'
-                                  ? 'Layout · $cells foto'
-                                  : mode,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        if (recording)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: Text(
-                              '00:${seconds.toString().padLeft(2, '0')}',
-                              style: const TextStyle(
-                                color: danger,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        GestureDetector(
-                          onTap: shoot,
-                          onLongPressStart: (_) {
-                            hold = true;
-                            record();
-                          },
-                          onLongPressEnd: (_) {
-                            hold = false;
-                            stop();
-                          },
-                          child: Semantics(
-                            label: 'Scatta foto o registra video',
-                            button: true,
-                            child: Container(
-                              width: 78,
-                              height: 78,
-                              padding: const EdgeInsets.all(5),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 3,
-                                ),
-                              ),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: recording
-                                      ? danger
-                                      : Colors.white.withValues(alpha: .85),
-                                ),
-                                child: busy
-                                    ? const Center(
-                                        child: CircularProgressIndicator(
-                                          color: ink,
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : recording
-                                    ? const GIcon(
-                                        CupertinoIcons.stop_fill,
-                                        color: Colors.white,
-                                        size: 30,
-                                      )
-                                    : null,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          SizedBox(
-            height: 88,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  IconButton(
-                    tooltip: 'Galleria',
-                    onPressed: gallery,
-                    icon: GIcon(
-                      CupertinoIcons.photo,
-                      color: foreground(c),
-                      size: 28,
-                    ),
-                  ),
-                  Expanded(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        for (final item
-                            in widget.showModes
-                                ? ['POST', 'STORIA', 'REEL']
-                                : <String>[])
-                          TextButton(
-                            style: TextButton.styleFrom(
-                              minimumSize: const Size(0, 36),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                              ),
-                            ),
-                            onPressed: item == 'STORIA'
-                                ? null
-                                : () => widget.onMode(
-                                    item.toLowerCase() == 'post'
-                                        ? 'post'
-                                        : 'reel',
+                        Expanded(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              for (final item
+                                  in widget.showModes
+                                      ? ['POST', 'STORIA', 'REEL']
+                                      : <String>[])
+                                TextButton(
+                                  style: TextButton.styleFrom(
+                                    minimumSize: const Size(0, 36),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                    ),
                                   ),
-                            child: Text(
-                              item,
-                              style: TextStyle(
-                                color: item == 'STORIA'
-                                    ? accent(c)
-                                    : secondaryText(c),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 1,
-                              ),
-                            ),
+                                  onPressed: item == 'STORIA'
+                                      ? null
+                                      : () => widget.onMode(
+                                          item.toLowerCase() == 'post'
+                                              ? 'post'
+                                              : 'reel',
+                                        ),
+                                  child: Text(
+                                    item,
+                                    style: TextStyle(
+                                      color: item == 'STORIA'
+                                          ? accent(c)
+                                          : secondaryText(c),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 1,
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
+                        ),
+                        IconButton(
+                          tooltip: 'Cambia fotocamera',
+                          onPressed: () {
+                            lens++;
+                            initialize();
+                          },
+                          icon: GIcon(
+                            CupertinoIcons.camera_rotate,
+                            color: foreground(c),
+                            size: 29,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  IconButton(
-                    tooltip: 'Cambia fotocamera',
-                    onPressed: () {
-                      lens++;
-                      initialize();
-                    },
-                    icon: GIcon(
-                      CupertinoIcons.camera_rotate,
-                      color: foreground(c),
-                      size: 29,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     ),
   );

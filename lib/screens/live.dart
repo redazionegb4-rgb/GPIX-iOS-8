@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'package:camera/camera.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../core/data.dart';
 import '../core/store.dart';
 import '../ui/kit.dart';
+import '../ui/creation.dart';
 import 'social.dart';
 import 'calls.dart';
 
@@ -24,6 +26,243 @@ Future<void> createLive(BuildContext c, {String? initialTitle}) async {
     if (c.mounted)
       await open(c, LiveRoom(id: id, host: s.myId, title: title, demo: s.demo));
   });
+}
+
+class LiveSetup extends StatefulWidget {
+  const LiveSetup({super.key});
+
+  @override
+  State<LiveSetup> createState() => _LiveSetupState();
+}
+
+class _LiveSetupState extends State<LiveSetup> with WidgetsBindingObserver {
+  final title = TextEditingController();
+  CameraController? preview;
+  Future<void> cameraWork = Future<void>.value();
+  String? cameraError;
+  bool front = false;
+  bool starting = false;
+  bool leaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    updatePreview(true);
+  }
+
+  void updatePreview(bool enabled) {
+    cameraWork = cameraWork.then((_) async {
+      final previous = preview;
+      if (mounted) setState(() => preview = null);
+      await previous?.dispose();
+      if (!enabled || !mounted || leaving) return;
+      CameraController? next;
+      try {
+        final cameras = await availableCameras();
+        if (cameras.isEmpty) throw StateError('Fotocamera non disponibile.');
+        final direction = front
+            ? CameraLensDirection.front
+            : CameraLensDirection.back;
+        next = CameraController(
+          cameras
+                  .where((camera) => camera.lensDirection == direction)
+                  .firstOrNull ??
+              cameras.first,
+          ResolutionPreset.medium,
+          enableAudio: false,
+        );
+        await next.initialize();
+        if (!mounted || leaving) {
+          await next.dispose();
+          return;
+        }
+        setState(() {
+          preview = next;
+          cameraError = null;
+        });
+      } catch (_) {
+        await next?.dispose();
+        if (mounted)
+          setState(() => cameraError = 'Anteprima fotocamera non disponibile');
+      }
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!starting && !leaving)
+      updatePreview(state == AppLifecycleState.resumed);
+  }
+
+  @override
+  void dispose() {
+    leaving = true;
+    WidgetsBinding.instance.removeObserver(this);
+    final previous = preview;
+    preview = null;
+    unawaited(cameraWork.whenComplete(() => previous?.dispose()));
+    title.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext c) => Theme(
+    data: gpixTheme(Brightness.dark),
+    child: Builder(
+      builder: (c) {
+        final camera = preview;
+        return Scaffold(
+          backgroundColor: Colors.black,
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (camera != null)
+                ClipRect(
+                  child: FittedBox(
+                    fit: BoxFit.cover,
+                    child: SizedBox(
+                      width: camera.value.previewSize!.height,
+                      height: camera.value.previewSize!.width,
+                      child: CameraPreview(camera),
+                    ),
+                  ),
+                )
+              else
+                CreationEmpty(
+                  icon: CupertinoIcons.dot_radiowaves_left_right,
+                  title: 'La tua prossima diretta',
+                  description: cameraError ?? 'Apertura fotocamera…',
+                  action: cameraError == null ? null : 'Riprova',
+                  onPressed: cameraError == null
+                      ? null
+                      : () => updatePreview(true),
+                ),
+              const IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      stops: [0, .25, .55, 1],
+                      colors: [
+                        Colors.black54,
+                        Colors.transparent,
+                        Colors.transparent,
+                        Colors.black87,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              SafeArea(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      children: [
+                        MediaToolButton(
+                          icon: CupertinoIcons.xmark,
+                          label: 'Chiudi diretta',
+                          onPressed: () => Navigator.pop(c),
+                        ),
+                        const Expanded(
+                          child: Text(
+                            'Nuova diretta',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        MediaToolButton(
+                          icon: CupertinoIcons.camera_rotate,
+                          label: 'Cambia fotocamera',
+                          onPressed: starting
+                              ? null
+                              : () {
+                                  front = !front;
+                                  updatePreview(true);
+                                },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 20,
+                right: 20,
+                bottom: 0,
+                child: SafeArea(
+                  top: false,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'Sei pronto ad andare live?',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Un momento da vivere insieme, in tempo reale.',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                      const SizedBox(height: 18),
+                      TextField(
+                        controller: title,
+                        maxLength: 100,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: const InputDecoration(
+                          hintText: 'Dai un titolo alla diretta',
+                          counterText: '',
+                          prefixIcon: GIcon(
+                            CupertinoIcons.textformat,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      FilledButton.icon(
+                        icon: const GIcon(
+                          CupertinoIcons.dot_radiowaves_left_right,
+                        ),
+                        label: Text(starting ? 'Avvio…' : 'Avvia diretta'),
+                        onPressed: starting
+                            ? null
+                            : () async {
+                                setState(() => starting = true);
+                                updatePreview(false);
+                                await cameraWork;
+                                if (!c.mounted) return;
+                                await createLive(
+                                  c,
+                                  initialTitle: title.text.trim(),
+                                );
+                                if (!c.mounted) return;
+                                setState(() => starting = false);
+                                updatePreview(true);
+                              },
+                      ),
+                      const SizedBox(height: 18),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    ),
+  );
 }
 
 class LiveRoom extends StatefulWidget {
@@ -324,39 +563,40 @@ class _LiveRoomState extends State<LiveRoom> with WidgetsBindingObserver {
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-        body: SafeArea(
-          child: Stack(
-            children: [
-              if (video.srcObject != null)
-                Positioned.fill(
-                  child: RTCVideoView(
-                    video,
-                    mirror: hosting,
-                    objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                  ),
-                )
-              else
-                const Center(
-                  child: CircularProgressIndicator(color: Colors.white),
-                ),
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (video.srcObject != null)
               Positioned.fill(
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black54,
-                          Colors.transparent,
-                          Colors.black87,
-                        ],
-                      ),
+                child: RTCVideoView(
+                  video,
+                  mirror: hosting,
+                  objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                ),
+              )
+            else
+              const Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              ),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black54,
+                        Colors.transparent,
+                        Colors.black87,
+                      ],
                     ),
                   ),
                 ),
               ),
-              Column(
+            ),
+            SafeArea(
+              child: Column(
                 children: [
                   Padding(
                     padding: const EdgeInsets.fromLTRB(15, 13, 8, 0),
@@ -507,11 +747,30 @@ class _LiveRoomState extends State<LiveRoom> with WidgetsBindingObserver {
                             child: TextField(
                               controller: input,
                               onSubmitted: (_) => send(),
-                              style: TextStyle(
-                                color: foreground(c),
-                                fontSize: 13,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
                               ),
-                              decoration: mediaInputDecoration(c, 'Commenta…'),
+                              decoration: InputDecoration(
+                                hintText: 'Commenta…',
+                                hintStyle: const TextStyle(
+                                  color: Colors.white70,
+                                ),
+                                filled: true,
+                                fillColor: const Color(0xb31a1a1a),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                  borderSide: const BorderSide(
+                                    color: Colors.white38,
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                  borderSide: const BorderSide(
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                           IconButton(
@@ -585,8 +844,8 @@ class _LiveRoomState extends State<LiveRoom> with WidgetsBindingObserver {
                     ),
                 ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

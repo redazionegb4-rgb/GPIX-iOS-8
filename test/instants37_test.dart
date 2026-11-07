@@ -109,7 +109,7 @@ void main() {
     s.dispose();
   });
   testWidgets(
-    'Inbox has photo pile at lower right; pause and resume are persisted',
+    'Inbox has discreet top photo access; pause and resume are persisted',
     (t) async {
       t.view.physicalSize = const Size(390, 844);
       t.view.devicePixelRatio = 1;
@@ -126,7 +126,7 @@ void main() {
       final pile = find.byType(InstantPile);
       expect(pile, findsOneWidget);
       expect(t.getCenter(pile).dx, greaterThan(300));
-      expect(t.getCenter(pile).dy, greaterThan(550));
+      expect(t.getCenter(pile).dy, greaterThan(650));
       await t.longPress(pile);
       await t.pumpAndSettle();
       await t.tap(find.text('Pausa per 24 ore'));
@@ -231,9 +231,11 @@ void main() {
         );
         await t.pumpWidget(wrap(const InstantArchive()));
         await t.pumpAndSettle();
-        expect(find.text('Ancora nessuna istantanea qui'), findsOneWidget);
+        expect(find.text('Il tuo prossimo ricordo inizia qui'), findsOneWidget);
         expect(t.takeException(), isNull);
-        await t.pumpWidget(wrap(const InstantCollectionPage(autoCapture: false)));
+        await t.pumpWidget(
+          wrap(const InstantCollectionPage(autoCapture: false)),
+        );
         await t.pumpAndSettle();
         expect(find.text('Dai tuoi amici'), findsOneWidget);
         expect(find.byType(InstantComposer), findsNothing);

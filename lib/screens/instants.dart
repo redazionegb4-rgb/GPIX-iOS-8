@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
@@ -44,7 +45,13 @@ Future<void> openInstants(BuildContext c) => Navigator.of(c).push(
 );
 
 class InstantPile extends StatefulWidget {
-  const InstantPile({super.key});
+  final bool compact, tray, docked;
+  const InstantPile({
+    super.key,
+    this.compact = false,
+    this.tray = false,
+    this.docked = false,
+  });
   @override
   State<InstantPile> createState() => _InstantPileState();
 }
@@ -100,6 +107,306 @@ class _InstantPileState extends State<InstantPile> {
     final count = s.demo
         ? rows.length
         : s.state.number('instantUnread', rows.length.toDouble()).toInt();
+    if (widget.docked) {
+      return Tooltip(
+        message: 'Istantanee',
+        child: Semantics(
+          label: paused ? 'Istantanee in pausa' : 'Istantanee: $count nuove',
+          button: true,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: enter,
+            onLongPress: controls,
+            child: SizedBox(
+              width: 116,
+              height: 146,
+              child: Column(
+                children: [
+                  SizedBox(
+                    height: 120,
+                    child: Transform.translate(
+                      offset: const Offset(12, 0),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        clipBehavior: Clip.none,
+                        children: [
+                          Transform.rotate(
+                            angle: .17,
+                            child: Container(
+                              width: 82,
+                              height: 104,
+                              clipBehavior: Clip.antiAlias,
+                              decoration: BoxDecoration(
+                                color: subdued(c),
+                                borderRadius: BorderRadius.circular(21),
+                                border: Border.all(
+                                  color: secondaryText(c).withValues(alpha: .3),
+                                ),
+                              ),
+                              child: rows.isEmpty || paused
+                                  ? null
+                                  : InstantPreview(
+                                      id: rows.length > 1
+                                          ? rows[1].str('id')
+                                          : rows.first.str('id'),
+                                    ),
+                            ),
+                          ),
+                          Transform.rotate(
+                            angle: -.09,
+                            child: Container(
+                              key: const ValueKey('instant-dock-front'),
+                              width: 82,
+                              height: 104,
+                              clipBehavior: Clip.antiAlias,
+                              decoration: BoxDecoration(
+                                color: subdued(c),
+                                borderRadius: BorderRadius.circular(21),
+                                border: Border.all(color: surface(c), width: 2),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: .12),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
+                              ),
+                              child: rows.isEmpty || paused
+                                  ? Center(
+                                      child: GIcon(
+                                        paused
+                                            ? CupertinoIcons.pause
+                                            : CupertinoIcons.camera,
+                                        size: 30,
+                                      ),
+                                    )
+                                  : InstantPreview(id: rows.first.str('id')),
+                            ),
+                          ),
+                          if (count > 0 && !paused)
+                            Positioned(
+                              right: 8,
+                              top: 6,
+                              child: Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: auraBlue,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: surface(c),
+                                    width: 1.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 18),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: surface(c).withValues(alpha: .94),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        paused ? 'In pausa' : 'Istantanee',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 11, color: secondaryText(c)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    if (widget.tray) {
+      return Semantics(
+        label: paused ? 'Istantanee in pausa' : 'Istantanee: $count nuove',
+        button: true,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: enter,
+          onLongPress: controls,
+          child: SizedBox(
+            width: 92,
+            child: Column(
+              children: [
+                SizedBox(
+                  height: 130,
+                  child: Center(
+                    child: Stack(
+                      alignment: Alignment.center,
+                      clipBehavior: Clip.none,
+                      children: [
+                        Transform.rotate(
+                          angle: .13,
+                          child: Container(
+                            width: 65,
+                            height: 85,
+                            decoration: BoxDecoration(
+                              color: auraBlue.withValues(alpha: .12),
+                              borderRadius: BorderRadius.circular(17),
+                              border: Border.all(
+                                color: auraBlue.withValues(alpha: .2),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Transform.rotate(
+                          angle: -.07,
+                          child: Container(
+                            width: 65,
+                            height: 85,
+                            clipBehavior: Clip.antiAlias,
+                            decoration: BoxDecoration(
+                              color: subdued(c),
+                              borderRadius: BorderRadius.circular(17),
+                              border: Border.all(color: surface(c), width: 2),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: .1),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: rows.isEmpty || paused
+                                ? Center(
+                                    child: GIcon(
+                                      paused
+                                          ? CupertinoIcons.pause
+                                          : CupertinoIcons.camera,
+                                      size: 26,
+                                      color: foreground(c),
+                                    ),
+                                  )
+                                : InstantPreview(id: rows.first.str('id')),
+                          ),
+                        ),
+                        if (count > 0 && !paused)
+                          Positioned(
+                            right: -5,
+                            top: -5,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: auraBlue,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: surface(c), width: 2),
+                              ),
+                              child: Text(
+                                '$count',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                Text(
+                  'Istantanee',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: foreground(c),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (paused)
+                  Text(
+                    'In pausa',
+                    style: TextStyle(fontSize: 10, color: secondaryText(c)),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    if (widget.compact) {
+      return Tooltip(
+        message: 'Istantanee',
+        child: Semantics(
+          label: paused ? 'Istantanee in pausa' : 'Istantanee: $count nuove',
+          button: true,
+          child: GestureDetector(
+            onTap: enter,
+            onLongPress: controls,
+            child: SizedBox(
+              width: 44,
+              height: 48,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Transform.rotate(
+                    angle: -.16,
+                    child: Container(
+                      width: 25,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color: subdued(c),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: secondaryText(c).withValues(alpha: .35),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Transform.translate(
+                    offset: const Offset(3, 1),
+                    child: Container(
+                      width: 28,
+                      height: 33,
+                      decoration: BoxDecoration(
+                        color: surface(c),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: secondaryText(c)),
+                      ),
+                      child: GIcon(
+                        paused ? CupertinoIcons.pause : CupertinoIcons.camera,
+                        size: 17,
+                      ),
+                    ),
+                  ),
+                  if (count > 0 && !paused)
+                    Positioned(
+                      right: 2,
+                      top: 4,
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: auraBlue,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: surface(c)),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     return Semantics(
       label: paused ? 'Istantanee in pausa' : 'Istantanee: $count nuove',
       button: true,
@@ -245,14 +552,13 @@ class _InstantPileState extends State<InstantPile> {
 
 // Inbox entry is the viewing deck, never the former marketing/grid hub.
 class InstantsPage extends StatefulWidget {
-  final bool autoCapture;
-  const InstantsPage({super.key, this.autoCapture = false});
+  const InstantsPage({super.key});
   @override
   State<InstantsPage> createState() => _InstantsPageState();
 }
 
 class _InstantsPageState extends State<InstantsPage> {
-  List<J>? rows;
+  List<J>? received;
   String error = '';
   bool loaded = false;
   @override
@@ -260,99 +566,54 @@ class _InstantsPageState extends State<InstantsPage> {
     super.didChangeDependencies();
     if (!loaded) {
       loaded = true;
-      refresh();
+      load();
     }
   }
 
-  Future<void> refresh() async {
+  Future<void> load() async {
+    setState(() => error = '');
     try {
-      final list = (await GpixScope.of(
-        context,
-        listen: false,
-      ).instantList()).rows('received');
-      if (mounted) setState(() => rows = list);
+      final s = GpixScope.of(context, listen: false);
+      final data = await s.instantList();
+      if (mounted)
+        setState(
+          () => received = data
+              .rows('received')
+              .where(
+                (item) =>
+                    item.number('expires') > now && item.str('owner') != s.myId,
+              )
+              .toList(),
+        );
     } catch (_) {
       if (mounted)
-        setState(() => error = 'Impossibile caricare le istantanee.');
+        setState(() => error = 'Non riesco a caricare le istantanee. Riprova.');
     }
   }
 
   @override
   Widget build(BuildContext c) {
-    if (rows?.isNotEmpty == true) return InstantViewer(items: rows!);
+    if (received != null)
+      return received!.isEmpty
+          ? const InstantComposer(autoCapture: true)
+          : InstantViewer(items: received!);
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        leading: IconButton(
-          tooltip: 'Chiudi istantanee',
-          onPressed: () => Navigator.pop(c),
-          icon: const GIcon(CupertinoIcons.xmark),
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Le tue istantanee',
-            onPressed: () => open(c, const InstantArchive()),
-            icon: const GIcon(CupertinoIcons.square_grid_2x2),
-          ),
-          IconButton(
-            tooltip: 'Crea un’istantanea',
-            onPressed: () async {
-              await open(c, const InstantComposer(autoCapture: true));
-              if (mounted) refresh();
-            },
-            icon: const GIcon(CupertinoIcons.camera),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const GIcon(
-                  CupertinoIcons.photo_on_rectangle,
-                  color: Colors.white,
-                  size: 64,
+      backgroundColor: surface(c),
+      appBar: AppBar(title: const Text('Istantanee')),
+      body: Center(
+        child: error.isEmpty
+            ? const CircularProgressIndicator()
+            : Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(error, textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
+                    FilledButton(onPressed: load, child: const Text('Riprova')),
+                  ],
                 ),
-                const SizedBox(height: 24),
-                Text(
-                  error.isNotEmpty
-                      ? error
-                      : rows == null
-                      ? 'Caricamento…'
-                      : 'Nessuna nuova istantanea',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 25,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'I nuovi scatti dei tuoi amici appariranno qui. Puoi condividere il tuo momento anche adesso.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white60, height: 1.4),
-                ),
-                const SizedBox(height: 24),
-                FilledButton.icon(
-                  onPressed: () async {
-                    await open(c, const InstantComposer(autoCapture: true));
-                    if (mounted) refresh();
-                  },
-                  icon: const GIcon(CupertinoIcons.camera),
-                  label: const Text('Crea un’istantanea'),
-                ),
-                if (error.isNotEmpty)
-                  TextButton(onPressed: refresh, child: const Text('Riprova')),
-              ],
-            ),
-          ),
-        ),
+              ),
       ),
     );
   }
@@ -506,7 +767,7 @@ class _InstantCollectionPageState extends State<InstantCollectionPage> {
           padding: const EdgeInsets.fromLTRB(18, 12, 18, 40),
           children: [
             const Text(
-              'Nuovi momenti',
+              'Un istante. Solo tuo.',
               style: TextStyle(
                 fontSize: 27,
                 fontWeight: FontWeight.w700,
@@ -515,7 +776,7 @@ class _InstantCollectionPageState extends State<InstantCollectionPage> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Apri le card degli amici. Scatta e condividi le tue.',
+              'Scatti spontanei, visibili per 24 ore.',
               style: TextStyle(color: muted),
             ),
             if (s.demo)
@@ -536,18 +797,28 @@ class _InstantCollectionPageState extends State<InstantCollectionPage> {
                 child: Ink(
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [Color(0xff2463e9), Color(0xff0891b2)],
+                      colors: [Color(0xff141f31), Color(0xff263c58)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
                     borderRadius: BorderRadius.circular(26),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: .15),
+                        blurRadius: 24,
+                        offset: const Offset(0, 9),
+                      ),
+                    ],
                   ),
-                  padding: const EdgeInsets.all(21),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 21,
+                    vertical: 35,
+                  ),
                   child: Row(
                     children: [
                       Container(
-                        width: 54,
-                        height: 54,
+                        width: 62,
+                        height: 78,
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: .17),
                           borderRadius: BorderRadius.circular(18),
@@ -555,7 +826,7 @@ class _InstantCollectionPageState extends State<InstantCollectionPage> {
                         child: const GIcon(
                           CupertinoIcons.camera_fill,
                           color: Colors.white,
-                          size: 29,
+                          size: 32,
                         ),
                       ),
                       const SizedBox(width: 15),
@@ -2567,9 +2838,9 @@ class _InstantArchiveState extends State<InstantArchive> {
   @override
   Widget build(BuildContext c) {
     final visible = (rows ?? <J>[])
-        .where((r) => !activeOnly || r.number('expires') > now)
+        .where((row) => !activeOnly || row.number('expires') > now)
         .toList();
-    final groups = <String, List<J>>{};
+    final grouped = <String, List<J>>{};
     const months = [
       'gennaio',
       'febbraio',
@@ -2585,28 +2856,33 @@ class _InstantArchiveState extends State<InstantArchive> {
       'dicembre',
     ];
     for (final row in visible) {
-      final d = DateTime.fromMillisecondsSinceEpoch(
+      final date = DateTime.fromMillisecondsSinceEpoch(
         (row.number('created') * 1000).round(),
       );
-      final name = '${months[d.month - 1]} ${d.year}';
-      groups.putIfAbsent(name, () => []).add(row);
+      grouped
+          .putIfAbsent('${months[date.month - 1]} ${date.year}', () => [])
+          .add(row);
     }
     return Scaffold(
       appBar: AppBar(
-        centerTitle: true,
+        centerTitle: false,
         title: Text(
           selecting ? '${selected.length} selezionate' : 'Le tue istantanee',
-          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+          style: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -.5,
+          ),
         ),
         leading: IconButton(
           tooltip: 'Indietro',
+          icon: const GIcon(CupertinoIcons.chevron_left),
           onPressed: () => selecting
               ? setState(() {
                   selecting = false;
                   selected.clear();
                 })
               : Navigator.maybePop(c),
-          icon: const GIcon(CupertinoIcons.chevron_left),
         ),
         actions: [
           if (selecting)
@@ -2620,310 +2896,216 @@ class _InstantArchiveState extends State<InstantArchive> {
           else
             IconButton(
               tooltip: 'Opzioni archivio',
+              icon: const GIcon(CupertinoIcons.ellipsis),
               onPressed: busy ? null : () => archiveOptions(c),
-              icon: const GIcon(CupertinoIcons.ellipsis, size: 24),
             ),
         ],
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: subdued(c),
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: Row(
-                children: [
-                  const GIcon(
-                    CupertinoIcons.lock_shield,
-                    color: auraBlue,
-                    size: 23,
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'Solo tu puoi vedere le tue foto qui.\nConservate nel tuo archivio fino a un anno.',
-                      style: TextStyle(fontSize: 12, height: 1.45),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (rows?.isNotEmpty == true)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-              child: Row(
-                children: [
-                  ChoiceChip(
-                    showCheckmark: false,
-                    visualDensity: VisualDensity.compact,
-                    shape: const StadiumBorder(),
-                    labelStyle: const TextStyle(fontSize: 12),
-                    label: const Text('Tutte'),
-                    selected: !activeOnly,
-                    onSelected: (_) => setState(() => activeOnly = false),
-                  ),
-                  const SizedBox(width: 8),
-                  ChoiceChip(
-                    showCheckmark: false,
-                    visualDensity: VisualDensity.compact,
-                    shape: const StadiumBorder(),
-                    labelStyle: const TextStyle(fontSize: 12),
-                    label: const Text('Ultime 24 ore'),
-                    selected: activeOnly,
-                    onSelected: (_) => setState(() => activeOnly = true),
-                  ),
-                  const Spacer(),
-                  if (!selecting)
-                    TextButton(
-                      onPressed: () => setState(() => selecting = true),
-                      child: const Text(
-                        'Seleziona',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          Expanded(
-            child: error.isNotEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
+      body: RefreshIndicator(
+        onRefresh: refresh,
+        child: CustomScrollView(
+          key: const PageStorageKey('own-instant-archive'),
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 10, 18, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        Text(error),
-                        TextButton(
-                          onPressed: refresh,
-                          child: const Text('Riprova'),
+                        GIcon(
+                          CupertinoIcons.lock,
+                          size: 13,
+                          color: secondaryText(c),
+                        ),
+                        const SizedBox(width: 7),
+                        Text(
+                          'Il tuo rullino privato',
+                          style: TextStyle(
+                            color: secondaryText(c),
+                            fontSize: 12,
+                          ),
                         ),
                       ],
                     ),
-                  )
-                : rows == null
-                ? const Center(child: CircularProgressIndicator())
-                : visible.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 84,
-                            height: 84,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(25),
-                              gradient: const LinearGradient(
-                                colors: [Color(0xff3478f6), Color(0xffed75aa)],
-                              ),
-                            ),
-                            child: const Icon(
-                              CupertinoIcons.square_grid_2x2,
-                              color: Colors.white,
-                              size: 38,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          Text(
-                            activeOnly
-                                ? 'Nessuna istantanea nelle ultime 24 ore'
-                                : 'Ancora nessuna istantanea qui',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 19,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          const Text(
-                            'Quando scatti e condividi le tue istantanee, le ritrovi qui.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: muted,
-                              height: 1.5,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
+                    const SizedBox(height: 10),
+                    Text(
+                      selecting
+                          ? 'Scegli fino a 9 foto da trasformare in una Storia.'
+                          : 'I tuoi scatti, da ritrovare.',
+                      style: const TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -.6,
                       ),
                     ),
-                  )
-                : RefreshIndicator(
-                    onRefresh: refresh,
-                    child: CustomScrollView(
-                      slivers: [
-                        for (final group in groups.entries) ...[
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(
-                                17,
-                                17,
-                                17,
-                                13,
-                              ),
-                              child: Text(
-                                group.key[0].toUpperCase() +
-                                    group.key.substring(1),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 16,
-                                ),
-                              ),
+                    const SizedBox(height: 7),
+                    Text(
+                      'Conservati fino a un anno. Le foto già aperte restano private nel tuo archivio.',
+                      style: TextStyle(
+                        color: secondaryText(c),
+                        fontSize: 12,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                for (final value in [false, true])
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: ChoiceChip(
+                                      showCheckmark: false,
+                                      label: Text(
+                                        value ? 'Ultime 24 ore' : 'Tutte',
+                                      ),
+                                      selected: activeOnly == value,
+                                      onSelected: (_) =>
+                                          setState(() => activeOnly = value),
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
-                          SliverGrid(
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 3,
-                                  mainAxisSpacing: 3,
-                                  crossAxisSpacing: 3,
-                                  childAspectRatio: 1,
-                                ),
-                            delegate: SliverChildBuilderDelegate((c, i) {
-                              final row = group.value[i],
-                                  id = row.str('id'),
-                                  d = DateTime.fromMillisecondsSinceEpoch(
-                                    (row.number('created') * 1000).round(),
-                                  );
-                              return GestureDetector(
-                                onTap: busy
-                                    ? null
-                                    : () => selecting
-                                          ? select(id)
-                                          : openPhoto(
-                                              visible,
-                                              visible.indexOf(row),
-                                            ),
-                                onLongPress: busy
-                                    ? null
-                                    : () => photoOptions(c, row),
-                                child: Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    ArchiveThumbnail(
-                                      key: ValueKey('archive-$id'),
-                                      id: id,
-                                    ),
-                                    Positioned(
-                                      top: 7,
-                                      left: 7,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.black45,
-                                          borderRadius: BorderRadius.circular(
-                                            6,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          '${d.day}',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    if (selecting)
-                                      Positioned(
-                                        top: 5,
-                                        right: 5,
-                                        child: Icon(
-                                          selected.contains(id)
-                                              ? CupertinoIcons
-                                                    .checkmark_circle_fill
-                                              : CupertinoIcons.circle,
-                                          color: selected.contains(id)
-                                              ? auraBlue
-                                              : Colors.white,
-                                          size: 26,
-                                        ),
-                                      ),
-                                    Positioned(
-                                      bottom: 6,
-                                      left: 6,
-                                      child: Material(
-                                        color: Colors.black54,
-                                        borderRadius: BorderRadius.circular(18),
-                                        child: InkWell(
-                                          onTap: () async {
-                                            await open(c, InstantViews(id: id));
-                                            if (mounted) refresh();
-                                          },
-                                          borderRadius: BorderRadius.circular(
-                                            18,
-                                          ),
-                                          child: Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 7,
-                                              vertical: 5,
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                const Icon(
-                                                  CupertinoIcons.eye,
-                                                  size: 13,
-                                                  color: Colors.white,
-                                                ),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  '${row.number('viewsCount').toInt()}',
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontWeight: FontWeight.w600,
-                                                    fontSize: 11,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }, childCount: group.value.length),
-                          ),
-                        ],
-                        if (cursor.isNotEmpty)
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.all(18),
-                              child: TextButton(
-                                onPressed: busy ? null : more,
-                                child: Text(
-                                  busy ? 'Caricamento…' : 'Carica altre',
-                                ),
-                              ),
+                        ),
+                        if (!selecting)
+                          IconButton(
+                            tooltip: 'Seleziona foto',
+                            icon: const GIcon(
+                              CupertinoIcons.checkmark_circle,
+                              size: 24,
                             ),
+                            onPressed: rows?.isNotEmpty == true
+                                ? () => setState(() => selecting = true)
+                                : null,
                           ),
-                        const SliverToBoxAdapter(child: SizedBox(height: 24)),
                       ],
                     ),
+                  ],
+                ),
+              ),
+            ),
+            if (error.isNotEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(error),
+                      TextButton(
+                        onPressed: refresh,
+                        child: const Text('Riprova'),
+                      ),
+                    ],
                   ),
-          ),
-        ],
+                ),
+              )
+            else if (rows == null)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (visible.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Padding(
+                  padding: const EdgeInsets.all(28),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: auraBlue.withValues(alpha: .08),
+                          borderRadius: BorderRadius.circular(28),
+                        ),
+                        child: GIcon(
+                          CupertinoIcons.photo_on_rectangle,
+                          size: 42,
+                          color: accent(c),
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      Text(
+                        activeOnly
+                            ? 'Nessuna istantanea nelle ultime 24 ore'
+                            : 'Il tuo prossimo ricordo inizia qui',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 21,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Scatta un’istantanea: qui ritroverai le tue foto e chi le ha aperte.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: muted, height: 1.5),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else ...[
+              for (final month in grouped.entries) ...[
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+                    child: Text(
+                      month.key[0].toUpperCase() + month.key.substring(1),
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  sliver: SliverLayoutBuilder(
+                    builder: (c, box) => SliverGrid(
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: box.crossAxisExtent >= 700 ? 3 : 2,
+                        mainAxisSpacing: 16,
+                        crossAxisSpacing: 12,
+                        childAspectRatio: .67,
+                      ),
+                      delegate: SliverChildBuilderDelegate(
+                        (c, i) => archiveTile(c, month.value[i], visible),
+                        childCount: month.value.length,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+              if (cursor.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: TextButton(
+                      onPressed: busy ? null : more,
+                      child: Text(busy ? 'Caricamento…' : 'Carica altre'),
+                    ),
+                  ),
+                ),
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            ],
+          ],
+        ),
       ),
       bottomNavigationBar: SafeArea(
+        top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 15),
+          padding: const EdgeInsets.fromLTRB(18, 10, 18, 12),
           child: FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: auraBlue,
-              foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 48),
-              shape: const StadiumBorder(),
-            ),
             onPressed: busy
                 ? null
                 : selecting
@@ -2932,6 +3114,12 @@ class _InstantArchiveState extends State<InstantArchive> {
                     await open(c, const InstantComposer(autoCapture: true));
                     if (mounted) refresh();
                   },
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(double.infinity, 50),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
             icon: GIcon(
               selecting ? CupertinoIcons.sparkles : CupertinoIcons.camera,
               size: 20,
@@ -2944,6 +3132,151 @@ class _InstantArchiveState extends State<InstantArchive> {
                   : 'Crea istantanea',
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget archiveTile(BuildContext c, J row, List<J> visible) {
+    final id = row.str('id'), isSelected = selected.contains(id);
+    final date = DateTime.fromMillisecondsSinceEpoch(
+      (row.number('created') * 1000).round(),
+    );
+    final time =
+        '${date.day.toString().padLeft(2, '0')} · ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    return Semantics(
+      button: true,
+      label: 'Istantanea del $time',
+      selected: selecting ? isSelected : null,
+      child: Container(
+        key: ValueKey('archive-tile-$id'),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: surface(c),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? auraBlue : Theme.of(c).dividerColor,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: busy
+                    ? null
+                    : () => selecting
+                          ? select(id)
+                          : openPhoto(visible, visible.indexOf(row)),
+                onLongPress: busy ? null : () => photoOptions(c, row),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ColoredBox(
+                      color: subdued(c),
+                      child: ArchiveThumbnail(
+                        key: ValueKey('archive-$id'),
+                        id: id,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                    if (row.number('expires') > now && !selecting)
+                      Positioned(
+                        top: 10,
+                        left: 10,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xd90a312b),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Text(
+                            'Attiva',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: selecting
+                          ? Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: Icon(
+                                isSelected
+                                    ? CupertinoIcons.checkmark_circle_fill
+                                    : CupertinoIcons.circle,
+                                color: isSelected ? auraBlue : Colors.white,
+                                size: 26,
+                              ),
+                            )
+                          : IconButton(
+                              tooltip: 'Opzioni istantanea',
+                              onPressed: busy
+                                  ? null
+                                  : () => photoOptions(c, row),
+                              style: IconButton.styleFrom(
+                                backgroundColor: const Color(0xa6111111),
+                                foregroundColor: Colors.white,
+                                minimumSize: const Size(36, 36),
+                              ),
+                              icon: const GIcon(
+                                CupertinoIcons.ellipsis,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 11, right: 3),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      time,
+                      style: TextStyle(fontSize: 11, color: secondaryText(c)),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      await open(c, InstantViews(id: id));
+                      if (mounted) refresh();
+                    },
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(40, 44),
+                      padding: const EdgeInsets.symmetric(horizontal: 7),
+                      foregroundColor: foreground(c),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const GIcon(CupertinoIcons.eye, size: 15),
+                        const SizedBox(width: 5),
+                        Text(
+                          '${row.number('viewsCount').toInt()}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -3082,7 +3415,12 @@ class _InstantViewsState extends State<InstantViews> {
 
 class ArchiveThumbnail extends StatefulWidget {
   final String id;
-  const ArchiveThumbnail({super.key, required this.id});
+  const ArchiveThumbnail({
+    super.key,
+    required this.id,
+    this.fit = BoxFit.cover,
+  });
+  final BoxFit fit;
   @override
   State<ArchiveThumbnail> createState() => _ArchiveThumbnailState();
 }
@@ -3118,7 +3456,19 @@ class _ArchiveThumbnailState extends State<ArchiveThumbnail> {
   Widget build(BuildContext c) => FutureBuilder<Uint8List>(
     future: future,
     builder: (c, s) => s.hasData && s.data!.isNotEmpty
-        ? Image.memory(s.data!, fit: BoxFit.cover)
+        ? widget.fit == BoxFit.contain
+              ? Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ImageFiltered(
+                      imageFilter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                      child: Image.memory(s.data!, fit: BoxFit.cover),
+                    ),
+                    const ColoredBox(color: Color(0x18000000)),
+                    Image.memory(s.data!, fit: BoxFit.contain),
+                  ],
+                )
+              : Image.memory(s.data!, fit: widget.fit)
         : ColoredBox(
             color: subdued(c),
             child: Center(

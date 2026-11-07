@@ -44,7 +44,7 @@ class _CreationStudioState extends State<CreationStudio> {
 
   @override
   Widget build(BuildContext c) => Scaffold(
-    backgroundColor: surface(c),
+    backgroundColor: Theme.of(c).canvasColor,
     resizeToAvoidBottomInset: false,
     body: Stack(
       fit: StackFit.expand,
@@ -79,58 +79,18 @@ class _CreationStudioState extends State<CreationStudio> {
             autoCapture: true,
             onPhotoChanged: (value) => setState(() => editingCapture = value),
           ),
-        if (mode == 4)
-          Scaffold(
-            appBar: AppBar(
-              title: const Text('Nuova diretta'),
-              leading: IconButton(
-                tooltip: 'Chiudi',
-                onPressed: startingLive ? null : () => Navigator.pop(c),
-                icon: const GIcon(CupertinoIcons.xmark),
-              ),
-            ),
-            body: SafeArea(
-              bottom: false,
-              child: ListView(
-                padding: const EdgeInsets.all(24),
-                children: [
-                  const SizedBox(height: 20),
-                  const GIcon(
-                    CupertinoIcons.dot_radiowaves_left_right,
-                    size: 46,
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'Preparati alla diretta',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 20),
-                  AppInput(title, 'Titolo della diretta'),
-                  const SizedBox(height: 20),
-                  PrimaryButton(
-                    'Avvia diretta',
-                    busy: startingLive,
-                    onTap: () async {
-                      setState(() => startingLive = true);
-                      try {
-                        await createLive(c, initialTitle: title.text.trim());
-                      } finally {
-                        if (mounted) setState(() => startingLive = false);
-                      }
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
+        if (mode == 4) const LiveSetup(),
       ],
     ),
     bottomNavigationBar: Offstage(
-      offstage: editingCapture || (mode == 0 && publishingPost),
+      offstage:
+          editingCapture ||
+          mode == 1 ||
+          mode == 4 ||
+          (mode == 0 && publishingPost),
       child: Builder(
         builder: (c) => ColoredBox(
-          color: surface(c),
+          color: Theme.of(c).canvasColor,
           child: SafeArea(
             top: false,
             child: SizedBox(

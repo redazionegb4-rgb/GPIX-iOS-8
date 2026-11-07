@@ -1,3 +1,4 @@
+import 'stories.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
@@ -338,7 +339,7 @@ class _ReelsState extends State<Reels> {
                       Positioned(
                         left: 17,
                         right: 75,
-                        bottom: 29,
+                        bottom: 20,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -358,10 +359,35 @@ class _ReelsState extends State<Reels> {
                                       ),
                                     ),
                                   ),
+                                  if (uid != s.myId && !s.follows(uid))
+                                    TextButton(
+                                      onPressed: () => perform(
+                                        c,
+                                        () => s.act('follow', {
+                                          'user': uid,
+                                          'enabled': true,
+                                        }),
+                                      ),
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                        ),
+                                        side: const BorderSide(
+                                          color: Colors.white54,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            7,
+                                          ),
+                                        ),
+                                      ),
+                                      child: const Text('Segui'),
+                                    ),
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 13),
+                            const SizedBox(height: 8),
                             Text(
                               p.str('text'),
                               style: const TextStyle(
@@ -418,7 +444,30 @@ class _ReelsState extends State<Reels> {
                               '${p.rows('comments').length}',
                               () => comments(c, p.str('id')),
                             ),
-                            const SizedBox(height: 18),
+                            if (!s.user(uid).flag('private') &&
+                                ![
+                                  'close',
+                                  'followers',
+                                ].contains(p.str('audience'))) ...[
+                              const SizedBox(height: 12),
+                              action(
+                                CupertinoIcons.repeat,
+                                '${p.ids('reposts').length}',
+                                () => perform(
+                                  c,
+                                  () => s.act('repost', {
+                                    'id': p['id'],
+                                    'enabled': !p
+                                        .ids('reposts')
+                                        .contains(s.myId),
+                                  }),
+                                ),
+                                color: p.ids('reposts').contains(s.myId)
+                                    ? Colors.greenAccent
+                                    : Colors.white,
+                              ),
+                            ],
+                            const SizedBox(height: 12),
                             action(
                               CupertinoIcons.paperplane,
                               'Invia',
@@ -480,7 +529,7 @@ class _ReelsState extends State<Reels> {
               right: 8,
               child: IconButton(
                 tooltip: 'Crea reel',
-                onPressed: () => createMenu(c),
+                onPressed: () => open(c, const Composer(kind: 'reel')),
                 icon: const GIcon(
                   CupertinoIcons.camera,
                   color: Colors.white,

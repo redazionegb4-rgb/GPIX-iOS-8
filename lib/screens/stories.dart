@@ -15,6 +15,7 @@ import 'package:image_picker/image_picker.dart';
 import '../core/data.dart';
 import '../core/store.dart';
 import '../ui/kit.dart';
+import '../ui/creation.dart';
 import 'social.dart';
 import 'video.dart';
 import 'emoji_picker.dart';
@@ -60,10 +61,10 @@ class StoryCanvas extends StatelessWidget {
           children: [
             ColoredBox(
               color: [
-                const Color(0xff142235),
-                const Color(0xff2b2d3a),
-                const Color(0xff13445b),
-                const Color(0xff283d43),
+                Colors.black,
+                const Color(0xff202020),
+                const Color(0xff0e3556),
+                const Color(0xff163c32),
               ][style.number('background').toInt() % 4],
             ),
             if (story.str('media').isNotEmpty)
@@ -79,7 +80,7 @@ class StoryCanvas extends StatelessWidget {
                         onDuration: onVideoDuration,
                         fit: BoxFit.cover,
                       )
-                    : MediaView(story.str('media')),
+                    : MediaView(story.str('media'), fit: BoxFit.contain),
               ),
             Positioned.fill(
               child: IgnorePointer(
@@ -683,8 +684,29 @@ class _StoryViewerState extends State<StoryViewer>
                         onChanged: (_) => setState(() {}),
                         minLines: 1,
                         maxLines: 3,
-                        style: TextStyle(color: foreground(c), fontSize: 15),
-                        decoration: mediaInputDecoration(c, 'Invia messaggio…'),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                        ),
+                        cursorColor: Colors.white,
+                        decoration: InputDecoration(
+                          hintText: 'Rispondi a ${u.str('username')}…',
+                          hintStyle: const TextStyle(color: Colors.white70),
+                          filled: true,
+                          fillColor: const Color(0xff151515),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(24),
+                            borderSide: const BorderSide(color: Colors.white54),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(24),
+                            borderSide: const BorderSide(color: Colors.white),
+                          ),
+                        ),
                       ),
                     ),
                     if (focus.hasFocus || recording)
@@ -764,6 +786,7 @@ class _ComposerState extends State<Composer> {
   final text = TextEditingController(), location = TextEditingController();
   List<String> files = [];
   String kind = 'post';
+  String reelAudience = 'followers';
   late String draftId;
   Timer? draftTimer;
   bool savingDraft = false;
@@ -792,6 +815,7 @@ class _ComposerState extends State<Composer> {
       'location': location.text,
       'caption': caption.text,
       'style': style,
+      'audience': reelAudience,
     };
     final encoded = jsonEncode(data);
     if (!feedback && lastDraft == encoded) return;
@@ -828,6 +852,7 @@ class _ComposerState extends State<Composer> {
       text.text = d.str('text');
       location.text = d.str('location');
       caption.text = d.str('caption');
+      reelAudience = d.str('audience') == 'close' ? 'close' : 'followers';
       final st = d.obj('style');
       audio = st.str('audio');
       aspect = st.number('aspect', 1).toDouble();
@@ -925,7 +950,9 @@ class _ComposerState extends State<Composer> {
     );
   }
 
-  Future<void> publish({String audience = 'all'}) async {
+  Future<void> publish({String? audience}) async {
+    final selectedAudience =
+        audience ?? (kind == 'reel' ? reelAudience : 'all');
     await saveDraft();
     if (!mounted) return;
     if (files.isEmpty && !(kind == 'story' && text.text.trim().isNotEmpty)) {
@@ -970,7 +997,7 @@ class _ComposerState extends State<Composer> {
         'media': media.isEmpty ? '' : media.first,
         'mediaItems': kind == 'post' ? media : [],
         'style': {...style, 'audio': track},
-        'audience': audience,
+        'audience': selectedAudience,
       });
       if (mounted) {
         unawaited(Drafts.delete('${s.server}|${s.myId}', draftId));
@@ -1007,208 +1034,178 @@ class _ComposerState extends State<Composer> {
           cameraStage = false;
         }),
       );
+    if (!story) return reelComposer(c);
     return Scaffold(
-      backgroundColor: surface(c),
-      appBar: story
-          ? null
-          : AppBar(
-              foregroundColor: foreground(c),
-              leading: IconButton(
-                tooltip: 'Annulla',
-                onPressed: () async {
-                  if (files.isEmpty && text.text.isEmpty) {
-                    Navigator.pop(c);
-                    return;
-                  }
-                  if (await gpixAlert(
-                        c,
-                        'Scartare le modifiche?',
-                        'Il contenuto non verrà pubblicato.',
-                        confirm: 'Scarta',
-                        cancel: true,
-                        destructive: true,
-                      ) &&
-                      c.mounted)
-                    Navigator.pop(c);
-                },
-                icon: const GIcon(CupertinoIcons.xmark),
-              ),
-              title: Text(
-                story
-                    ? 'Nuova storia'
-                    : kind == 'reel'
-                    ? 'Nuovo reel'
-                    : 'Nuovo post',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              actions: [
-                if (kind == 'reel')
-                  TextButton.icon(
-                    key: const ValueKey('save-reel-draft'),
-                    onPressed: busy ? null : () => saveDraft(feedback: true),
-                    icon: const GIcon(CupertinoIcons.doc_text, size: 18),
-                    label: const Text('Bozza'),
-                  ),
-                TextButton(
-                  onPressed: busy ? null : publish,
-                  child: Text(
-                    busy ? 'Pubblico…' : 'Condividi',
-                    style: TextStyle(
-                      color: story ? Colors.white : auraBlue,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-      body: story
-          ? storyEditor(c)
-          : ListView(
-              children: [
-                if (busy)
-                  ValueListenableBuilder<double>(
-                    valueListenable: GpixScope.of(c).uploadProgress,
-                    builder: (c, progress, _) => Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        children: [
-                          LinearProgressIndicator(
-                            value: progress > 0 && progress < 1
-                                ? progress
-                                : null,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            progress < 1
-                                ? 'Caricamento ${(progress * 100).round()}%'
-                                : 'Pubblicazione in corso…',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                AspectRatio(
-                  aspectRatio: kind == 'post' ? aspect : 1,
-                  child: ColoredBox(
-                    color: subdued(c),
-                    child: files.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  iconSize: 40,
-                                  onPressed: () => pick(video: kind == 'reel'),
-                                  icon: GIcon(
-                                    kind == 'reel'
-                                        ? CupertinoIcons.videocam
-                                        : CupertinoIcons.photo,
-                                    color: muted,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  kind == 'reel'
-                                      ? 'Scegli un video'
-                                      : 'Scegli fino a 10 foto',
-                                  style: const TextStyle(color: muted),
-                                ),
-                              ],
-                            ),
-                          )
-                        : kind == 'reel'
-                        ? ClipPlayer(
-                            reference: files.first,
-                            active: TickerMode.of(c),
-                          )
-                        : PageView.builder(
-                            itemCount: files.length,
-                            onPageChanged: (i) => setState(() => page = i),
-                            itemBuilder: (c, i) => MediaView(files[i]),
-                          ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(17),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          TextButton.icon(
-                            onPressed: () => pick(video: kind == 'reel'),
-                            icon: const GIcon(CupertinoIcons.photo, size: 19),
-                            label: Text(
-                              files.isEmpty
-                                  ? 'Galleria'
-                                  : 'Cambia (${files.length})',
-                            ),
-                          ),
-                          const Spacer(),
-                          TextButton.icon(
-                            onPressed: () =>
-                                pick(camera: true, video: kind == 'reel'),
-                            icon: const GIcon(CupertinoIcons.camera, size: 19),
-                            label: const Text('Fotocamera'),
-                          ),
-                        ],
-                      ),
-                      if (kind == 'post')
-                        Wrap(
-                          alignment: WrapAlignment.center,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          runSpacing: 8,
-                          children: [
-                            const Text(
-                              'Formato',
-                              style: TextStyle(fontSize: 12, color: muted),
-                            ),
-                            const SizedBox(width: 12),
-                            for (final v in [1.0, .8, .75, 1.91])
-                              Padding(
-                                padding: const EdgeInsets.only(right: 6),
-                                child: ChoiceChip(
-                                  label: Text(
-                                    v == 1
-                                        ? '1:1'
-                                        : v == .8
-                                        ? '4:5'
-                                        : v == .75
-                                        ? '3:4'
-                                        : '1.91:1',
-                                    style: const TextStyle(fontSize: 10),
-                                  ),
-                                  selected: aspect == v,
-                                  onSelected: (_) => setState(() => aspect = v),
-                                ),
-                              ),
-                          ],
-                        ),
-                      const SizedBox(height: 13),
-                      AppInput(text, 'Scrivi una didascalia…', lines: 4),
-                      const SizedBox(height: 15),
-                      AppInput(location, 'Aggiungi un luogo'),
-                      const SizedBox(height: 20),
-                      PrimaryButton('Condividi', busy: busy, onTap: publish),
-                      const SizedBox(height: 15),
-                      const Text(
-                        'Scegli un formato per tutte le foto del post.\nI video possono durare fino a 60 secondi (25 MB online).',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: muted,
-                          height: 1.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+      backgroundColor: Colors.black,
+      body: Theme(
+        data: gpixTheme(Brightness.dark),
+        child: Builder(builder: (c) => storyEditor(c)),
+      ),
     );
   }
+
+  Widget reelComposer(BuildContext c) => Scaffold(
+    backgroundColor: Theme.of(c).canvasColor,
+    appBar: AppBar(
+      centerTitle: true,
+      leading: IconButton(
+        tooltip: 'Annulla',
+        onPressed: busy ? null : () => Navigator.pop(c),
+        icon: GIcon(CupertinoIcons.xmark, color: foreground(c)),
+      ),
+      title: const Text('Nuovo reel'),
+      actions: [
+        IconButton(
+          key: const ValueKey('save-reel-draft'),
+          tooltip: 'Salva bozza',
+          onPressed: busy ? null : () => saveDraft(feedback: true),
+          icon: GIcon(CupertinoIcons.doc_text, color: foreground(c)),
+        ),
+      ],
+    ),
+    bottomNavigationBar: SafeArea(
+      minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      child: FilledButton(
+        onPressed: busy || files.isEmpty ? null : publish,
+        child: Text(busy ? 'Pubblicazione…' : 'Condividi reel'),
+      ),
+    ),
+    body: ListView(
+      padding: const EdgeInsets.only(bottom: 16),
+      children: [
+        if (busy)
+          ValueListenableBuilder<double>(
+            valueListenable: GpixScope.of(c).uploadProgress,
+            builder: (c, value, _) => LinearProgressIndicator(
+              value: value > 0 && value < 1 ? value : null,
+            ),
+          ),
+        Container(
+          margin: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          height: (MediaQuery.sizeOf(c).height * .48).clamp(220.0, 430.0),
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            color: Theme.of(c).colorScheme.surfaceContainerLow,
+          ),
+          child: files.isEmpty
+              ? CreationEmpty(
+                  icon: CupertinoIcons.play_rectangle,
+                  title: 'Crea il tuo reel',
+                  description: 'Scegli un video oppure registralo adesso.',
+                  action: 'Scegli video',
+                  onPressed: busy ? null : () => pick(video: true),
+                )
+              : Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ColoredBox(
+                      color: Colors.black,
+                      child: ClipPlayer(
+                        reference: files.first,
+                        fit: BoxFit.contain,
+                        active: TickerMode.of(c),
+                      ),
+                    ),
+                    Positioned(
+                      right: 10,
+                      top: 10,
+                      child: MediaToolButton(
+                        icon: CupertinoIcons.photo,
+                        label: 'Cambia video',
+                        onPressed: busy ? null : () => pick(video: true),
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+        if (files.isEmpty)
+          Center(
+            child: TextButton.icon(
+              onPressed: busy ? null : () => pick(camera: true, video: true),
+              icon: GIcon(CupertinoIcons.videocam, color: foreground(c)),
+              label: Text(
+                'Registra video',
+                style: TextStyle(color: foreground(c)),
+              ),
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: TextField(
+            controller: text,
+            minLines: 2,
+            maxLines: 5,
+            style: TextStyle(color: foreground(c)),
+            decoration: const InputDecoration(
+              hintText: 'Scrivi una didascalia…',
+              filled: false,
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+            ),
+          ),
+        ),
+        const Divider(height: 1, indent: 16, endIndent: 16),
+        ListTile(
+          leading: GIcon(CupertinoIcons.person_2, color: foreground(c)),
+          title: const Text('Pubblico'),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(reelAudience == 'close' ? 'Amici più stretti' : 'Follower'),
+              const SizedBox(width: 6),
+              const GIcon(CupertinoIcons.chevron_down, size: 14),
+            ],
+          ),
+          onTap: () => sheet(
+            c,
+            Builder(
+              builder: (menu) => Column(
+                children: [
+                  for (final item in const [
+                    ('followers', 'Follower'),
+                    ('close', 'Amici più stretti'),
+                  ])
+                    ListTile(
+                      title: Text(item.$2),
+                      trailing: reelAudience == item.$1
+                          ? const GIcon(
+                              CupertinoIcons.check_mark,
+                              color: auraBlue,
+                            )
+                          : null,
+                      onTap: () {
+                        setState(() => reelAudience = item.$1);
+                        Navigator.pop(menu);
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const Divider(height: 1, indent: 16, endIndent: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: TextField(
+            controller: location,
+            style: TextStyle(color: foreground(c)),
+            decoration: InputDecoration(
+              hintText: 'Aggiungi luogo',
+              prefixIcon: GIcon(
+                CupertinoIcons.placemark,
+                color: foreground(c),
+                size: 20,
+              ),
+              filled: false,
+              isDense: true,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 
   Future<void> editStoryText() async {
     final result = await textDialog(context, 'Testo della storia', text.text);
@@ -1297,375 +1294,412 @@ class _ComposerState extends State<Composer> {
     );
   }
 
-  Widget storyEditor(BuildContext c) => SafeArea(
-    child: Column(
-      children: [
-        Expanded(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(22),
-            child: Stack(
-              fit: StackFit.expand,
+  Widget storyEditor(BuildContext c) => Stack(
+    fit: StackFit.expand,
+    children: [
+      RepaintBoundary(
+        key: canvasKey,
+        child: StoryCanvas(
+          story: {
+            'text': text.text,
+            'media': files.isEmpty ? '' : files.first,
+            'style': style,
+          },
+          editing: true,
+          onStickerTap: (i) => setState(() => selectedSticker = i),
+          onStickerMove: (i, d) => setState(() {
+            stickers[i]['x'] = (stickers[i].number('x') + d.dx).clamp(0, .8);
+            stickers[i]['y'] = (stickers[i].number('y') + d.dy).clamp(.05, .85);
+            selectedSticker = i;
+          }),
+          onMove: (p) => setState(() {
+            x = p.dx.clamp(.12, .88);
+            y = p.dy.clamp(.1, .85);
+          }),
+        ),
+      ),
+      if (files.isEmpty && text.text.isEmpty)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 90, 72, 100),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                RepaintBoundary(
-                  key: canvasKey,
-                  child: StoryCanvas(
-                    story: {
-                      'text': text.text,
-                      'media': files.isEmpty ? '' : files.first,
-                      'style': style,
-                    },
-                    editing: true,
-                    onStickerTap: (i) => setState(() => selectedSticker = i),
-                    onStickerMove: (i, d) => setState(() {
-                      stickers[i]['x'] = (stickers[i].number('x') + d.dx).clamp(
-                        0,
-                        .8,
-                      );
-                      stickers[i]['y'] = (stickers[i].number('y') + d.dy).clamp(
-                        .05,
-                        .85,
-                      );
-                      selectedSticker = i;
-                    }),
-                    onMove: (p) => setState(() {
-                      x = p.dx.clamp(.12, .88);
-                      y = p.dy.clamp(.1, .85);
-                    }),
+                const GIcon(
+                  CupertinoIcons.textformat,
+                  color: Colors.white,
+                  size: 38,
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'La tua storia inizia qui',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 19,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-                Positioned(
-                  top: 10,
-                  left: 12,
-                  child: tool(CupertinoIcons.xmark, 'Annulla', () async {
-                    if (await gpixAlert(
-                          c,
-                          'Scartare la storia?',
-                          'Il contenuto non verrà pubblicato.',
-                          confirm: 'Scarta',
-                          cancel: true,
-                          destructive: true,
-                        ) &&
-                        mounted)
-                      Navigator.pop(c);
-                  }),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: editStoryText,
+                  child: const Text('Scrivi un pensiero'),
                 ),
-                if (audio.isNotEmpty)
-                  Positioned(
-                    top: 13,
-                    left: 72,
-                    right: 72,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 9,
+                TextButton(
+                  onPressed: chooseMedia,
+                  child: const Text(
+                    'Scegli una foto',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      Positioned(
+        top: MediaQuery.paddingOf(c).top + 10,
+        left: 12,
+        child: tool(CupertinoIcons.xmark, 'Annulla', () async {
+          if (await gpixAlert(
+                c,
+                'Scartare la storia?',
+                'Il contenuto non verrà pubblicato.',
+                confirm: 'Scarta',
+                cancel: true,
+                destructive: true,
+              ) &&
+              mounted)
+            Navigator.pop(c);
+        }),
+      ),
+      if (audio.isNotEmpty)
+        Positioned(
+          top: 13,
+          left: 72,
+          right: 72,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: Colors.white10,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Row(
+              children: [
+                const GIcon(
+                  CupertinoIcons.music_note_2,
+                  color: Colors.white,
+                  size: 17,
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    audio.split('/').last,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ),
+                InkWell(
+                  onTap: () => setState(() => audio = ''),
+                  child: const GIcon(
+                    CupertinoIcons.xmark_circle_fill,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      Positioned(
+        top: MediaQuery.paddingOf(c).top + 10,
+        right: 12,
+        child: Column(
+          children: [
+            tool(CupertinoIcons.textformat, 'Testo', editStoryText),
+            const SizedBox(height: 10),
+            tool(
+              CupertinoIcons.smiley,
+              'Sticker',
+              () => sheet(
+                c,
+                EmojiPicker(
+                  onSelected: (emoji) {
+                    setState(() {
+                      stickers.add({
+                        'emoji': emoji,
+                        'x': .18 + (stickers.length % 3) * .2,
+                        'y': .35 + (stickers.length ~/ 3 % 3) * .15,
+                        'size': 52.0,
+                        'angle': 0.0,
+                      });
+                      selectedSticker = stickers.length - 1;
+                    });
+                    Navigator.pop(c);
+                  },
+                ),
+                scroll: false,
+              ),
+            ),
+            const SizedBox(height: 10),
+            tool(CupertinoIcons.music_note_2, 'Musica da file', chooseMusic),
+            const SizedBox(height: 10),
+            tool(
+              CupertinoIcons.arrow_down_to_line,
+              'Esporta immagine',
+              exportStory,
+            ),
+            const SizedBox(height: 10),
+            tool(
+              CupertinoIcons.circle_lefthalf_fill,
+              'Sfondo',
+              () => setState(() => background = (background + 1) % 4),
+            ),
+            const SizedBox(height: 10),
+            tool(CupertinoIcons.chevron_down, 'Galleria', chooseMedia),
+          ],
+        ),
+      ),
+      Positioned(
+        left: 18,
+        right: 18,
+        bottom:
+            110 +
+            MediaQuery.paddingOf(c).bottom +
+            (text.text.isNotEmpty ? 70 : 0) +
+            (selectedSticker >= 0 ? 48 : 0),
+        child: TextField(
+          controller: caption,
+          onChanged: (_) => setState(() {}),
+          maxLines: 2,
+          minLines: 1,
+          style: const TextStyle(color: Colors.white, fontSize: 14),
+          cursorColor: Colors.white,
+          decoration: InputDecoration(
+            hintText: 'Aggiungi una didascalia…',
+            hintStyle: const TextStyle(color: Colors.white70),
+            fillColor: const Color(0xcc111111),
+            filled: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 12,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: Colors.white38),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: Colors.white),
+            ),
+          ),
+        ),
+      ),
+      Positioned(
+        left: 0,
+        right: 0,
+        bottom: 0,
+        child: Container(
+          padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(c).bottom),
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Colors.transparent, Color(0xe6000000)],
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (selectedSticker >= 0 && selectedSticker < stickers.length)
+                Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Elimina sticker',
+                      onPressed: () => setState(() {
+                        stickers.removeAt(selectedSticker);
+                        selectedSticker = -1;
+                      }),
+                      icon: GIcon(
+                        CupertinoIcons.trash,
+                        color: foreground(c),
+                        size: 20,
                       ),
-                      decoration: BoxDecoration(
-                        color: Colors.white10,
-                        borderRadius: BorderRadius.circular(18),
+                    ),
+                    Expanded(
+                      child: Slider(
+                        value: stickers[selectedSticker].number('size', 52),
+                        min: 24,
+                        max: 100,
+                        onChanged: (v) => setState(
+                          () => stickers[selectedSticker]['size'] = v,
+                        ),
                       ),
-                      child: Row(
-                        children: [
-                          const GIcon(
-                            CupertinoIcons.music_note_2,
-                            color: Colors.white,
-                            size: 17,
+                    ),
+                    IconButton(
+                      tooltip: 'Ruota sticker',
+                      onPressed: () => setState(
+                        () => stickers[selectedSticker]['angle'] =
+                            stickers[selectedSticker].number('angle') + .2,
+                      ),
+                      icon: GIcon(
+                        CupertinoIcons.rotate_right,
+                        color: foreground(c),
+                        size: 20,
+                      ),
+                    ),
+                  ],
+                ),
+              if (text.text.isNotEmpty) ...[
+                SizedBox(
+                  height: 42,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    children: [
+                      for (var i = 0; i < 3; i++)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 7),
+                          child: ChoiceChip(
+                            label: Text(
+                              ['Classico', 'Moderno', 'Elegante'][i],
+                              style: const TextStyle(fontSize: 10),
+                            ),
+                            selected: font == i,
+                            onSelected: (_) => setState(() => font = i),
                           ),
-                          const SizedBox(width: 7),
-                          Expanded(
-                            child: Text(
-                              audio.split('/').last,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
+                        ),
+                      for (var i = 0; i < storyColors.length; i++)
+                        GestureDetector(
+                          onTap: () => setState(() => color = i),
+                          child: Container(
+                            width: 25,
+                            height: 25,
+                            margin: const EdgeInsets.all(7),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: storyColors[i],
+                              border: Border.all(
+                                color: color == i ? auraBlue : Colors.white38,
+                                width: 2,
                               ),
                             ),
                           ),
-                          InkWell(
-                            onTap: () => setState(() => audio = ''),
-                            child: const GIcon(
-                              CupertinoIcons.xmark_circle_fill,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                Positioned(
-                  top: 10,
-                  right: 12,
-                  child: Column(
-                    children: [
-                      tool(CupertinoIcons.textformat, 'Testo', editStoryText),
-                      const SizedBox(height: 10),
-                      tool(
-                        CupertinoIcons.smiley,
-                        'Sticker',
-                        () => sheet(
-                          c,
-                          EmojiPicker(
-                            onSelected: (emoji) {
-                              setState(() {
-                                stickers.add({
-                                  'emoji': emoji,
-                                  'x': .18 + (stickers.length % 3) * .2,
-                                  'y': .35 + (stickers.length ~/ 3 % 3) * .15,
-                                  'size': 52.0,
-                                  'angle': 0.0,
-                                });
-                                selectedSticker = stickers.length - 1;
-                              });
-                              Navigator.pop(c);
-                            },
-                          ),
-                          scroll: false,
                         ),
-                      ),
-                      const SizedBox(height: 10),
-                      tool(
-                        CupertinoIcons.music_note_2,
-                        'Musica da file',
-                        chooseMusic,
-                      ),
-                      const SizedBox(height: 10),
-                      tool(
-                        CupertinoIcons.arrow_down_to_line,
-                        'Esporta immagine',
-                        exportStory,
-                      ),
-                      const SizedBox(height: 10),
-                      tool(
-                        CupertinoIcons.circle_lefthalf_fill,
-                        'Sfondo',
-                        () => setState(() => background = (background + 1) % 4),
-                      ),
-                      const SizedBox(height: 10),
-                      tool(
-                        CupertinoIcons.chevron_down,
-                        'Galleria',
-                        chooseMedia,
-                      ),
                     ],
                   ),
                 ),
-                Positioned(
-                  left: 18,
-                  right: 65,
-                  bottom: 8,
-                  child: TextField(
-                    controller: caption,
-                    onChanged: (_) => setState(() {}),
-                    maxLines: 2,
-                    minLines: 1,
-                    style: TextStyle(color: foreground(c), fontSize: 13),
-                    decoration: mediaInputDecoration(
-                      c,
-                      'Aggiungi una didascalia…',
-                    ),
+                SizedBox(
+                  height: 28,
+                  child: Slider(
+                    value: size,
+                    min: 18,
+                    max: 48,
+                    onChanged: (v) => setState(() => size = v),
                   ),
                 ),
               ],
-            ),
-          ),
-        ),
-        if (selectedSticker >= 0 && selectedSticker < stickers.length)
-          Row(
-            children: [
-              IconButton(
-                tooltip: 'Elimina sticker',
-                onPressed: () => setState(() {
-                  stickers.removeAt(selectedSticker);
-                  selectedSticker = -1;
-                }),
-                icon: GIcon(
-                  CupertinoIcons.trash,
-                  color: foreground(c),
-                  size: 20,
-                ),
-              ),
-              Expanded(
-                child: Slider(
-                  value: stickers[selectedSticker].number('size', 52),
-                  min: 24,
-                  max: 100,
-                  onChanged: (v) =>
-                      setState(() => stickers[selectedSticker]['size'] = v),
-                ),
-              ),
-              IconButton(
-                tooltip: 'Ruota sticker',
-                onPressed: () => setState(
-                  () => stickers[selectedSticker]['angle'] =
-                      stickers[selectedSticker].number('angle') + .2,
-                ),
-                icon: GIcon(
-                  CupertinoIcons.rotate_right,
-                  color: foreground(c),
-                  size: 20,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 14, 12, 16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: busy ? null : () => publish(),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: subdued(c),
+                          foregroundColor: foreground(c),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 16,
+                          ),
+                        ),
+                        icon: Avatar(GpixScope.of(c).myId, size: 25),
+                        label: const Text(
+                          'La tua storia',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: GestureDetector(
+                        onLongPress: friends,
+                        child: FilledButton.icon(
+                          onPressed: busy
+                              ? null
+                              : () async {
+                                  if (GpixScope.of(
+                                    c,
+                                    listen: false,
+                                  ).state.ids('closeFriends').isEmpty)
+                                    await friends();
+                                  if (mounted &&
+                                      GpixScope.of(
+                                        c,
+                                        listen: false,
+                                      ).state.ids('closeFriends').isNotEmpty)
+                                    publish(audience: 'close');
+                                },
+                          style: FilledButton.styleFrom(
+                            backgroundColor: subdued(c),
+                            foregroundColor: foreground(c),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 16,
+                            ),
+                          ),
+                          icon: const GIcon(
+                            CupertinoIcons.star_fill,
+                            color: Colors.greenAccent,
+                            size: 22,
+                          ),
+                          label: const Text(
+                            'Amici più stretti',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: 'Condividi',
+                      onPressed: busy ? null : () => publish(),
+                      style: IconButton.styleFrom(
+                        backgroundColor: auraBlue,
+                        padding: const EdgeInsets.all(16),
+                      ),
+                      icon: busy
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const GIcon(
+                              CupertinoIcons.arrow_right,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-        if (text.text.isNotEmpty) ...[
-          SizedBox(
-            height: 42,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              children: [
-                for (var i = 0; i < 3; i++)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 7),
-                    child: ChoiceChip(
-                      label: Text(
-                        ['Classico', 'Moderno', 'Elegante'][i],
-                        style: const TextStyle(fontSize: 10),
-                      ),
-                      selected: font == i,
-                      onSelected: (_) => setState(() => font = i),
-                    ),
-                  ),
-                for (var i = 0; i < storyColors.length; i++)
-                  GestureDetector(
-                    onTap: () => setState(() => color = i),
-                    child: Container(
-                      width: 25,
-                      height: 25,
-                      margin: const EdgeInsets.all(7),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: storyColors[i],
-                        border: Border.all(
-                          color: color == i ? auraBlue : Colors.white38,
-                          width: 2,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          SizedBox(
-            height: 28,
-            child: Slider(
-              value: size,
-              min: 18,
-              max: 48,
-              onChanged: (v) => setState(() => size = v),
-            ),
-          ),
-        ],
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 14, 12, 16),
-          child: Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: busy ? null : () => publish(),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: subdued(c),
-                    foregroundColor: foreground(c),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 16,
-                    ),
-                  ),
-                  icon: Avatar(GpixScope.of(c).myId, size: 25),
-                  label: const Text(
-                    'La tua storia',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: GestureDetector(
-                  onLongPress: friends,
-                  child: FilledButton.icon(
-                    onPressed: busy
-                        ? null
-                        : () async {
-                            if (GpixScope.of(
-                              c,
-                              listen: false,
-                            ).state.ids('closeFriends').isEmpty)
-                              await friends();
-                            if (mounted &&
-                                GpixScope.of(
-                                  c,
-                                  listen: false,
-                                ).state.ids('closeFriends').isNotEmpty)
-                              publish(audience: 'close');
-                          },
-                    style: FilledButton.styleFrom(
-                      backgroundColor: subdued(c),
-                      foregroundColor: foreground(c),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 16,
-                      ),
-                    ),
-                    icon: const GIcon(
-                      CupertinoIcons.star_fill,
-                      color: Colors.greenAccent,
-                      size: 22,
-                    ),
-                    label: const Text(
-                      'Amici più stretti',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                tooltip: 'Condividi',
-                onPressed: busy ? null : () => publish(),
-                style: IconButton.styleFrom(
-                  backgroundColor: const Color(0xff4b5bff),
-                  padding: const EdgeInsets.all(16),
-                ),
-                icon: busy
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const GIcon(
-                        CupertinoIcons.arrow_right,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-              ),
-            ],
-          ),
         ),
-      ],
-    ),
+      ),
+    ],
   );
 
-  Widget tool(IconData icon, String label, VoidCallback tap) => Tooltip(
-    message: label,
-    child: InkWell(
-      onTap: tap,
-      child: Container(
-        width: 42,
-        height: 42,
-        decoration: const BoxDecoration(
-          color: Colors.black38,
-          shape: BoxShape.circle,
-        ),
-        child: GIcon(icon, color: Colors.white, size: 23),
-      ),
-    ),
-  );
+  Widget tool(IconData icon, String label, VoidCallback tap) =>
+      MediaToolButton(icon: icon, label: label, onPressed: busy ? null : tap);
 }
