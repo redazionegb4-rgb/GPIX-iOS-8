@@ -15,10 +15,26 @@ import '../ui/kit.dart' show open, notice;
 
 String pushNotificationBody(GpixStore s, String? kind, String? body) {
   if (kind == 'message' && s.preferences.flag('hideNotificationPreviews')) {
-    return 'Nuovo messaggio';
+    return 'Apri GPIX per leggerlo.';
   }
   return body ??
       (kind == 'message' ? 'Nuovo messaggio' : 'Nuova attività GPIX');
+}
+
+String pushNotificationNotice(
+  GpixStore s,
+  String? kind,
+  String? title,
+  String? body,
+) {
+  final text = pushNotificationBody(s, kind, body);
+  if (kind != 'message') return text;
+  final heading = title != null && title.startsWith('Nuovo messaggio')
+      ? title
+      : title != null && title.isNotEmpty && title != 'GPIX'
+      ? 'Nuovo messaggio · $title'
+      : 'Nuovo messaggio';
+  return '$heading\n$text';
 }
 
 @pragma('vm:entry-point')
@@ -201,7 +217,12 @@ class PushService {
       if (c != null && !Platform.isIOS) {
         notice(
           c,
-          pushNotificationBody(s, m.data['kind'], m.notification?.body),
+          pushNotificationNotice(
+            s,
+            m.data['kind'],
+            m.notification?.title,
+            m.notification?.body,
+          ),
         );
       }
       unawaited(s.sync(silent: true));

@@ -19,7 +19,7 @@ void main() {
       await s.setPreference('hideNotificationPreviews', true);
       expect(
         pushNotificationBody(s, 'message', 'TESTO PRIVATO'),
-        'Nuovo messaggio',
+        'Apri GPIX per leggerlo.',
       );
       expect(
         pushNotificationBody(s, 'announcement', 'Novità GPIX'),
@@ -28,6 +28,44 @@ void main() {
       await s.setPreference('hideNotificationPreviews', false);
       expect(pushNotificationBody(s, 'message', 'Ciao'), 'Ciao');
       expect(pushNotificationBody(s, 'message', null), 'Nuovo messaggio');
+      s.dispose();
+    },
+  );
+  test(
+    'Foreground message headings distinguish messages from other notifications',
+    () async {
+      final s = GpixStore()..startTestDemo();
+      expect(
+        pushNotificationNotice(
+          s,
+          'message',
+          'Nuovo messaggio · Andrea Rossi',
+          'Ciao!',
+        ),
+        'Nuovo messaggio · Andrea Rossi\nCiao!',
+      );
+      expect(
+        pushNotificationNotice(s, 'message', 'Andrea Rossi', 'Ciao!'),
+        'Nuovo messaggio · Andrea Rossi\nCiao!',
+      );
+      expect(
+        pushNotificationNotice(s, 'message', 'GPIX', 'Ciao!'),
+        'Nuovo messaggio\nCiao!',
+      );
+      expect(
+        pushNotificationNotice(s, 'announcement', 'GPIX', 'Novità'),
+        'Novità',
+      );
+      await s.setPreference('hideNotificationPreviews', true);
+      expect(
+        pushNotificationNotice(
+          s,
+          'message',
+          'Nuovo messaggio · Weekend',
+          'TESTO PRIVATO',
+        ),
+        'Nuovo messaggio · Weekend\nApri GPIX per leggerlo.',
+      );
       s.dispose();
     },
   );
@@ -62,7 +100,7 @@ void main() {
         expect(inboxPreview(s, thread), before);
         expect(
           pushNotificationBody(s, 'message', 'PRIVATO'),
-          'Nuovo messaggio',
+          'Apri GPIX per leggerlo.',
         );
         gpixNavigator.currentState!.pop();
         await t.pumpAndSettle();

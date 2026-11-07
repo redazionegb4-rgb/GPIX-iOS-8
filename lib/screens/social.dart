@@ -5407,7 +5407,7 @@ class MessageToggleSetting extends StatelessWidget {
       ),
       'hideNotificationPreviews': (
         'Nascondi anteprima nelle notifiche',
-        'Nasconde il contenuto dei messaggi nelle notifiche: vedrai soltanto “Nuovo messaggio”. Disattiva questa opzione per mostrare il testo ricevuto.',
+        'Nasconde il testo dei messaggi nelle notifiche. Il titolo indica “Nuovo messaggio” e puoi aprire GPIX per leggerlo. Disattiva questa opzione per mostrare il testo ricevuto.',
         CupertinoIcons.bell_slash,
         false,
       ),
