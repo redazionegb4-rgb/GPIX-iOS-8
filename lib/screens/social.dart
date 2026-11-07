@@ -4806,6 +4806,20 @@ class _SettingsState extends State<Settings> {
           ),
           ('Utenti bloccati', blocked),
           (
+            'Nascondi anteprima notifiche messaggi privacy',
+            row(
+              CupertinoIcons.bell_slash,
+              'Nascondi anteprima nelle notifiche',
+              () => open(
+                c,
+                const MessageToggleSetting(setting: 'hideNotificationPreviews'),
+              ),
+              value: s.preferences.flag('hideNotificationPreviews')
+                  ? 'Sì'
+                  : 'No',
+            ),
+          ),
+          (
             'Storie nascoste silenziati restrizioni messaggi tag menzioni',
             row(
               CupertinoIcons.shield,
@@ -5389,6 +5403,12 @@ class MessageToggleSetting extends StatelessWidget {
         'Protezione delle immagini',
         'Sfoca tutte le foto e GIF ricevute nelle chat finché non scegli di mostrarle. La protezione è preventiva: non analizza né identifica automaticamente immagini di nudo.',
         CupertinoIcons.eye_slash,
+        false,
+      ),
+      'hideNotificationPreviews': (
+        'Nascondi anteprima nelle notifiche',
+        'Nasconde il contenuto dei messaggi nelle notifiche: vedrai soltanto “Nuovo messaggio”. Disattiva questa opzione per mostrare il testo ricevuto.',
+        CupertinoIcons.bell_slash,
         false,
       ),
       'messagePreviews': (

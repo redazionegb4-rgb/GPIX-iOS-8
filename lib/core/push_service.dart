@@ -13,6 +13,14 @@ import '../screens/sessions_instants.dart' show InstantsPage;
 import '../screens/social.dart' show PostPage, Profile, Activity;
 import '../ui/kit.dart' show open, notice;
 
+String pushNotificationBody(GpixStore s, String? kind, String? body) {
+  if (kind == 'message' && s.preferences.flag('hideNotificationPreviews')) {
+    return 'Nuovo messaggio';
+  }
+  return body ??
+      (kind == 'message' ? 'Nuovo messaggio' : 'Nuova attività GPIX');
+}
+
 @pragma('vm:entry-point')
 Future<void> gpixBackgroundMessage(RemoteMessage message) async {
   try {
@@ -191,7 +199,10 @@ class PushService {
       final c = gpixNavigator.currentContext;
       if (!currentSession()) return;
       if (c != null && !Platform.isIOS) {
-        notice(c, m.notification?.body ?? 'Nuova attività GPIX');
+        notice(
+          c,
+          pushNotificationBody(s, m.data['kind'], m.notification?.body),
+        );
       }
       unawaited(s.sync(silent: true));
     });
