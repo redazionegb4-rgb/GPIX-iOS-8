@@ -7,6 +7,7 @@ import '../core/data.dart';
 import '../core/store.dart';
 import '../ui/kit.dart';
 import 'stories.dart';
+import 'auth.dart';
 import 'features13.dart';
 import 'sessions_instants.dart';
 import 'messages.dart';
@@ -2527,6 +2528,51 @@ class _ProfileState extends State<Profile> {
   int selected = 0;
   bool showSuggestions = false;
   final dismissedSuggestions = <String>{};
+  Future<void> switchAccount(BuildContext context, GpixStore store) async {
+    final chosen = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            ListTile(
+              leading: Avatar(store.myId),
+              title: Text(store.me.str('username')),
+              subtitle: const Text('Account attivo'),
+              trailing: const Icon(CupertinoIcons.check_mark),
+            ),
+            for (final account in store.savedAccounts)
+              if (account.str('id') != store.myId)
+                ListTile(
+                  leading: const CircleAvatar(
+                    child: Icon(CupertinoIcons.person_fill),
+                  ),
+                  title: Text(account.str('username')),
+                  subtitle: Text(account.str('name')),
+                  onTap: () => Navigator.pop(context, account.str('id')),
+                ),
+            ListTile(
+              leading: const Icon(CupertinoIcons.add_circled),
+              title: const Text('Aggiungi account'),
+              onTap: () => Navigator.pop(context, ''),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (chosen == null || !context.mounted) return;
+    if (chosen.isEmpty) {
+      open(context, const Welcome(addingAccount: true));
+      return;
+    }
+    final navigator = Navigator.of(context);
+    await perform(context, () async {
+      await store.useSavedAccount(chosen);
+      if (navigator.mounted) navigator.popUntil((route) => route.isFirst);
+    });
+  }
+
   @override
   Widget build(BuildContext c) {
     final s = GpixScope.of(c),
@@ -2572,24 +2618,28 @@ class _ProfileState extends State<Profile> {
       appBar: AppBar(
         automaticallyImplyLeading: !widget.root,
         centerTitle: false,
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (u.flag('private')) ...[
-              const GIcon(CupertinoIcons.lock, size: 15),
-              const SizedBox(width: 5),
-            ],
-            Flexible(
-              child: Text(
-                u.str('username'),
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 21,
-                  fontWeight: FontWeight.w700,
+        title: InkWell(
+          onTap: own ? () => switchAccount(c, s) : null,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (u.flag('private')) ...[
+                const GIcon(CupertinoIcons.lock, size: 15),
+                const SizedBox(width: 5),
+              ],
+              Flexible(
+                child: Text(
+                  u.str('username'),
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 21,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-            ),
-          ],
+              if (own) const GIcon(CupertinoIcons.chevron_down, size: 15),
+            ],
+          ),
         ),
         actions: own
             ? [

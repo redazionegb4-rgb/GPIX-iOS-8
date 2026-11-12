@@ -115,7 +115,14 @@ void main() {
     await fill(t, 'auth-Email', 'DMB@EXAMPLE.COM');
     await fill(t, 'auth-password', 'StrongPass1234');
     await fill(t, 'auth-confirmation', 'StrongPass1234');
-    await press(t, 'Crea account');
+    await t.ensureVisible(find.text('Crea account'));
+    await t.tap(find.text('Crea account'));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 400));
+    expect(find.text('Salvare i dati di accesso?'), findsOneWidget);
+    await t.tap(find.text('Non ora'));
+    await t.pumpAndSettle();
+    expect(s.savedAccounts, isEmpty);
     expect(requests.single.url.toString(), 'https://gpix.cc/auth/register');
     final payload = jsonDecode(requests.single.body) as Map;
     expect(payload['username'], 'dmb.new');
@@ -182,6 +189,63 @@ void main() {
       s.dispose();
     },
   );
+  testWidgets(
+    'Saved access survives logout and removing the last profile restores welcome',
+    (t) async {
+      int revision = 0;
+      final store = GpixStore(
+        client: MockClient((request) async {
+          if (request.url.path != '/auth/login')
+            return http.Response('{}', 200);
+          final login = (jsonDecode(request.body) as Map)['login'] as String;
+          return http.Response(
+            jsonEncode({
+              'token': 'session-${revision++}',
+              'state': {
+                'me': {'id': login, 'username': login, 'name': login},
+              },
+            }),
+            200,
+          );
+        }),
+      );
+      await store.authenticate(
+        login: 'primo',
+        password: 'secret-password-one',
+        remember: () async => true,
+      );
+      await store.authenticate(
+        login: 'secondo',
+        password: 'secret-password-two',
+        remember: () async => true,
+      );
+      expect(store.savedAccounts.map((a) => a['id']), ['secondo', 'primo']);
+      expect(
+        store.savedAccounts.any((a) => a.containsKey('password')),
+        isFalse,
+      );
+      await store.useSavedAccount('primo');
+      expect(store.myId, 'primo');
+      await store.logout();
+      expect(store.signedIn, isFalse);
+      await t.pumpWidget(GpixApp(store: store));
+      await t.pumpAndSettle();
+      expect(find.text('Accedi con un altro account'), findsOneWidget);
+      for (var i = 0; i < 2; i++) {
+        final menu = find.byTooltip('Opzioni profilo salvato').first;
+        await t.ensureVisible(menu);
+        await t.tap(menu);
+        await t.pumpAndSettle();
+        await press(t, 'Rimuovi accesso salvato');
+      }
+      expect(store.savedAccounts, isEmpty);
+      expect(await store.vault.read(key: 'gpix.savedAccounts.v1'), isNull);
+      expect(find.text('Accedi'), findsOneWidget);
+      await t.pumpWidget(const SizedBox());
+      store.dispose();
+    },
+  );
+
   testWidgets('Login errors remain inline and password visibility works', (
     t,
   ) async {

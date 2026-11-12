@@ -63,6 +63,7 @@ class GpixApp extends StatelessWidget {
         home: AnimatedBuilder(
           animation: store,
           builder: (c, _) => AnimatedSwitcher(
+            key: ValueKey(store.myId),
             duration: MediaQuery.disableAnimationsOf(c)
                 ? Duration.zero
                 : const Duration(milliseconds: 320),
@@ -76,11 +77,11 @@ class GpixApp extends StatelessWidget {
                   )
                 : store.signedIn
                 ? store.me['emailVerified'] == false
-                      ? const AccountSecurity(
-                          key: ValueKey('verify'),
+                      ? AccountSecurity(
+                          key: ValueKey('verify-${store.myId}'),
                           mode: 'verify',
                         )
-                      : const HomeShell(key: ValueKey('home'))
+                      : HomeShell(key: ValueKey('home-${store.myId}'))
                 : const Welcome(key: ValueKey('welcome')),
           ),
         ),

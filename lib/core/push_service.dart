@@ -53,6 +53,7 @@ class PushService {
     'GPIX_NATIVE_PUSH',
     defaultValue: true,
   );
+  static const _notificationAudio = MethodChannel('GPIX/notificationAudio');
   static const _appleRegistration = MethodChannel('GPIX/pushRegistration');
   static const _permissionRequested = 'gpix.pushPermissionRequested';
   String _session = '', _attemptSession = '';
@@ -88,10 +89,12 @@ class PushService {
       return;
     _lastAttempt = DateTime.now();
     _attemptSession = s.token;
-    _automaticCheck = _register(
-      s,
-      prompt: false,
-    ).catchError((Object _) => '').whenComplete(() => _automaticCheck = null);
+    _automaticCheck = _register(s, prompt: false)
+        .catchError((Object _) => '')
+        .whenComplete(() {
+          _automaticCheck = null;
+          if (_store?.token != _attemptSession) _changed();
+        });
   }
 
   Future<String> enable(GpixStore s) async {
@@ -213,7 +216,16 @@ class PushService {
     await foreground?.cancel();
     foreground = FirebaseMessaging.onMessage.listen((m) {
       final c = gpixNavigator.currentContext;
-      if (!currentSession()) return;
+      if (!currentSession() ||
+          (m.data['recipient'] != null && m.data['recipient'] != s.myId))
+        return;
+      if (Platform.isAndroid && m.data['sound'] == 'gpix_dm') {
+        unawaited(
+          _notificationAudio
+              .invokeMethod<void>('playDirectMessage')
+              .catchError((_) {}),
+        );
+      }
       if (c != null && !Platform.isIOS) {
         notice(
           c,
@@ -233,7 +245,9 @@ class PushService {
   }
 
   Future<void> _open(GpixStore s, RemoteMessage m) async {
-    if (!s.signedIn) return;
+    if (!s.signedIn ||
+        (m.data['recipient'] != null && m.data['recipient'] != s.myId))
+      return;
     final session = s.token;
     await s.sync(silent: true);
     if (s.token != session || s.preferences['pushEnabled'] == false) return;

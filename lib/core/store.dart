@@ -85,6 +85,43 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
   GpixStore({http.Client? client, FlutterSecureStorage? vault})
     : client = client ?? http.Client(),
       vault = vault ?? const FlutterSecureStorage();
+  static const _savedAccountsKey = 'gpix.savedAccounts.v1';
+  List<J> _savedAccounts = [];
+  bool _changingAccount = false;
+
+  List<J> get savedAccounts => [
+    for (final account in _savedAccounts)
+      {
+        'id': account.str('id'),
+        'username': account.str('username'),
+        'name': account.str('name'),
+      },
+  ];
+
+  Future<void> _writeSavedAccounts(List<J> accounts) async {
+    if (accounts.isEmpty) {
+      await vault.delete(key: _savedAccountsKey);
+    } else {
+      await vault.write(key: _savedAccountsKey, value: jsonEncode(accounts));
+    }
+    _savedAccounts = accounts;
+    notifyListeners();
+  }
+
+  Future<void> removeSavedAccount(String id) => _writeSavedAccounts(
+    _savedAccounts.where((account) => account.str('id') != id).toList(),
+  );
+
+  Future<void> useSavedAccount(String id) async {
+    final account = _savedAccounts.firstWhere((entry) => entry.str('id') == id);
+    await authenticate(
+      login: account.str('login'),
+      password: account.str('password'),
+      remember: () async => true,
+      expectedAccount: id,
+    );
+  }
+
   J state = {};
   String server = productionServer, token = '';
   String appearance = 'light';
@@ -317,6 +354,14 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
     appearance = prefs!.getString('gpix.appearance') ?? 'light';
     server = productionServer;
     token = await vault.read(key: 'gpix.token') ?? '';
+    try {
+      _savedAccounts =
+          (jsonDecode(await vault.read(key: _savedAccountsKey) ?? '[]') as List)
+              .map(object)
+              .toList();
+    } catch (_) {
+      _savedAccounts = [];
+    }
     final previousServer = prefs!
         .getString('gpix.server')
         ?.replaceAll(RegExp(r'/+$'), '');
@@ -412,15 +457,21 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
     if (demo) await prefs?.setString('gpix.demoData', jsonEncode(state));
   }
 
-  Future<J> _request(String route, {J? body}) async {
-    final uri = Uri.parse('$server$route');
+  Future<J> _request(
+    String route, {
+    J? body,
+    String? endpoint,
+    String? session,
+  }) async {
+    final activeToken = token;
+    final uri = Uri.parse('${endpoint ?? server}$route');
     if (uri.scheme != 'https')
       throw Exception(
         'Inserisci un indirizzo HTTPS valido per il server GPIX.',
       );
     http.Response r;
     final headers = {
-      'Authorization': 'Bearer $token',
+      'Authorization': 'Bearer ${session ?? activeToken}',
       'Content-Type': 'application/json',
       'X-GPIX-Active': foreground ? '1' : '0',
     };
@@ -432,6 +483,9 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
       r = await client
           .post(uri, headers: headers, body: jsonEncode(body))
           .timeout(const Duration(seconds: 60));
+    }
+    if (session == null && token != activeToken) {
+      throw Exception('La sessione è cambiata.');
     }
     J data;
     try {
@@ -452,34 +506,80 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
     required String password,
     String? email,
     String? name,
+    Future<bool> Function()? remember,
+    String? expectedAccount,
   }) async {
-    server = endpoint.trim().replaceAll(RegExp(r'/+$'), '');
-    final register = email != null;
-    final r = await _request(
-      '/auth/${register ? 'register' : 'login'}',
-      body: register
-          ? {
-              'username': login.trim().toLowerCase(),
-              'password': password,
-              'email': email.trim().toLowerCase(),
-              'name': name?.trim(),
-              'device': Platform.isIOS
-                  ? 'iPhone / iPad'
-                  : Platform.isAndroid
-                  ? 'Android'
-                  : Platform.operatingSystem,
-            }
-          : {'login': login.trim(), 'password': password},
-    );
-    final nextToken = r.str('token'), nextState = r.obj('state');
-    if (nextToken.isEmpty || nextState.obj('me').str('id').isEmpty)
-      throw Exception('Accesso non completato. Riprova.');
-    await vault.write(key: 'gpix.token', value: nextToken);
-    token = nextToken;
-    demo = false;
-    state = nextState;
-    await _persist();
-    notifyListeners();
+    if (_changingAccount)
+      throw Exception('Attendi il completamento dell’accesso.');
+    _changingAccount = true;
+    final previousToken = token, previousServer = server;
+    final nextServer = endpoint.trim().replaceAll(RegExp(r'/+$'), '');
+    try {
+      final register = email != null;
+      final r = await _request(
+        '/auth/${register ? 'register' : 'login'}',
+        endpoint: nextServer,
+        session: '',
+        body: register
+            ? {
+                'username': login.trim().toLowerCase(),
+                'password': password,
+                'email': email.trim().toLowerCase(),
+                'name': name?.trim(),
+                'device': Platform.isIOS
+                    ? 'iPhone / iPad'
+                    : Platform.isAndroid
+                    ? 'Android'
+                    : Platform.operatingSystem,
+              }
+            : {'login': login.trim(), 'password': password},
+      );
+      final nextToken = r.str('token'), nextState = r.obj('state');
+      if (nextToken.isEmpty || nextState.obj('me').str('id').isEmpty)
+        throw Exception('Accesso non completato. Riprova.');
+      final account = nextState.obj('me');
+      if (expectedAccount != null && account.str('id') != expectedAccount) {
+        await _request(
+          '/auth/logout',
+          body: {},
+          endpoint: nextServer,
+          session: nextToken,
+        );
+        throw Exception('Questo accesso appartiene a un altro profilo.');
+      }
+      if (remember != null && await remember()) {
+        final id = account.str('id');
+        await _writeSavedAccounts([
+          {
+            'id': id,
+            'name': account.str('name'),
+            'username': account.str('username'),
+            'login': login.trim(),
+            'password': password,
+          },
+          ..._savedAccounts.where((entry) => entry.str('id') != id),
+        ]);
+      }
+      await vault.write(key: 'gpix.token', value: nextToken);
+      if (previousToken.isNotEmpty && previousToken != nextToken) {
+        try {
+          await _request(
+            '/auth/logout',
+            body: {},
+            endpoint: previousServer,
+            session: previousToken,
+          ).timeout(const Duration(seconds: 4));
+        } catch (_) {}
+      }
+      server = nextServer;
+      token = nextToken;
+      demo = false;
+      state = nextState;
+      await _persist();
+      notifyListeners();
+    } finally {
+      _changingAccount = false;
+    }
   }
 
   J get preferences => state.obj('preferences');
@@ -583,7 +683,7 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
         throw Exception('Scrivi una nota entro 60 caratteri.');
       }
     }
-    final key = '$action:${payload['id'] ?? payload['user'] ?? ''}';
+    final key = '$token:$action:${payload['id'] ?? payload['user'] ?? ''}';
     if (_pending.containsKey(key)) return _pending[key]!;
     final future = _perform(action, payload);
     _pending[key] = future;
@@ -611,6 +711,7 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
       body: {'action': action, 'payload': p},
     );
     if (r.flag('deleted')) {
+      await removeSavedAccount(myId);
       await logout(remote: false);
       return;
     }
@@ -1179,22 +1280,29 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> logout({bool remote = true}) async {
-    if (!demo && token.isNotEmpty) {
-      try {
-        await api('/presence', payload: {'active': false});
-      } catch (_) {}
+    if (_changingAccount)
+      throw Exception('Attendi il completamento dell’accesso.');
+    _changingAccount = true;
+    try {
+      if (!demo && token.isNotEmpty) {
+        try {
+          await api('/presence', payload: {'active': false});
+        } catch (_) {}
+      }
+      if (remote && !demo && token.isNotEmpty) {
+        try {
+          await _request('/auth/logout', body: {});
+        } catch (_) {}
+      }
+      token = '';
+      demo = false;
+      state = {};
+      await vault.delete(key: 'gpix.token');
+      await _persist();
+      notifyListeners();
+    } finally {
+      _changingAccount = false;
     }
-    if (remote && !demo && token.isNotEmpty) {
-      try {
-        await _request('/auth/logout', body: {});
-      } catch (_) {}
-    }
-    token = '';
-    demo = false;
-    state = {};
-    await vault.delete(key: 'gpix.token');
-    await _persist();
-    notifyListeners();
   }
 
   @override
