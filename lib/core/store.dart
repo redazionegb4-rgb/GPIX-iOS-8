@@ -95,6 +95,9 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
         'id': account.str('id'),
         'username': account.str('username'),
         'name': account.str('name'),
+        'avatar': account.str('id') == myId
+            ? me.str('avatar')
+            : account.str('avatar', user(account.str('id')).str('avatar')),
       },
   ];
 
@@ -107,6 +110,16 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
     _savedAccounts = accounts;
     notifyListeners();
   }
+
+  List<J> _withCurrentAccountAvatar() => [
+    for (final account in _savedAccounts)
+      if (myId.isNotEmpty &&
+          account.str('id') == myId &&
+          me.containsKey('avatar'))
+        {...account, 'avatar': me.str('avatar')}
+      else
+        account,
+  ];
 
   Future<void> removeSavedAccount(String id) => _writeSavedAccounts(
     _savedAccounts.where((account) => account.str('id') != id).toList(),
@@ -547,6 +560,7 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
         );
         throw Exception('Questo accesso appartiene a un altro profilo.');
       }
+      final savedProfiles = _withCurrentAccountAvatar();
       if (remember != null && await remember()) {
         final id = account.str('id');
         await _writeSavedAccounts([
@@ -554,11 +568,14 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
             'id': id,
             'name': account.str('name'),
             'username': account.str('username'),
+            'avatar': account.str('avatar'),
             'login': login.trim(),
             'password': password,
           },
-          ..._savedAccounts.where((entry) => entry.str('id') != id),
+          ...savedProfiles.where((entry) => entry.str('id') != id),
         ]);
+      } else if (jsonEncode(savedProfiles) != jsonEncode(_savedAccounts)) {
+        await _writeSavedAccounts(savedProfiles);
       }
       await vault.write(key: 'gpix.token', value: nextToken);
       if (previousToken.isNotEmpty && previousToken != nextToken) {
@@ -1284,6 +1301,10 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
       throw Exception('Attendi il completamento dell’accesso.');
     _changingAccount = true;
     try {
+      final savedProfiles = _withCurrentAccountAvatar();
+      if (jsonEncode(savedProfiles) != jsonEncode(_savedAccounts)) {
+        await _writeSavedAccounts(savedProfiles);
+      }
       if (!demo && token.isNotEmpty) {
         try {
           await api('/presence', payload: {'active': false});

@@ -734,6 +734,69 @@ class Avatar extends StatelessWidget {
   }
 }
 
+class SavedAccountTile extends StatelessWidget {
+  const SavedAccountTile({
+    super.key,
+    required this.account,
+    required this.trailing,
+    this.active = false,
+    this.onTap,
+  });
+
+  final J account;
+  final Widget trailing;
+  final bool active;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext c) {
+    final theme = Theme.of(c);
+    final username = account.str('username');
+    final name = account.str('name');
+    final avatar = account.str('avatar');
+    final label = name.isEmpty ? username : name;
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(20),
+      side: BorderSide(
+        color: active
+            ? accent(c).withValues(alpha: .35)
+            : theme.colorScheme.outlineVariant,
+      ),
+    );
+    return Material(
+      color: active
+          ? Color.alphaBlend(accent(c).withValues(alpha: .09), surface(c))
+          : theme.colorScheme.surfaceContainerLow,
+      shape: shape,
+      clipBehavior: Clip.antiAlias,
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        leading: avatar.isEmpty
+            ? CircleAvatar(
+                radius: 24,
+                backgroundColor: theme.colorScheme.primaryContainer,
+                foregroundColor: theme.colorScheme.onPrimaryContainer,
+                child: Text(label.characters.take(1).toString().toUpperCase()),
+              )
+            : Avatar(account.str('id'), image: avatar, size: 48),
+        title: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        subtitle: Text(
+          active ? '@$username · Account attivo' : '@$username',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        onTap: onTap,
+        trailing: trailing,
+      ),
+    );
+  }
+}
+
 class PersonTile extends StatelessWidget {
   final String user;
   final String? subtitle;

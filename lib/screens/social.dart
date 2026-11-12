@@ -2154,17 +2154,18 @@ class _CommentsState extends State<Comments> {
 }
 
 class Explore extends StatefulWidget {
-  const Explore({super.key});
+  const Explore({super.key, this.initialQuery = ''});
+  final String initialQuery;
   @override
   State<Explore> createState() => _ExploreState();
 }
 
 class _ExploreState extends State<Explore> {
-  String query = '';
+  late String query = widget.initialQuery;
   String category = 'Tutti';
   bool showAll = false;
   String mediaFilter = 'Tutti';
-  final searchInput = TextEditingController();
+  late final searchInput = TextEditingController(text: widget.initialQuery);
   @override
   void dispose() {
     searchInput.dispose();
@@ -2532,32 +2533,52 @@ class _ProfileState extends State<Profile> {
     final chosen = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (context) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            ListTile(
-              leading: Avatar(store.myId),
-              title: Text(store.me.str('username')),
-              subtitle: const Text('Account attivo'),
-              trailing: const Icon(CupertinoIcons.check_mark),
-            ),
-            for (final account in store.savedAccounts)
-              if (account.str('id') != store.myId)
-                ListTile(
-                  leading: const CircleAvatar(
-                    child: Icon(CupertinoIcons.person_fill),
-                  ),
-                  title: Text(account.str('username')),
-                  subtitle: Text(account.str('name')),
-                  onTap: () => Navigator.pop(context, account.str('id')),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * .72,
+          ),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            shrinkWrap: true,
+            children: [
+              Text(
+                'Cambia account',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
                 ),
-            ListTile(
-              leading: const Icon(CupertinoIcons.add_circled),
-              title: const Text('Aggiungi account'),
-              onTap: () => Navigator.pop(context, ''),
-            ),
-          ],
+              ),
+              const SizedBox(height: 16),
+              SavedAccountTile(
+                account: store.me,
+                active: true,
+                trailing: Icon(
+                  CupertinoIcons.check_mark_circled_solid,
+                  color: accent(context),
+                ),
+              ),
+              for (final account in store.savedAccounts)
+                if (account.str('id') != store.myId)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: SavedAccountTile(
+                      account: account,
+                      onTap: () => Navigator.pop(context, account.str('id')),
+                      trailing: Icon(
+                        CupertinoIcons.chevron_right,
+                        size: 16,
+                        color: secondaryText(context),
+                      ),
+                    ),
+                  ),
+              const SizedBox(height: 18),
+              PrimaryButton(
+                'Aggiungi account',
+                onTap: () => Navigator.pop(context, ''),
+              ),
+            ],
+          ),
         ),
       ),
     );

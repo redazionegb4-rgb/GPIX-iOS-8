@@ -12,6 +12,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../core/data.dart';
 import '../core/store.dart';
 import '../ui/kit.dart';
@@ -19,6 +20,8 @@ import '../ui/creation.dart';
 import 'social.dart';
 import 'video.dart';
 import 'emoji_picker.dart';
+import 'giphy.dart';
+import 'story_stickers.dart';
 import 'story_camera.dart';
 import 'post_composer.dart';
 
@@ -38,6 +41,7 @@ class StoryCanvas extends StatelessWidget {
   final ValueChanged<Duration>? onVideoDuration;
   final void Function(int, Offset)? onStickerMove;
   final ValueChanged<int>? onStickerTap;
+  final ValueChanged<J>? onStickerAction;
   const StoryCanvas({
     super.key,
     required this.story,
@@ -47,6 +51,7 @@ class StoryCanvas extends StatelessWidget {
     this.onVideoDuration,
     this.onStickerMove,
     this.onStickerTap,
+    this.onStickerAction,
   });
   @override
   Widget build(BuildContext c) {
@@ -99,7 +104,7 @@ class StoryCanvas extends StatelessWidget {
                 ),
               ),
             ),
-            if (story.str('text').isNotEmpty)
+            if (story.str('text').isNotEmpty && !style.flag('stickerOnly'))
               Positioned(
                 left: 0,
                 right: 0,
@@ -155,10 +160,21 @@ class StoryCanvas extends StatelessWidget {
               ),
             for (var i = 0; i < style.rows('stickers').length; i++)
               Positioned(
-                left: box.maxWidth * style.rows('stickers')[i].number('x', .4),
-                top: box.maxHeight * style.rows('stickers')[i].number('y', .5),
+                left:
+                    box.maxWidth *
+                    style.rows('stickers')[i].number('x', .4).clamp(0, .8),
+                top:
+                    box.maxHeight *
+                    style.rows('stickers')[i].number('y', .5).clamp(0, .85),
                 child: GestureDetector(
-                  onTap: editing ? () => onStickerTap?.call(i) : null,
+                  onTap: editing
+                      ? () => onStickerTap?.call(i)
+                      : onStickerAction == null ||
+                            !interactiveStoryStickers.contains(
+                              style.rows('stickers')[i].str('type'),
+                            )
+                      ? null
+                      : () => onStickerAction!(style.rows('stickers')[i]),
                   onPanUpdate: editing
                       ? (d) => onStickerMove?.call(
                           i,
@@ -170,12 +186,10 @@ class StoryCanvas extends StatelessWidget {
                       : null,
                   child: Transform.rotate(
                     angle: style.rows('stickers')[i].number('angle'),
-                    child: Text(
-                      style.rows('stickers')[i].str('emoji'),
-                      style: TextStyle(
-                        fontSize: style.rows('stickers')[i].number('size', 52),
-                        height: 1.1,
-                      ),
+                    child: StoryStickerFace(
+                      sticker: style.rows('stickers')[i],
+                      post: story,
+                      editing: editing,
                     ),
                   ),
                 ),
@@ -337,6 +351,93 @@ class _StoryViewerState extends State<StoryViewer>
     });
   }
 
+  Future<void> openSticker(J story, J sticker) async {
+    final store = GpixScope.of(context, listen: false);
+    final type = sticker.str('type');
+    final label = sticker.str('label');
+    progress.stop();
+    _music?.pause();
+    setState(() => paused = true);
+    try {
+      switch (type) {
+        case 'poll':
+        case 'slider':
+        case 'rating':
+          final poll = story.obj('style').obj('poll');
+          final choice = await sheet<int>(
+            context,
+            StoryVoteSheet(
+              poll: poll,
+              type: type,
+              own: story.str('author') == store.myId,
+            ),
+          );
+          if (choice != null && mounted) {
+            await perform(
+              context,
+              () => store.act('pollVote', {
+                'id': story.str('id'),
+                'choice': choice,
+              }),
+            );
+          }
+        case 'question':
+          if (!store.canReplyStory(story) || story.str('author') == store.myId)
+            return;
+          final answer = await storyStickerInput(
+            context,
+            label,
+            'Risposta privata',
+            limit: 500,
+          );
+          if (answer != null && mounted) {
+            await perform(context, () async {
+              await store.storyReply(story, '$label\n$answer');
+              if (mounted) notice(context, 'Risposta inviata');
+            });
+          }
+        case 'prompt':
+          await open(
+            context,
+            Composer(
+              kind: 'story',
+              initialDraft: {
+                'style': {
+                  'stickers': [sticker],
+                },
+              },
+            ),
+          );
+        case 'mention':
+          final username = label.replaceFirst('@', '').toLowerCase();
+          final user = [store.me, ...store.users]
+              .where((user) => user.str('username').toLowerCase() == username)
+              .firstOrNull;
+          if (user != null) await open(context, Profile(user: user.str('id')));
+        case 'hashtag':
+          await open(context, Explore(initialQuery: label));
+        case 'link':
+        case 'donation':
+        case 'place':
+          final uri = storyStickerLink(sticker.str('url'));
+          if (uri != null)
+            await perform(context, () async {
+              if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+                throw Exception('Impossibile aprire il collegamento.');
+              }
+            });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => paused = false);
+        if (!focus.hasFocus && !reactions) {
+          progress.forward();
+          _music?.resume();
+        }
+      }
+    }
+  }
+
   Future<void> voice() async {
     await perform(context, () async {
       final s = GpixScope.of(context, listen: false);
@@ -440,6 +541,7 @@ class _StoryViewerState extends State<StoryViewer>
                       StoryCanvas(
                         key: ValueKey(p['id']),
                         story: p,
+                        onStickerAction: (sticker) => openSticker(p, sticker),
                         onVideoDuration: (duration) {
                           if (!mounted || duration.inMilliseconds <= 0) return;
                           progress.duration = duration;
@@ -839,13 +941,16 @@ class _ComposerState extends State<Composer> {
   final caption = TextEditingController();
   final canvasKey = GlobalKey();
   final List<J> stickers = [];
+  J? stickerPoll;
+  bool highlightAfterPublish = false;
   int selectedSticker = -1;
   bool busy = false, cameraStage = false;
   @override
   void initState() {
     super.initState();
     kind = widget.kind;
-    draftId = widget.initialDraft?.str('id') ?? newId();
+    final previousDraftId = widget.initialDraft?.str('id') ?? '';
+    draftId = previousDraftId.isEmpty ? newId() : previousDraftId;
     if (widget.initialDraft != null) {
       final d = widget.initialDraft!;
       files = d.ids('files');
@@ -865,6 +970,7 @@ class _ComposerState extends State<Composer> {
       zoom = st.number('zoom', 1).toDouble();
       sticker = st.str('sticker');
       stickers.addAll(st.rows('stickers'));
+      if (st.obj('poll').isNotEmpty) stickerPoll = st.obj('poll');
     }
     draftTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (mounted) saveDraft();
@@ -894,6 +1000,7 @@ class _ComposerState extends State<Composer> {
     'zoom': zoom,
     'sticker': sticker,
     'stickers': stickers,
+    if (stickerPoll != null) 'poll': stickerPoll,
     'video':
         files.isNotEmpty &&
         (files.first.toLowerCase().endsWith('.mp4') ||
@@ -955,13 +1062,23 @@ class _ComposerState extends State<Composer> {
         audience ?? (kind == 'reel' ? reelAudience : 'all');
     await saveDraft();
     if (!mounted) return;
-    if (files.isEmpty && !(kind == 'story' && text.text.trim().isNotEmpty)) {
+    if (files.isEmpty &&
+        !(kind == 'story' &&
+            (text.text.trim().isNotEmpty || stickers.isNotEmpty))) {
       notice(context, 'Aggiungi un contenuto prima di pubblicare.');
       return;
     }
     setState(() => busy = true);
     await perform(context, () async {
       final s = GpixScope.of(context, listen: false);
+      if (files.length +
+              stickers.fold<int>(
+                0,
+                (total, item) => total + item.ids('files').length,
+              ) >
+          10) {
+        throw Exception('Puoi usare al massimo 10 foto o GIF per storia.');
+      }
       final media = <String>[];
       for (final path in files) {
         media.add(
@@ -989,16 +1106,76 @@ class _ComposerState extends State<Composer> {
                   ? 'audio/wav'
                   : 'audio/mp4',
             );
+      final overlayMedia = <String>[];
+      final publishedStickers = <J>[];
+      for (final sticker in stickers) {
+        final mediaIds = <String>[];
+        for (final reference in sticker.ids('files')) {
+          final mime = reference.toLowerCase().endsWith('.gif')
+              ? 'image/gif'
+              : reference.toLowerCase().endsWith('.png')
+              ? 'image/png'
+              : 'image/jpeg';
+          if (reference.startsWith('https://')) {
+            final response = await s.client
+                .get(Uri.parse(reference))
+                .timeout(const Duration(seconds: 20));
+            if (response.statusCode != 200 ||
+                response.bodyBytes.length > 25 * 1024 * 1024) {
+              throw Exception('GIF non disponibile. Scegline un’altra.');
+            }
+            final folder = await getTemporaryDirectory();
+            final file = await File(
+              '${folder.path}/story-${newId()}.gif',
+            ).writeAsBytes(response.bodyBytes);
+            try {
+              mediaIds.add(await s.upload(file.path, mime));
+            } finally {
+              await file.delete();
+            }
+          } else if (File(reference).isAbsolute) {
+            mediaIds.add(await s.upload(reference, mime));
+          } else {
+            mediaIds.add(await s.uploadAsset(reference, mime));
+          }
+        }
+        overlayMedia.addAll(mediaIds);
+        publishedStickers.add(
+          {...sticker}
+            ..remove('files')
+            ..['mediaIds'] = mediaIds,
+        );
+      }
+      final stickerOnly =
+          kind == 'story' && text.text.trim().isEmpty && stickers.isNotEmpty;
+      final previous = highlightAfterPublish
+          ? s
+                .stories(s.myId, archive: true)
+                .map((story) => story.str('id'))
+                .toSet()
+          : const <String>{};
       await s.act('post', {
         'kind': kind,
         'idempotencyKey': draftId,
-        'text': text.text.trim(),
+        'text': stickerOnly ? 'Storia con sticker' : text.text.trim(),
         'location': location.text.trim(),
         'media': media.isEmpty ? '' : media.first,
-        'mediaItems': kind == 'post' ? media : [],
-        'style': {...style, 'audio': track},
+        'mediaItems': kind == 'story' ? [...media, ...overlayMedia] : const [],
+        'style': {
+          ...style,
+          'audio': track,
+          'stickers': publishedStickers,
+          'stickerOnly': stickerOnly,
+        },
         'audience': selectedAudience,
       });
+      if (mounted && highlightAfterPublish) {
+        final created = s
+            .stories(s.myId)
+            .where((story) => !previous.contains(story.str('id')))
+            .firstOrNull;
+        if (created != null) await addStoryHighlight(context, created);
+      }
       if (mounted) {
         unawaited(Drafts.delete('${s.server}|${s.myId}', draftId));
         Navigator.pop(context);
@@ -1212,6 +1389,228 @@ class _ComposerState extends State<Composer> {
     if (result != null && mounted) setState(() => text.text = result);
   }
 
+  void addStorySticker(StoryStickerTool tool, [J data = const {}]) {
+    setState(() {
+      if (['poll', 'slider', 'rating'].contains(tool.name)) {
+        stickers.removeWhere(
+          (item) => ['poll', 'slider', 'rating'].contains(item.str('type')),
+        );
+      }
+      stickers.add({
+        'type': tool.name,
+        'x': .18 + (stickers.length % 2) * .13,
+        'y': .31 + (stickers.length % 4) * .11,
+        'size': 52.0,
+        'angle': 0.0,
+        ...data,
+      });
+      selectedSticker = stickers.length - 1;
+    });
+  }
+
+  Future<void> chooseSticker() async {
+    final tool = await sheet(context, const StoryStickerPicker());
+    if (tool is! StoryStickerTool || !mounted) return;
+    switch (tool) {
+      case StoryStickerTool.highlight:
+        setState(() => highlightAfterPublish = !highlightAfterPublish);
+        notice(
+          context,
+          highlightAfterPublish
+              ? 'Sceglierai la raccolta dopo la pubblicazione.'
+              : 'Aggiunta alle raccolte annullata.',
+        );
+      case StoryStickerTool.music:
+        await chooseMusic();
+      case StoryStickerTool.emoji:
+        final emoji = await sheet<String>(
+          context,
+          Builder(
+            builder: (context) => EmojiPicker(
+              onSelected: (emoji) => Navigator.pop(context, emoji),
+            ),
+          ),
+          scroll: false,
+        );
+        if (emoji != null && mounted) addStorySticker(tool, {'emoji': emoji});
+      case StoryStickerTool.gif:
+        final ref = await sheet<String>(
+          context,
+          Builder(
+            builder: (context) => GiphyGallery(
+              onSelected: (ref) => Navigator.pop(context, ref),
+              onImport: () => Navigator.pop(context, ''),
+            ),
+          ),
+          scroll: false,
+        );
+        if (ref == null || !mounted) return;
+        final path = ref.isNotEmpty
+            ? ref
+            : (await FilePicker.platform.pickFiles(
+                type: FileType.custom,
+                allowedExtensions: ['gif'],
+              ))?.files.single.path;
+        if (path != null && mounted)
+          addStorySticker(tool, {
+            'files': [path],
+          });
+      case StoryStickerTool.photo:
+      case StoryStickerTool.frame:
+      case StoryStickerTool.strip:
+      case StoryStickerTool.cutout:
+        final picker = ImagePicker();
+        final images = tool == StoryStickerTool.strip
+            ? await picker.pickMultiImage(limit: 4, maxWidth: 1200)
+            : [
+                await picker.pickImage(
+                  source: ImageSource.gallery,
+                  maxWidth: 1200,
+                ),
+              ].whereType<XFile>().toList();
+        if (images.isEmpty || !mounted) return;
+        if (tool == StoryStickerTool.strip && images.length < 2) {
+          notice(context, 'Scegli almeno due foto.');
+          return;
+        }
+        addStorySticker(tool, {
+          'files': images.take(4).map((image) => image.path).toList(),
+        });
+      case StoryStickerTool.avatar:
+        addStorySticker(tool);
+      case StoryStickerTool.time:
+        addStorySticker(tool, {'label': TimeOfDay.now().format(context)});
+      case StoryStickerTool.poll:
+        final result = await sheet<J>(
+          context,
+          PollEditor(initial: stickerPoll),
+        );
+        if (result == null || !mounted) return;
+        if (result.isEmpty) {
+          setState(() {
+            stickerPoll = null;
+            stickers.removeWhere(
+              (item) => ['poll', 'slider', 'rating'].contains(item.str('type')),
+            );
+            selectedSticker = -1;
+          });
+          return;
+        }
+        stickerPoll = result;
+        addStorySticker(tool, {'label': result.str('question')});
+      case StoryStickerTool.slider:
+      case StoryStickerTool.rating:
+        final prompt = await storyStickerInput(
+          context,
+          tool.label,
+          'Cosa vuoi chiedere?',
+          limit: 120,
+        );
+        if (prompt == null || !mounted) return;
+        stickerPoll = {
+          'question': prompt,
+          'options': tool == StoryStickerTool.rating
+              ? ['★', '★★', '★★★', '★★★★']
+              : ['🙂', '😊', '😍', '🤩'],
+        };
+        addStorySticker(tool, {'label': prompt});
+      case StoryStickerTool.countdown:
+        final label = await storyStickerInput(
+          context,
+          tool.label,
+          'Nome evento',
+        );
+        if (label == null || !mounted) return;
+        final now = DateTime.now();
+        final date = await showDatePicker(
+          context: context,
+          firstDate: now,
+          lastDate: now.add(const Duration(days: 365)),
+          initialDate: now,
+        );
+        if (date == null || !mounted) return;
+        final time = await showTimePicker(
+          context: context,
+          initialTime: TimeOfDay.now(),
+        );
+        if (time == null || !mounted) return;
+        final end = DateTime(
+          date.year,
+          date.month,
+          date.day,
+          time.hour,
+          time.minute,
+        );
+        if (!end.isAfter(DateTime.now())) {
+          notice(context, 'Scegli una data e un’ora future.');
+          return;
+        }
+        addStorySticker(tool, {
+          'label': label,
+          'end': end.millisecondsSinceEpoch,
+        });
+      case StoryStickerTool.link:
+      case StoryStickerTool.donation:
+        final url = await storyStickerInput(
+          context,
+          tool.label,
+          'Indirizzo HTTPS',
+          limit: 2048,
+          validate: (value) => storyStickerLink(value) == null
+              ? 'Inserisci un indirizzo HTTPS valido.'
+              : null,
+        );
+        if (url != null && mounted) {
+          addStorySticker(tool, {
+            'label': storyStickerLink(url)!.host,
+            'url': url,
+          });
+        }
+      case StoryStickerTool.place:
+      case StoryStickerTool.mention:
+      case StoryStickerTool.hashtag:
+      case StoryStickerTool.question:
+      case StoryStickerTool.prompt:
+        final store = GpixScope.of(context, listen: false);
+        final value = await storyStickerInput(
+          context,
+          tool.label,
+          switch (tool) {
+            StoryStickerTool.place => 'Nome del luogo',
+            StoryStickerTool.mention => 'Nome utente',
+            StoryStickerTool.hashtag => 'Parola chiave',
+            _ => 'Scrivi qui',
+          },
+          validate: (value) {
+            if (tool == StoryStickerTool.mention &&
+                ![store.me, ...store.users].any(
+                  (user) =>
+                      user.str('username').toLowerCase() ==
+                      value.replaceFirst('@', '').toLowerCase(),
+                ))
+              return 'Profilo non trovato.';
+            if (tool == StoryStickerTool.hashtag &&
+                !RegExp(r'^#?[a-zA-Z0-9_À-ÿ]+$').hasMatch(value))
+              return 'Usa una parola senza spazi.';
+            return null;
+          },
+        );
+        if (value == null || !mounted) return;
+        addStorySticker(tool, {
+          'label': switch (tool) {
+            StoryStickerTool.mention => '@${value.replaceFirst('@', '')}',
+            StoryStickerTool.hashtag => '#${value.replaceFirst('#', '')}',
+            _ => value,
+          },
+          if (tool == StoryStickerTool.place)
+            'url': Uri.https('www.google.com', '/maps/search/', {
+              'api': '1',
+              'query': value,
+            }).toString(),
+        });
+    }
+  }
+
   Future<void> chooseMusic() async {
     await perform(context, () async {
       final f = await FilePicker.platform.pickFiles(
@@ -1302,6 +1701,7 @@ class _ComposerState extends State<Composer> {
         child: StoryCanvas(
           story: {
             'text': text.text,
+            'author': GpixScope.of(c, listen: false).myId,
             'media': files.isEmpty ? '' : files.first,
             'style': style,
           },
@@ -1318,7 +1718,7 @@ class _ComposerState extends State<Composer> {
           }),
         ),
       ),
-      if (files.isEmpty && text.text.isEmpty)
+      if (files.isEmpty && text.text.isEmpty && stickers.isEmpty)
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 90, 72, 100),
           child: Center(
@@ -1421,25 +1821,7 @@ class _ComposerState extends State<Composer> {
             tool(
               CupertinoIcons.smiley,
               'Sticker',
-              () => sheet(
-                c,
-                EmojiPicker(
-                  onSelected: (emoji) {
-                    setState(() {
-                      stickers.add({
-                        'emoji': emoji,
-                        'x': .18 + (stickers.length % 3) * .2,
-                        'y': .35 + (stickers.length ~/ 3 % 3) * .15,
-                        'size': 52.0,
-                        'angle': 0.0,
-                      });
-                      selectedSticker = stickers.length - 1;
-                    });
-                    Navigator.pop(c);
-                  },
-                ),
-                scroll: false,
-              ),
+              () => perform(c, chooseSticker),
             ),
             const SizedBox(height: 10),
             tool(CupertinoIcons.music_note_2, 'Musica da file', chooseMusic),
@@ -1517,7 +1899,14 @@ class _ComposerState extends State<Composer> {
                     IconButton(
                       tooltip: 'Elimina sticker',
                       onPressed: () => setState(() {
-                        stickers.removeAt(selectedSticker);
+                        final removed = stickers.removeAt(selectedSticker);
+                        if ([
+                          'poll',
+                          'slider',
+                          'rating',
+                        ].contains(removed.str('type'))) {
+                          stickerPoll = null;
+                        }
                         selectedSticker = -1;
                       }),
                       icon: GIcon(

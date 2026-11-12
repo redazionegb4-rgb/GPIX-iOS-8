@@ -12,6 +12,7 @@ import 'package:http/testing.dart';
 import 'package:gpix/main.dart';
 import 'package:gpix/core/store.dart';
 import 'package:gpix/screens/social.dart';
+import 'package:gpix/ui/kit.dart';
 
 void main() {
   setUpAll(() async {
@@ -202,7 +203,12 @@ void main() {
             jsonEncode({
               'token': 'session-${revision++}',
               'state': {
-                'me': {'id': login, 'username': login, 'name': login},
+                'me': {
+                  'id': login,
+                  'username': login,
+                  'name': login,
+                  'avatar': '/media/$login.png',
+                },
               },
             }),
             200,
@@ -224,13 +230,45 @@ void main() {
         store.savedAccounts.any((a) => a.containsKey('password')),
         isFalse,
       );
+      await t.pumpWidget(
+        GpixScope(
+          store: store,
+          child: MaterialApp(
+            theme: gpixTheme(Brightness.dark),
+            home: const Profile(user: 'secondo'),
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      await t.tap(
+        find.descendant(of: find.byType(AppBar), matching: find.text('secondo')),
+      );
+      await t.pumpAndSettle();
+      final sheet = find.byType(BottomSheet);
+      expect(find.text('Cambia account'), findsOneWidget);
+      expect(
+        t
+            .widgetList<Avatar>(
+              find.descendant(of: sheet, matching: find.byType(Avatar)),
+            )
+            .map((avatar) => avatar.image),
+        ['/media/secondo.png', '/media/primo.png'],
+      );
+      await t.pumpWidget(const SizedBox());
+      await t.pumpAndSettle();
       await store.useSavedAccount('primo');
       expect(store.myId, 'primo');
+      store.me['avatar'] = '/media/primo-nuovo.png';
       await store.logout();
+      expect(store.savedAccounts.first['avatar'], '/media/primo-nuovo.png');
       expect(store.signedIn, isFalse);
       await t.pumpWidget(GpixApp(store: store));
       await t.pumpAndSettle();
       expect(find.text('Accedi con un altro account'), findsOneWidget);
+      expect(
+        t.widgetList<Avatar>(find.byType(Avatar)).map((avatar) => avatar.image),
+        ['/media/primo-nuovo.png', '/media/secondo.png'],
+      );
       for (var i = 0; i < 2; i++) {
         final menu = find.byTooltip('Opzioni profilo salvato').first;
         await t.ensureVisible(menu);

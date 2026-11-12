@@ -73,44 +73,32 @@ class _WelcomeState extends State<Welcome> {
   Widget savedProfiles(BuildContext c) {
     final store = GpixScope.of(c);
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final account in store.savedAccounts)
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const CircleAvatar(
-              child: Icon(CupertinoIcons.person_fill),
-            ),
-            title: Text(
-              account.str('username'),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: Text(
-              account.str('name'),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            onTap: busy
-                ? null
-                : () => savedAction(
-                    () => store.useSavedAccount(account.str('id')),
-                  ),
-            trailing: PopupMenuButton<String>(
-              enabled: !busy,
-              tooltip: 'Opzioni profilo salvato',
-              onSelected: (_) => savedAction(
-                () => store.removeSavedAccount(account.str('id')),
-              ),
-              itemBuilder: (_) => const [
-                PopupMenuItem(
-                  value: 'remove',
-                  child: Text('Rimuovi accesso salvato'),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: SavedAccountTile(
+              account: account,
+              onTap: busy
+                  ? null
+                  : () => savedAction(
+                      () => store.useSavedAccount(account.str('id')),
+                    ),
+              trailing: PopupMenuButton<String>(
+                enabled: !busy,
+                tooltip: 'Opzioni profilo salvato',
+                onSelected: (_) => savedAction(
+                  () => store.removeSavedAccount(account.str('id')),
                 ),
-              ],
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: 'remove',
+                    child: Text('Rimuovi accesso salvato'),
+                  ),
+                ],
+              ),
             ),
           ),
-        if (store.savedAccounts.isNotEmpty) const SizedBox(height: 12),
       ],
     );
   }
@@ -340,11 +328,21 @@ class _WelcomeState extends State<Welcome> {
                         if (hasSavedAccounts) ...[
                           const SizedBox(height: 24),
                           Text(
-                            'Profili salvati',
-                            style: Theme.of(c).textTheme.headlineSmall,
+                            'Scegli un profilo',
+                            style: Theme.of(c).textTheme.headlineMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -.7,
+                                ),
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Tocca il tuo profilo per accedere.',
+                            style: TextStyle(color: secondaryText(c)),
+                          ),
+                          const SizedBox(height: 22),
                           savedProfiles(c),
+                          const SizedBox(height: 10),
                         ] else ...[
                           const SizedBox(height: 25),
                           const _AuthArtwork(),
