@@ -85,8 +85,8 @@ class ProfileLinkChips extends StatelessWidget {
       onPressed: tap,
     );
     return Wrap(
-      spacing: 7,
-      runSpacing: 3,
+      spacing: 8,
+      runSpacing: 7,
       children: [
         for (final link in visibleLinks)
           ConstrainedBox(

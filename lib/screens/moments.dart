@@ -25,27 +25,35 @@ class CommunityTabs extends StatelessWidget {
                 selected: selected == label,
                 child: InkWell(
                   onTap: () => onSelected(label),
-                  child: Container(
+                  borderRadius: BorderRadius.circular(18),
+                  child: AnimatedContainer(
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : const Duration(milliseconds: 190),
+                    curve: Curves.easeOutCubic,
                     alignment: Alignment.center,
-                    height: 44,
+                    height: 39,
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 3,
+                      vertical: 5,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
                     decoration: BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(
-                          color: selected == label
-                              ? accent(context)
-                              : Colors.transparent,
-                          width: 2,
-                        ),
-                      ),
+                      color: selected == label
+                          ? subdued(context)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(18),
                     ),
                     child: Text(
                       label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontWeight: FontWeight.w600,
+                        fontWeight: selected == label
+                            ? FontWeight.w700
+                            : FontWeight.w500,
                         color: selected == label
-                            ? accent(context)
+                            ? foreground(context)
                             : secondaryText(context),
                       ),
                     ),
@@ -61,8 +69,13 @@ class CommunityTabs extends StatelessWidget {
 }
 
 class CommunityDirectory extends StatefulWidget {
-  const CommunityDirectory({super.key, this.query = ''});
+  const CommunityDirectory({
+    super.key,
+    this.query = '',
+    this.bottomPadding = 0,
+  });
   final String query;
+  final double bottomPadding;
   @override
   State<CommunityDirectory> createState() => _CommunityDirectoryState();
 }
@@ -121,61 +134,27 @@ class _CommunityDirectoryState extends State<CommunityDirectory> {
       child: ListView(
         key: const PageStorageKey('community-directory'),
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
+        padding: EdgeInsets.fromLTRB(16, 18, 16, 28 + widget.bottomPadding),
         children: [
-          Container(
-            padding: const EdgeInsets.all(22),
-            decoration: BoxDecoration(
-              color: subdued(c),
-              borderRadius: BorderRadius.circular(26),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: auraBlue.withValues(alpha: .12),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: GIcon(
-                        CupertinoIcons.person_3,
-                        color: accent(c),
-                        size: 25,
-                      ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      tooltip: 'Crea gruppo',
-                      onPressed: () => composeCommunity(c, 'communityGroup'),
-                      icon: const GIcon(
-                        CupertinoIcons.plus_circle_fill,
-                        color: auraBlue,
-                        size: 30,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-                const Text(
-                  'Trova il tuo giro.',
-                  style: TextStyle(
-                    fontSize: 28,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Gruppi',
+                  style: Theme.of(c).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w800,
-                    letterSpacing: -.8,
+                    letterSpacing: -.65,
                   ),
                 ),
-                const SizedBox(height: 7),
-                Text(
-                  'Persone, passioni e Momenti da condividere.',
-                  style: TextStyle(color: secondaryText(c), height: 1.4),
-                ),
-              ],
-            ),
+              ),
+              FilledButton.icon(
+                onPressed: () => composeCommunity(c, 'communityGroup'),
+                icon: const Icon(CupertinoIcons.plus, size: 16),
+                label: const Text('Crea gruppo'),
+              ),
+            ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
           if (widget.query.isEmpty)
             TextField(
               onChanged: (value) => setState(() => search = value),
@@ -185,18 +164,10 @@ class _CommunityDirectoryState extends State<CommunityDirectory> {
               ),
             ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              for (final label in ['Scopri', 'I tuoi'])
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(label),
-                    selected: selected == label,
-                    onSelected: (_) => setState(() => selected = label),
-                  ),
-                ),
-            ],
+          CommunityTabs(
+            const ['Scopri', 'I tuoi'],
+            selected,
+            (label) => setState(() => selected = label),
           ),
           const SizedBox(height: 20),
           Text(
@@ -427,96 +398,109 @@ class _CommunityGroupState extends State<CommunityGroup> {
     final joined = group.flag('joined');
     final cover = group.str('cover');
     return Scaffold(
-      appBar: AppBar(title: Text(group.str('title')), centerTitle: true),
+      appBar: AppBar(
+        title: Text(group.str('title')),
+        centerTitle: true,
+        actions: [if (owner) _CommunityOptions(record: group, group: true)],
+      ),
       body: RefreshIndicator(
         onRefresh: () => perform(c, s.refreshHome),
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          children: [
-            Container(
-              margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(26),
-              ),
-              child: AspectRatio(
-                aspectRatio: 2.1,
-                child: cover.isNotEmpty
-                    ? MediaView(cover, fit: BoxFit.cover)
-                    : ColoredBox(
-                        color: subdued(c),
-                        child: GIcon(
-                          CupertinoIcons.person_3_fill,
-                          color: accent(c),
-                          size: 62,
+        child: SectionSwipe(
+          onStep: (step) {
+            final tabs = categories.keys.toList();
+            final index = tabs.indexOf(selected) + step;
+            if (index >= 0 && index < tabs.length) {
+              setState(() => selected = tabs[index]);
+            }
+          },
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            children: [
+              Container(
+                margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(26),
+                ),
+                child: AspectRatio(
+                  aspectRatio: 2.1,
+                  child: cover.isNotEmpty
+                      ? MediaView(cover, fit: BoxFit.cover)
+                      : ColoredBox(
+                          color: subdued(c),
+                          child: GIcon(
+                            CupertinoIcons.person_3_fill,
+                            color: accent(c),
+                            size: 62,
+                          ),
                         ),
-                      ),
-              ),
-            ),
-            ListTile(
-              title: Text(
-                group.str('title'),
-                style: const TextStyle(
-                  fontSize: 23,
-                  fontWeight: FontWeight.w800,
                 ),
               ),
-              subtitle: Text(
-                'Gruppo pubblico · ${group.number('members').toInt()} membri',
-              ),
-              trailing: OutlinedButton(
-                onPressed: owner
-                    ? null
-                    : () => perform(
-                        c,
-                        () => s.act('communityJoin', {
-                          'id': widget.id,
-                          'group': widget.id,
-                          'enabled': !joined,
-                        }),
-                      ),
-                child: Text(joined ? 'Membro' : 'Iscriviti'),
-              ),
-            ),
-            if (group.str('description').isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Text(group.str('description')),
-              ),
-            CommunityTabs(
-              categories.keys.toList(),
-              selected,
-              (label) => setState(() => selected = label),
-            ),
-            if (selected == 'Discussioni' && events.isNotEmpty)
               ListTile(
-                leading: GIcon(CupertinoIcons.calendar, color: accent(c)),
-                title: const Text('Evento fissato'),
-                subtitle: Text(events.first.str('title')),
-                onTap: () =>
-                    open(c, CommunityDetail(id: events.first.str('id'))),
+                title: Text(
+                  group.str('title'),
+                  style: const TextStyle(
+                    fontSize: 23,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                subtitle: Text(
+                  'Gruppo pubblico · ${group.number('members').toInt()} membri',
+                ),
+                trailing: OutlinedButton(
+                  onPressed: owner
+                      ? null
+                      : () => perform(
+                          c,
+                          () => s.act('communityJoin', {
+                            'id': widget.id,
+                            'group': widget.id,
+                            'enabled': !joined,
+                          }),
+                        ),
+                  child: Text(joined ? 'Membro' : 'Iscriviti'),
+                ),
               ),
-            if (joined && (selected != 'Eventi' || owner))
-              ListTile(
-                leading: const GIcon(CupertinoIcons.plus_circle),
-                title: Text(switch (selected) {
-                  'Momenti' => 'Crea Momento',
-                  'Eventi' => 'Fissa evento',
-                  _ => 'Scrivi nel gruppo',
-                }),
-                onTap: () => composeCommunity(c, switch (selected) {
-                  'Momenti' => 'communityMoment',
-                  'Eventi' => 'communityEvent',
-                  _ => 'communityDiscuss',
-                }, group: widget.id),
+              if (group.str('description').isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Text(group.str('description')),
+                ),
+              CommunityTabs(
+                categories.keys.toList(),
+                selected,
+                (label) => setState(() => selected = label),
               ),
-            for (final item in visible) CommunityItem(item: item),
-            if (visible.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(20),
-                child: Text('Ancora nessun contenuto.'),
-              ),
-          ],
+              if (selected == 'Discussioni' && events.isNotEmpty)
+                ListTile(
+                  leading: GIcon(CupertinoIcons.calendar, color: accent(c)),
+                  title: const Text('Evento fissato'),
+                  subtitle: Text(events.first.str('title')),
+                  onTap: () =>
+                      open(c, CommunityDetail(id: events.first.str('id'))),
+                ),
+              if (joined && (selected != 'Eventi' || owner))
+                ListTile(
+                  leading: const GIcon(CupertinoIcons.plus_circle),
+                  title: Text(switch (selected) {
+                    'Momenti' => 'Crea Momento',
+                    'Eventi' => 'Fissa evento',
+                    _ => 'Scrivi nel gruppo',
+                  }),
+                  onTap: () => composeCommunity(c, switch (selected) {
+                    'Momenti' => 'communityMoment',
+                    'Eventi' => 'communityEvent',
+                    _ => 'communityDiscuss',
+                  }, group: widget.id),
+                ),
+              for (final item in visible) CommunityItem(item: item),
+              if (visible.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Text('Ancora nessun contenuto.'),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -622,6 +606,10 @@ class _CommunityDetailState extends State<CommunityDetail> {
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
+        actions: [
+          if (item.isNotEmpty && item.str('author') == s.myId)
+            _CommunityOptions(record: item, group: false),
+        ],
         title: Column(
           children: [
             Text(
@@ -790,21 +778,12 @@ Future<void> composeCommunity(
   }
   final moment = action == 'communityMoment';
   final needsTitle = action != 'communityDiscuss';
-  final title = needsTitle
-      ? await textDialog(c, switch (action) {
-          'communityGroup' => 'Nome del gruppo',
-          'communityEvent' => 'Nome dell’evento',
-          _ => 'Titolo del Momento',
-        }, '')
-      : '';
-  if (title == null || (needsTitle && title.trim().isEmpty) || !c.mounted)
-    return;
-  final body = await textDialog(
+  final draft = await open<(String, String, XFile?, bool)>(
     c,
-    action == 'communityDiscuss' ? 'Scrivi nel gruppo' : 'Descrizione',
-    '',
+    _CommunityComposer(action: action, needsTitle: needsTitle),
   );
-  if (body == null || !c.mounted) return;
+  if (draft == null || !c.mounted) return;
+  final (title, body, image, _) = draft;
   final invitees = <String>{};
   if (moment && group.isEmpty) {
     final confirmed = await sheet<bool>(
@@ -848,30 +827,11 @@ Future<void> composeCommunity(
   final previous = s.state.rows('socialItems').map((m) => m.str('id')).toSet();
   await perform(c, () async {
     String cover = '';
-    if (action == 'communityGroup') {
-      final withCover = await gpixAlert(
-        c,
-        'Copertina del gruppo',
-        'Vuoi aggiungere una foto visibile a tutti?',
-        confirm: 'Scegli foto',
-        cancel: true,
+    if (image != null) {
+      cover = await s.upload(
+        image.path,
+        image.path.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg',
       );
-      if (!c.mounted) return;
-      if (withCover) {
-        final image = await ImagePicker().pickImage(
-          source: ImageSource.gallery,
-          maxWidth: 1600,
-          imageQuality: 88,
-        );
-        if (image != null) {
-          cover = await s.upload(
-            image.path,
-            image.path.toLowerCase().endsWith('.png')
-                ? 'image/png'
-                : 'image/jpeg',
-          );
-        }
-      }
     }
     if (!c.mounted) return;
     await s.act(action, {
@@ -894,6 +854,272 @@ Future<void> composeCommunity(
         .firstOrNull;
     if (created != null) open(c, CommunityDetail(id: created.str('id')));
   });
+}
+
+class _CommunityOptions extends StatelessWidget {
+  const _CommunityOptions({required this.record, required this.group});
+
+  final J record;
+  final bool group;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = GpixScope.of(context);
+    final label = group
+        ? 'gruppo'
+        : switch (record.str('kind')) {
+            'moment' => 'momento',
+            'event' => 'evento',
+            _ => 'discussione',
+          };
+    return IconButton(
+      tooltip: 'Opzioni',
+      icon: const Icon(CupertinoIcons.ellipsis),
+      onPressed: () async {
+        if (store.state.number('communityVersion') < 2) {
+          notice(
+            context,
+            'Modifica ed eliminazione richiedono il server GPIX 2.24.13.',
+          );
+          return;
+        }
+        final choice = await sheet<String>(
+          context,
+          Column(
+            children: [
+              ListTile(
+                leading: const Icon(CupertinoIcons.pencil),
+                title: Text('Modifica $label'),
+                onTap: () => Navigator.pop(context, 'edit'),
+              ),
+              ListTile(
+                leading: const Icon(CupertinoIcons.trash, color: danger),
+                title: Text(
+                  'Elimina $label',
+                  style: const TextStyle(color: danger),
+                ),
+                onTap: () => Navigator.pop(context, 'delete'),
+              ),
+            ],
+          ),
+        );
+        if (choice == null || !context.mounted) return;
+        final id = record.str('id');
+        if (choice == 'delete') {
+          final confirmed = await gpixAlert(
+            context,
+            'Eliminare $label?',
+            group
+                ? 'Verranno rimossi anche i contenuti del gruppo.'
+                : 'Verranno rimossi anche i contributi.',
+            confirm: 'Elimina',
+            destructive: true,
+            cancel: true,
+          );
+          if (!confirmed || !context.mounted) return;
+          await perform(context, () async {
+            await store.act(
+              group ? 'communityDeleteGroup' : 'communityDeleteItem',
+              {group ? 'group' : 'id': id},
+            );
+            if (context.mounted) Navigator.pop(context);
+          });
+          return;
+        }
+        final draft = await open<(String, String, XFile?, bool)>(
+          context,
+          _CommunityComposer(
+            action: group
+                ? 'communityGroup'
+                : switch (record.str('kind')) {
+                    'event' => 'communityEvent',
+                    'discussion' => 'communityDiscuss',
+                    _ => 'communityMoment',
+                  },
+            needsTitle: group || record.str('kind') != 'discussion',
+            original: record,
+          ),
+        );
+        if (draft == null || !context.mounted) return;
+        final (title, text, image, removeCover) = draft;
+        await perform(context, () async {
+          final media = image == null
+              ? ''
+              : await store.upload(
+                  image.path,
+                  image.path.toLowerCase().endsWith('.png')
+                      ? 'image/png'
+                      : 'image/jpeg',
+                );
+          await store.act(group ? 'communityEditGroup' : 'communityEditItem', {
+            group ? 'group' : 'id': id,
+            'title': title,
+            'text': text,
+            if (group) 'media': media,
+            if (group) 'removeCover': removeCover,
+          });
+        });
+      },
+    );
+  }
+}
+
+class _CommunityComposer extends StatefulWidget {
+  const _CommunityComposer({
+    required this.action,
+    required this.needsTitle,
+    this.original,
+  });
+
+  final String action;
+  final bool needsTitle;
+  final J? original;
+
+  @override
+  State<_CommunityComposer> createState() => _CommunityComposerState();
+}
+
+class _CommunityComposerState extends State<_CommunityComposer> {
+  late final title = TextEditingController(text: widget.original?.str('title'));
+  late final description = TextEditingController(
+    text: widget.original?.str(
+      widget.action == 'communityGroup' ? 'description' : 'text',
+    ),
+  );
+  bool removeCover = false;
+  bool get hasCover =>
+      cover != null ||
+      (!removeCover && (widget.original?.str('cover').isNotEmpty ?? false));
+  XFile? cover;
+  bool picking = false;
+
+  @override
+  void dispose() {
+    title.dispose();
+    description.dispose();
+    super.dispose();
+  }
+
+  Future<void> pickCover() async {
+    setState(() => picking = true);
+    await perform(context, () async {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1600,
+        imageQuality: 88,
+      );
+      if (mounted && picked != null) setState(() => cover = picked);
+    });
+    if (mounted) setState(() => picking = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final heading = switch (widget.action) {
+      'communityGroup' => 'Nuovo gruppo',
+      'communityEvent' => 'Nuovo evento',
+      'communityDiscuss' => 'Nuova discussione',
+      _ => 'Nuovo momento',
+    };
+    final next = widget.original != null
+        ? 'Salva'
+        : widget.action == 'communityMoment'
+        ? 'Avanti'
+        : 'Crea';
+    return Scaffold(
+      appBar: AppBar(
+        centerTitle: true,
+        title: Text(
+          widget.original == null
+              ? heading
+              : 'Modifica ${heading.split(' ').last}',
+        ),
+        actions: [
+          TextButton(
+            onPressed:
+                picking ||
+                    (widget.needsTitle
+                        ? title.text.trim().isEmpty
+                        : description.text.trim().isEmpty)
+                ? null
+                : () => Navigator.pop(context, (
+                    title.text.trim(),
+                    description.text.trim(),
+                    cover,
+                    removeCover,
+                  )),
+            child: Text(next),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: ListView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 28),
+          children: [
+            if (widget.action == 'communityGroup') ...[
+              Material(
+                color: subdued(context),
+                borderRadius: BorderRadius.circular(18),
+                child: ListTile(
+                  leading: const Icon(CupertinoIcons.photo_on_rectangle),
+                  title: Text(
+                    hasCover ? 'Cambia copertina' : 'Aggiungi copertina',
+                  ),
+                  subtitle: cover == null
+                      ? null
+                      : Text(
+                          cover!.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                  trailing: !hasCover
+                      ? const Icon(CupertinoIcons.plus, size: 19)
+                      : IconButton(
+                          tooltip: 'Rimuovi copertina',
+                          onPressed: picking
+                              ? null
+                              : () => setState(() {
+                                  cover = null;
+                                  removeCover = true;
+                                }),
+                          icon: const Icon(CupertinoIcons.xmark),
+                        ),
+                  onTap: picking ? null : pickCover,
+                ),
+              ),
+              const SizedBox(height: 22),
+            ],
+            if (widget.needsTitle) ...[
+              TextField(
+                controller: title,
+                maxLength: 80,
+                textInputAction: TextInputAction.next,
+                textCapitalization: TextCapitalization.sentences,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(labelText: 'Titolo'),
+              ),
+              const SizedBox(height: 12),
+            ],
+            TextField(
+              controller: description,
+              maxLength: 2200,
+              textCapitalization: TextCapitalization.sentences,
+              onChanged: (_) => setState(() {}),
+              minLines: 4,
+              maxLines: 8,
+              decoration: InputDecoration(
+                labelText: widget.needsTitle
+                    ? 'Descrizione'
+                    : 'Scrivi nel gruppo',
+                alignLabelWithHint: true,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// Timeline cards consume only community records authorized by the server.

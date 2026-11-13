@@ -151,17 +151,36 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
   final Map<String, Future<void>> _pending = {};
   bool get signedIn => state.containsKey('me') && (demo || token.isNotEmpty);
   J get me => state.obj('me');
-  List<J> get socialNotifications => state
-      .rows('notifications')
-      .where(
-        (n) => ![
-          'message',
-          'call',
-          'instant',
-          'messageReaction',
-        ].contains(n.str('type')),
-      )
-      .toList();
+  List<J> get socialNotifications {
+    final requests = state.ids('requests').toSet();
+    final blockedAccounts = state.ids('blocks').toSet();
+    final seen = <(String, String)>{};
+    final notifications = state.rows('notifications')
+      ..sort((a, b) => b.number('created').compareTo(a.number('created')));
+    return [
+      for (final notification in notifications)
+        if (!const [
+              'message',
+              'call',
+              'instant',
+              'messageReaction',
+            ].contains(notification.str('type')) &&
+            !blockedAccounts.contains(notification.str('actor')) &&
+            (notification.str('type') != 'followRequest' ||
+                requests.contains(notification.str('actor'))) &&
+            (!const [
+                  'follow',
+                  'followRequest',
+                ].contains(notification.str('type')) ||
+                notification.str('actor').isEmpty ||
+                seen.add((
+                  notification.str('type'),
+                  notification.str('actor'),
+                ))))
+          notification,
+    ];
+  }
+
   final Map<String, List<String>> _searchHistory = {};
   String get _searchKey => 'gpix.search.${demo ? "demo" : server}.$myId';
   List<String> get searchHistory => List.unmodifiable(
@@ -208,7 +227,10 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
       ..sort((a, b) => b.number('created').compareTo(a.number('created')));
   }
 
-  bool chatHasUnread(J t) => unread(t) > 0 || chatReactions(t).isNotEmpty;
+  bool chatHasUnread(J t) =>
+      t.obj('chatSettings').flag('unread') ||
+      unread(t) > 0 ||
+      chatReactions(t).isNotEmpty;
   final _readingThreads = <String>{};
   bool get hasActivity => socialNotifications.any((n) => !n.flag('seen'));
   List<String> viewers(J p) =>
@@ -267,7 +289,12 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
           .rows('threads')
           .where((t) => !t.ids('members').any(blocked))
           .toList()
-        ..sort((a, b) => _last(b).compareTo(_last(a)));
+        ..sort((a, b) {
+          final pin =
+              (b.obj('chatSettings').flag('pinned') ? 1 : 0) -
+              (a.obj('chatSettings').flag('pinned') ? 1 : 0);
+          return pin == 0 ? _last(b).compareTo(_last(a)) : pin;
+        });
   bool messageRequest(J t) {
     if (t.str('requestDecision') == 'restricted' ||
         preferences.ids('restricted').contains(other(t)))
@@ -282,7 +309,13 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   List<J> get inboxThreads => threads
-      .where((t) => t.str('requestDecision') != 'hidden' && !messageRequest(t))
+      .where(
+        (t) =>
+            t.str('requestDecision') != 'hidden' &&
+            !messageRequest(t) &&
+            (t.obj('chatSettings').number('cleared') == 0 ||
+                t.rows('messages').isNotEmpty),
+      )
       .toList();
   List<J> get requestedThreads => threads
       .where((t) => t.str('requestDecision') != 'hidden' && messageRequest(t))
@@ -678,9 +711,12 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> sync({bool silent = false}) async {
-    if (demo || token.isEmpty) return;
+    if (demo || token.isEmpty || _changingAccount) return;
+    final session = token;
+    final endpoint = server;
     try {
-      final r = await _request('/state');
+      final r = await _request('/state', endpoint: endpoint, session: session);
+      if (_changingAccount || session != token || endpoint != server) return;
       final next = r.obj('state');
       if (jsonEncode(next) != jsonEncode(state)) {
         state = next;
@@ -723,10 +759,15 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
       notifyListeners();
       return;
     }
+    final session = token;
+    final endpoint = server;
     final r = await _request(
       '/actions',
       body: {'action': action, 'payload': p},
+      endpoint: endpoint,
+      session: session,
     );
+    if (session != token || endpoint != server) return;
     if (r.flag('deleted')) {
       await removeSavedAccount(myId);
       await logout(remote: false);
@@ -809,6 +850,13 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> markRead(String tid) async {
     if (!_readingThreads.add(tid)) return;
     try {
+      if (thread(tid).obj('chatSettings').flag('unread')) {
+        await act('chatSettings', {
+          'id': tid,
+          'field': 'unread',
+          'enabled': false,
+        });
+      }
       final reactions = chatReactions(thread(tid));
       for (final n in reactions) {
         await act('notificationsRead', {'id': n.str('id')});
@@ -1423,6 +1471,42 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
         break;
       case 'profile':
         me.addAll(p);
+        break;
+      case 'chatSettings':
+        final settings = t.obj('chatSettings');
+        if (p.str('field') == 'clear') {
+          settings.addAll({'cleared': now, 'unread': false, 'pinned': false});
+          t['messages'] = <J>[];
+        } else {
+          settings[p.str('field')] = p.flag('enabled');
+        }
+        t['chatSettings'] = settings;
+        break;
+      case 'storyStickerResponse':
+        final position = p.number('position').toInt();
+        final sticker = item.obj('style').rows('stickers')[position];
+        final kind = sticker.str('type');
+        item['stickerActivity'] = [
+          {
+            'position': position,
+            'user': myId,
+            'kind': kind,
+            'value': kind == 'reaction' ? sticker.str('emoji') : p.str('text'),
+          },
+          ...item
+              .rows('stickerActivity')
+              .where(
+                (entry) =>
+                    entry.str('user') != myId ||
+                    entry.number('position') != position,
+              ),
+        ];
+        if (kind == 'reaction') {
+          item['myStickerReactions'] = {
+            ...item.ids('myStickerReactions'),
+            '$position',
+          }.toList();
+        }
         break;
       case 'pollVote':
         final poll = item.obj('style').obj('poll');

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'core/store.dart';
 import 'ui/kit.dart';
 import 'ui/entrance.dart';
-import 'screens/social.dart';
+import 'rebuild/shell.dart';
 import 'screens/calls.dart';
 import 'screens/auth.dart';
 import 'screens/features13.dart';
@@ -27,6 +27,9 @@ void main() async {
 }
 
 class GpixApp extends StatelessWidget {
+  static final _lightTheme = gpixTheme(Brightness.light);
+  static final _darkTheme = gpixTheme(Brightness.dark);
+
   final GpixStore store;
   final bool initializing;
   final String launchError;
@@ -52,8 +55,8 @@ class GpixApp extends StatelessWidget {
             : store.appearance == 'light'
             ? ThemeMode.light
             : ThemeMode.system,
-        theme: gpixTheme(Brightness.light),
-        darkTheme: gpixTheme(Brightness.dark),
+        theme: _lightTheme,
+        darkTheme: _darkTheme,
         builder: (c, child) => AuraBackdrop(
           child: Stack(
             fit: StackFit.expand,
@@ -63,7 +66,6 @@ class GpixApp extends StatelessWidget {
         home: AnimatedBuilder(
           animation: store,
           builder: (c, _) => AnimatedSwitcher(
-            key: ValueKey(store.myId),
             duration: MediaQuery.disableAnimationsOf(c)
                 ? Duration.zero
                 : const Duration(milliseconds: 320),
@@ -81,7 +83,7 @@ class GpixApp extends StatelessWidget {
                           key: ValueKey('verify-${store.myId}'),
                           mode: 'verify',
                         )
-                      : HomeShell(key: ValueKey('home-${store.myId}'))
+                      : const SocialShell(key: ValueKey('signed-in-home'))
                 : const Welcome(key: ValueKey('welcome')),
           ),
         ),

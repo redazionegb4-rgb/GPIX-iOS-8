@@ -7,355 +7,16 @@ import '../core/data.dart';
 import '../core/store.dart';
 import '../ui/kit.dart';
 import 'stories.dart';
-import 'auth.dart';
 import 'features13.dart';
 import 'sessions_instants.dart';
 import 'messages.dart';
 import 'video.dart';
-import 'people.dart';
 import 'live.dart';
 import 'community.dart';
+import 'creation_studio.dart';
 import 'giphy.dart';
-import 'post_extras.dart';
+import '../rebuild/surfaces.dart' show DiscoverHome, ProfileHome, TimelinePost;
 import 'moments.dart';
-
-class HomeShell extends StatefulWidget {
-  const HomeShell({super.key});
-  @override
-  State<HomeShell> createState() => _HomeShellState();
-}
-
-class _HomeShellState extends State<HomeShell> {
-  int tab = 0;
-  final feedKey = GlobalKey<_FeedState>();
-  @override
-  Widget build(BuildContext c) {
-    final s = GpixScope.of(c);
-    return Scaffold(
-      backgroundColor: Theme.of(c).canvasColor,
-      body: IndexedStack(
-        index: tab,
-        children: [
-          Feed(key: feedKey),
-          const Explore(),
-          Reels(active: tab == 2),
-          Profile(user: s.myId, root: true),
-        ],
-      ),
-      bottomNavigationBar: ColoredBox(
-        key: const ValueKey('home-navigation'),
-        color: Theme.of(c).canvasColor,
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Divider(height: 1),
-              SizedBox(
-                height: 52,
-                child: Row(
-                  children: [
-                    nav(
-                      CupertinoIcons.house,
-                      CupertinoIcons.house_fill,
-                      0,
-                      'Home',
-                    ),
-                    nav(
-                      CupertinoIcons.search,
-                      CupertinoIcons.search,
-                      1,
-                      'Cerca',
-                    ),
-                    Expanded(
-                      child: IconButton(
-                        tooltip: 'Crea',
-                        onPressed: () => createMenu(c),
-                        icon: Container(
-                          width: 34,
-                          height: 34,
-                          decoration: BoxDecoration(
-                            color: auraBlue,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            CupertinoIcons.plus,
-                            size: 21,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                    nav(
-                      CupertinoIcons.play_rectangle,
-                      CupertinoIcons.play_rectangle_fill,
-                      2,
-                      'Reel',
-                    ),
-                    nav(
-                      CupertinoIcons.person,
-                      CupertinoIcons.person_fill,
-                      3,
-                      'Profilo',
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget nav(IconData icon, IconData activeIcon, int index, String label) {
-    final selected = tab == index;
-    return Expanded(
-      child: Center(
-        child: Semantics(
-          selected: selected,
-          child: IconButton(
-            tooltip: label,
-            style: IconButton.styleFrom(
-              backgroundColor: Colors.transparent,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(15),
-              ),
-              minimumSize: const Size(48, 48),
-            ),
-            onPressed: () {
-              setState(() => tab = index);
-              if (index == 0) feedKey.currentState?.toTop();
-            },
-            icon: index == 3
-                ? Avatar(GpixScope.of(context).myId, size: 26)
-                : GIcon(
-                    selected ? activeIcon : icon,
-                    size: 25,
-                    color: selected ? accent(context) : foreground(context),
-                  ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class Feed extends StatefulWidget {
-  const Feed({super.key});
-  @override
-  State<Feed> createState() => _FeedState();
-}
-
-class _FeedState extends State<Feed> {
-  static const sections = ['Per te', 'Seguiti', 'Gruppi'];
-  final pages = PageController();
-  final scrolls = {for (final tab in sections.take(2)) tab: ScrollController()};
-  final storyKeys = {
-    for (final tab in sections.take(2)) tab: GlobalKey<_StoryTrayState>(),
-  };
-  final refreshKeys = {
-    for (final tab in sections.take(2)) tab: GlobalKey<RefreshIndicatorState>(),
-  };
-  ScrollController get scroll => scrolls[filter] ?? scrolls['Per te']!;
-  GlobalKey<_StoryTrayState> get storyKey =>
-      storyKeys[filter] ?? storyKeys['Per te']!;
-  GlobalKey<RefreshIndicatorState> get refreshKey =>
-      refreshKeys[filter] ?? refreshKeys['Per te']!;
-  String filter = 'Per te';
-  bool refreshing = false;
-  Future<void> toTop() async {
-    storyKey.currentState?.reset();
-    if (scroll.hasClients)
-      await scroll.animateTo(
-        0,
-        duration: const Duration(milliseconds: 350),
-        curve: Curves.easeOutCubic,
-      );
-    if (refreshKey.currentState != null) {
-      await refreshKey.currentState!.show();
-    } else {
-      await refreshFeed();
-    }
-  }
-
-  Future<void> refreshFeed() async {
-    if (refreshing) return;
-    setState(() => refreshing = true);
-    final started = DateTime.now();
-    await perform(
-      context,
-      () => GpixScope.of(context, listen: false).refreshHome(),
-    );
-    final remaining = 600 - DateTime.now().difference(started).inMilliseconds;
-    if (remaining > 0)
-      await Future<void>.delayed(Duration(milliseconds: remaining));
-    if (mounted) {
-      setState(() => refreshing = false);
-      storyKey.currentState?.reset();
-    }
-  }
-
-  @override
-  void dispose() {
-    pages.dispose();
-    for (final controller in scrolls.values) controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext c) {
-    final s = GpixScope.of(c);
-    final posts = s.posts
-        .where((p) => !s.preferences.ids('muted').contains(p.str('author')))
-        .toList();
-    final entries = <J>[
-      for (final p in posts) {...p, '_entry': 'post'},
-      for (final m in s.state.rows('socialItems'))
-        if (m.str('kind') == 'moment' &&
-            !s.blocked(m.str('author')) &&
-            !s.preferences.ids('muted').contains(m.str('author')) &&
-            !posts.any((p) => p.str('id') == m.str('post')))
-          {...m, '_entry': 'moment'},
-      for (final g in s.state.rows('socialGroups'))
-        if (!s.blocked(g.str('owner')) &&
-            !s.preferences.ids('muted').contains(g.str('owner')))
-          {...g, '_entry': 'group'},
-    ]..sort((a, b) => b.number('created').compareTo(a.number('created')));
-    return Scaffold(
-      appBar: AppBar(
-        centerTitle: false,
-        titleSpacing: 12,
-        toolbarHeight: 54,
-        title: const Text(
-          'Home',
-          style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
-        ),
-        bottom: PreferredSize(
-          preferredSize: Size.fromHeight(refreshing ? 48 : 45),
-          child: Column(
-            children: [
-              CommunityTabs(const ['Per te', 'Seguiti', 'Gruppi'], filter, (
-                value,
-              ) {
-                pages.animateToPage(
-                  sections.indexOf(value),
-                  duration: const Duration(milliseconds: 260),
-                  curve: Curves.easeOutCubic,
-                );
-              }),
-              if (refreshing)
-                const LinearProgressIndicator(
-                  key: ValueKey('home-refresh-indicator'),
-                  minHeight: 3,
-                ),
-            ],
-          ),
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Attività',
-            icon: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                const GIcon(CupertinoIcons.bell, size: 24),
-                if (s.hasActivity)
-                  const Positioned(
-                    top: -2,
-                    right: -3,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: auraBlue,
-                        shape: BoxShape.circle,
-                      ),
-                      child: SizedBox(width: 8, height: 8),
-                    ),
-                  ),
-              ],
-            ),
-            onPressed: () => open(c, const Activity()),
-          ),
-          IconButton(
-            tooltip: 'Messaggi',
-            onPressed: () => open(c, const Inbox()),
-            icon: Badge(
-              isLabelVisible: s.threads.any(s.chatHasUnread),
-              backgroundColor: auraBlue,
-              child: const GIcon(CupertinoIcons.paperplane, size: 24),
-            ),
-          ),
-          const SizedBox(width: 7),
-        ],
-      ),
-      backgroundColor: Theme.of(c).canvasColor,
-      body: PageView.builder(
-        key: const ValueKey('home-sections'),
-        controller: pages,
-        itemCount: sections.length,
-        onPageChanged: (index) => setState(() => filter = sections[index]),
-        itemBuilder: (context, index) {
-          final section = sections[index];
-          if (section == 'Gruppi') return const CommunityDirectory();
-          final visible = entries.where((entry) {
-            final author = entry.str('_entry') == 'group'
-                ? entry.str('owner')
-                : entry.str('author');
-            return section != 'Seguiti' ||
-                s.follows(author) ||
-                author == s.myId;
-          }).toList();
-          return RefreshIndicator(
-            key: refreshKeys[section],
-            color: auraBlue,
-            onRefresh: refreshFeed,
-            child: ListView.builder(
-              key: PageStorageKey(
-                section == 'Per te' ? 'feed' : 'feed-following',
-              ),
-              controller: scrolls[section],
-              padding: const EdgeInsets.only(bottom: 16),
-              physics: const AlwaysScrollableScrollPhysics(),
-              itemCount: visible.length + 2,
-              itemBuilder: (c, i) {
-                if (i == 0) return StoryTray(key: storyKeys[section]);
-                if (i == visible.length + 1)
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 32),
-                    child: Column(
-                      children: [
-                        const GIcon(
-                          CupertinoIcons.check_mark_circled,
-                          size: 32,
-                          color: auraBlue,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          visible.isEmpty
-                              ? 'Qui iniziano le tue storie.'
-                              : 'Sei al passo con le novità',
-                          style: const TextStyle(color: muted, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  );
-                final entry = visible[i - 1];
-                if (entry.str('_entry') != 'post')
-                  return CommunityFeedCard(
-                    item: entry,
-                    group: entry.str('_entry') == 'group',
-                  );
-                return PostCard(
-                  key: ValueKey(entry.str('id')),
-                  id: entry.str('id'),
-                );
-              },
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
 
 class StoryTray extends StatefulWidget {
   const StoryTray({super.key});
@@ -428,13 +89,15 @@ class _StoryTrayState extends State<StoryTray> {
           ),
         Container(
           height:
-              112 +
+              121 +
               (MediaQuery.textScalerOf(c).scale(12) - 12).clamp(0.0, 32.0),
-          margin: const EdgeInsets.fromLTRB(10, 4, 10, 6),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: Theme.of(c).dividerColor)),
+          ),
           child: ListView.separated(
             key: const ValueKey('stories-strip'),
             controller: scroll,
-            padding: const EdgeInsets.fromLTRB(6, 10, 6, 5),
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 5),
             scrollDirection: Axis.horizontal,
             itemCount: users.length + 1,
             separatorBuilder: (_, i) => const SizedBox(width: 6),
@@ -449,9 +112,9 @@ class _StoryTrayState extends State<StoryTray> {
                     ? () => open(c, const Composer(kind: 'story'))
                     : null,
                 child: SizedBox(
-                  width: ((MediaQuery.sizeOf(c).width - 36) / 5.2).clamp(
-                    56.0,
-                    88.0,
+                  width: ((MediaQuery.sizeOf(c).width - 36) / 3.65).clamp(
+                    69.0,
+                    102.0,
                   ),
                   child: Column(
                     children: [
@@ -460,8 +123,9 @@ class _StoryTrayState extends State<StoryTray> {
                         children: [
                           Avatar(
                             uid,
-                            size: ((MediaQuery.sizeOf(c).width - 36) / 5.2 - 13)
-                                .clamp(48.0, 58.0),
+                            size:
+                                ((MediaQuery.sizeOf(c).width - 36) / 3.65 - 15)
+                                    .clamp(54.0, 68.0),
                             ring: stories.isNotEmpty,
                             viewed:
                                 i != 0 &&
@@ -522,8 +186,8 @@ class _StoryTrayState extends State<StoryTray> {
   }
 }
 
-class _PostAction extends StatelessWidget {
-  const _PostAction({
+class PostAction extends StatelessWidget {
+  const PostAction({
     required this.label,
     required this.icon,
     required this.onTap,
@@ -564,7 +228,21 @@ class _PostAction extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  GIcon(icon, color: color ?? foreground(context), size: 23),
+                  AnimatedSwitcher(
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : const Duration(milliseconds: 180),
+                    transitionBuilder: (child, animation) => ScaleTransition(
+                      scale: animation.drive(Tween(begin: .78, end: 1.0)),
+                      child: FadeTransition(opacity: animation, child: child),
+                    ),
+                    child: GIcon(
+                      icon,
+                      key: ValueKey(icon),
+                      color: color ?? foreground(context),
+                      size: 23,
+                    ),
+                  ),
                   if (display != null) ...[
                     const SizedBox(width: 5),
                     Text(
@@ -585,599 +263,22 @@ class _PostAction extends StatelessWidget {
   }
 }
 
-class PostCard extends StatefulWidget {
+class PostCard extends StatelessWidget {
+  const PostCard({super.key, required this.id, this.detail = false});
+
   final String id;
   final bool detail;
-  const PostCard({super.key, required this.id, this.detail = false});
-  @override
-  State<PostCard> createState() => _PostCardState();
-}
-
-class _PostCardState extends State<PostCard>
-    with SingleTickerProviderStateMixin {
-  int page = 0;
-  late final AnimationController heart = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 750),
-  );
-  @override
-  void dispose() {
-    heart.dispose();
-    super.dispose();
-  }
-
-  void like(BuildContext c, J p, {bool force = false}) {
-    final s = GpixScope.of(c, listen: false);
-    if (force) {
-      heart.forward(from: 0);
-      if (p.ids('likes').contains(s.myId)) return;
-    }
-    perform(
-      c,
-      () => s.act('like', {
-        'id': widget.id,
-        'enabled': force || !p.ids('likes').contains(s.myId),
-      }),
-    );
-  }
 
   @override
-  Widget build(BuildContext c) {
-    final s = GpixScope.of(c), p = s.post(widget.id);
-    if (p.isEmpty) return const SizedBox.shrink();
-    final uid = p.str('author'),
-        u = s.user(uid),
-        media = s.media(p),
-        liked = p.ids('likes').contains(s.myId);
-    final moment = s.state
-        .rows('socialItems')
-        .where(
-          (item) =>
-              item.str('kind') == 'moment' && item.str('post') == widget.id,
-        )
-        .firstOrNull;
-    final participants = <String>{
-      if (moment != null) moment.str('author'),
-      if (moment != null)
-        ...moment.rows('contributions').map((r) => r.str('author')),
-    }.take(4).toList();
-    final visibleLikers = p
-        .ids('likes')
-        .where((id) => s.user(id).str('username').isNotEmpty)
-        .take(3)
-        .toList();
-    final menu = IconButton(
-      tooltip: 'Opzioni del post',
-      icon: const GIcon(CupertinoIcons.ellipsis, size: 22),
-      onPressed: () {
-        if (uid == s.myId &&
-            moment == null &&
-            s.state.number('communityVersion') > 0 &&
-            p.str('kind') == 'post') {
-          sheet(
-            c,
-            Builder(
-              builder: (menu) => Column(
-                children: [
-                  ListTile(
-                    leading: const GIcon(CupertinoIcons.person_2),
-                    title: const Text('Crea un Momento da questo post'),
-                    onTap: () {
-                      Navigator.pop(menu);
-                      composeCommunity(c, 'communityMoment', post: widget.id);
-                    },
-                  ),
-                  ListTile(
-                    leading: const GIcon(CupertinoIcons.ellipsis),
-                    title: const Text('Altre opzioni del post'),
-                    onTap: () {
-                      Navigator.pop(menu);
-                      postMenu(c, p);
-                    },
-                  ),
-                ],
-              ),
-            ),
-          );
-        } else {
-          postMenu(c, p);
-        }
-      },
-    );
-    final location = p.str('location');
-    final name = u.str('name').trim().isEmpty
-        ? u.str('username')
-        : u.str('name');
-    final postSubtitle = [
-      if (p.number('created') > 0) relative(p['created']),
-      if (p.str('audience') == 'close') 'Amici più stretti',
-      if (location.isNotEmpty) location,
-    ].join(' · ');
-    final authorInfo = InkWell(
-      onTap: () => open(c, Profile(user: uid)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Avatar(uid, size: 38),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  Text(
-                    postSubtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: secondaryText(c)),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-    final author = authorInfo;
-    final canFollow = uid != s.myId && !s.follows(uid);
-    final followButton = TextButton(
-      key: ValueKey('feed-follow-$uid-${widget.id}'),
-      onPressed: () =>
-          perform(c, () => s.act('follow', {'user': uid, 'enabled': true})),
-      style: TextButton.styleFrom(
-        backgroundColor: subdued(c),
-        foregroundColor: foreground(c),
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        minimumSize: const Size(68, 34),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
-      ),
-      child: const Text(
-        'Segui',
-        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-      ),
-    );
-    return Container(
-      key: ValueKey('feed-post-${widget.id}'),
-      margin: EdgeInsets.fromLTRB(
-        widget.detail ? 0 : 10,
-        6,
-        widget.detail ? 0 : 10,
-        14,
-      ),
-      padding: const EdgeInsets.only(bottom: 14),
-      decoration: BoxDecoration(
-        color: surface(c),
-        border: Border.all(
-          color: Theme.of(c).dividerColor.withValues(alpha: .6),
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(
-              alpha: Theme.of(c).brightness == Brightness.dark ? .18 : .055,
-            ),
-            blurRadius: 20,
-            offset: const Offset(0, 7),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (p.ids('reposts').isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(17, 10, 17, 0),
-              child: Row(
-                children: [
-                  const GIcon(CupertinoIcons.repeat, size: 14, color: muted),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'Ripubblicato da ${p.ids('reposts').map((id) => id == s.myId ? 'te' : s.user(id).str('username')).take(3).join(', ')}',
-                      style: const TextStyle(color: muted, fontSize: 11),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          Padding(
-            padding: const EdgeInsets.only(right: 6),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Align(alignment: Alignment.centerLeft, child: author),
-                ),
-                if (canFollow) followButton,
-                menu,
-              ],
-            ),
-          ),
-          if (media.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 7),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(18),
-                child: GestureDetector(
-                  onTap: () => openPhotoPreview(
-                    c,
-                    media[page.clamp(0, media.length - 1)],
-                  ),
-                  onDoubleTap: () => like(c, p, force: true),
-                  child: LayoutBuilder(
-                    builder: (c, constraints) {
-                      final width = constraints.maxWidth;
-                      final aspect = p
-                          .obj('style')
-                          .number('aspect', 1)
-                          .clamp(.35, 2.5)
-                          .toDouble();
-                      Widget photo(String ref) => ColoredBox(
-                        color: subdued(c),
-                        child: MediaView(
-                          ref,
-                          width: width,
-                          fit: BoxFit.contain,
-                          placeholderHeight: width / aspect,
-                        ),
-                      );
-                      return Stack(
-                        children: [
-                          if (media.length == 1)
-                            ConstrainedBox(
-                              constraints: BoxConstraints(
-                                minHeight: width / 2.5,
-                              ),
-                              child: photo(media.first),
-                            )
-                          else
-                            AspectRatio(
-                              aspectRatio: aspect,
-                              child: PageView.builder(
-                                key: PageStorageKey('media-${widget.id}'),
-                                itemCount: media.length,
-                                onPageChanged: (i) => setState(() => page = i),
-                                itemBuilder: (c, i) => photo(media[i]),
-                              ),
-                            ),
-                          if (media.length > 1)
-                            Positioned(
-                              top: 10,
-                              right: 10,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 9,
-                                  vertical: 5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.black54,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  '${page + 1}/${media.length}',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          Positioned.fill(
-                            child: IgnorePointer(
-                              child: AnimatedBuilder(
-                                animation: heart,
-                                builder: (c, _) => Opacity(
-                                  opacity: heart.value == 0
-                                      ? 0
-                                      : (1 - heart.value).clamp(0, 1),
-                                  child: Transform.scale(
-                                    scale: .8 + heart.value * .45,
-                                    child: const Center(
-                                      child: GIcon(
-                                        CupertinoIcons.heart_fill,
-                                        size: 95,
-                                        color: Colors.white,
-                                        shadows: [
-                                          Shadow(
-                                            blurRadius: 12,
-                                            color: Colors.black26,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ),
-          if (media.length > 1)
-            Padding(
-              padding: const EdgeInsets.only(top: 7),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(
-                  media.length,
-                  (i) => Container(
-                    width: i == page ? 6 : 5,
-                    height: i == page ? 6 : 5,
-                    margin: const EdgeInsets.symmetric(horizontal: 2),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: i == page
-                          ? accent(c)
-                          : secondaryText(c).withValues(alpha: .35),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 3, 9, 3),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      Flexible(
-                        child: _PostAction(
-                          label: 'Mi piace',
-                          icon: liked
-                              ? CupertinoIcons.heart_fill
-                              : CupertinoIcons.heart,
-                          color: liked ? danger : foreground(c),
-                          count: p.flag('hideLikes')
-                              ? null
-                              : p.ids('likes').length,
-                          onTap: () => like(c, p),
-                        ),
-                      ),
-                      Flexible(
-                        child: _PostAction(
-                          label: 'Commenti',
-                          icon: CupertinoIcons.chat_bubble,
-                          count: p.rows('comments').length,
-                          onTap: () => comments(c, widget.id),
-                        ),
-                      ),
-                      if (p.str('kind') != 'story' &&
-                          !s.user(p.str('author')).flag('private') &&
-                          !['close', 'followers'].contains(p.str('audience')))
-                        Flexible(
-                          child: _PostAction(
-                            label: p.ids('reposts').contains(s.myId)
-                                ? 'Annulla ripubblicazione'
-                                : 'Ripubblica',
-                            icon: CupertinoIcons.repeat,
-                            color: p.ids('reposts').contains(s.myId)
-                                ? Colors.green
-                                : foreground(c),
-                            count: p.ids('reposts').length,
-                            onTap: () => perform(
-                              c,
-                              () => s.act('repost', {
-                                'id': p['id'],
-                                'enabled': !p.ids('reposts').contains(s.myId),
-                              }),
-                            ),
-                          ),
-                        ),
-                      Flexible(
-                        child: _PostAction(
-                          label: 'Condividi',
-                          icon: CupertinoIcons.paperplane,
-                          count: p.number('shareCount').toInt(),
-                          onTap: () => sharePost(c, p),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Salva',
-                  onPressed: () => perform(
-                    c,
-                    () => s.act('save', {
-                      'id': widget.id,
-                      'enabled': !p.flag('saved'),
-                    }),
-                  ),
-                  icon: GIcon(
-                    p.flag('saved')
-                        ? CupertinoIcons.bookmark_fill
-                        : CupertinoIcons.bookmark,
-                    size: 23,
-                    color: p.flag('saved') ? accent(c) : foreground(c),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (widget.detail && canFollow)
-            Align(
-              alignment: Alignment.centerRight,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 6, right: 3),
-                child: followButton,
-              ),
-            ),
-          PostExtras(post: p),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 2),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (!p.flag('hideLikes') && visibleLikers.isNotEmpty)
-                  InkWell(
-                    onTap: () => people(c, p.ids('likes'), 'Mi piace'),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 20 + (visibleLikers.length - 1) * 14.0,
-                          height: 22,
-                          child: Stack(
-                            children: [
-                              for (
-                                var i = visibleLikers.length - 1;
-                                i >= 0;
-                                i--
-                              )
-                                Positioned(
-                                  left: i * 14.0,
-                                  child: Avatar(visibleLikers[i], size: 20),
-                                ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 7),
-                        Flexible(
-                          child: Text.rich(
-                            TextSpan(
-                              text: 'Piace a ',
-                              children: [
-                                TextSpan(
-                                  text: s
-                                      .user(visibleLikers.first)
-                                      .str('username'),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                if (p.ids('likes').length > 1)
-                                  const TextSpan(text: ' e altri'),
-                              ],
-                            ),
-                            style: const TextStyle(fontSize: 12.5),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (p.str('text').isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(
-                          text: '$name ',
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        TextSpan(text: p.str('text')),
-                      ],
-                    ),
-                    style: const TextStyle(fontSize: 14, height: 1.35),
-                  ),
-                ],
-                if (widget.detail &&
-                    !p.flag('commentsOff') &&
-                    p.rows('comments').isEmpty) ...[
-                  const SizedBox(height: 7),
-                  InkWell(
-                    onTap: () => comments(c, widget.id),
-                    child: Text(
-                      'Aggiungi un commento…',
-                      style: TextStyle(fontSize: 12.5, color: secondaryText(c)),
-                    ),
-                  ),
-                ],
-                if (widget.detail && p.number('created') > 0) ...[
-                  const SizedBox(height: 5),
-                  Text(
-                    relative(p['created']),
-                    style: TextStyle(fontSize: 11, color: secondaryText(c)),
-                  ),
-                ],
-                if (widget.detail && location.isNotEmpty) ...[
-                  const SizedBox(height: 7),
-                  Text(
-                    p.str('location'),
-                    style: TextStyle(fontSize: 10.5, color: secondaryText(c)),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (moment != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 3),
-              child: Material(
-                color: auraBlue.withValues(alpha: .06),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  side: BorderSide(color: auraBlue.withValues(alpha: .12)),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width:
-                            30 + (participants.length - 1).clamp(0, 3) * 18.0,
-                        height: 32,
-                        child: Stack(
-                          children: [
-                            for (var i = participants.length - 1; i >= 0; i--)
-                              Positioned(
-                                left: i * 18.0,
-                                child: Avatar(participants[i], size: 30),
-                              ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '${participants.length} persone hanno aggiunto uno scatto',
-                          style: const TextStyle(fontSize: 12, height: 1.2),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size(0, 34),
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          side: const BorderSide(color: auraBlue),
-                          foregroundColor: accent(c),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        onPressed: () =>
-                            open(c, CommunityDetail(id: moment.str('id'))),
-                        child: const Text(
-                          'Apri momento',
-                          style: TextStyle(fontSize: 11),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
+  Widget build(BuildContext context) {
+    final post = GpixScope.of(context).post(id);
+    return post.isEmpty
+        ? const EmptyState(
+            CupertinoIcons.photo,
+            'Contenuto non disponibile',
+            '',
+          )
+        : TimelinePost(key: ValueKey(id), post: post, detail: detail);
   }
 }
 
@@ -1307,6 +408,19 @@ Future<void> postMenu(BuildContext c, J p) async {
           sharePost(c, p);
         }),
         if (own) ...[
+          if (p.str('kind') == 'post' &&
+              s.state.number('communityVersion') > 0 &&
+              !s.state
+                  .rows('socialItems')
+                  .any((item) => item.str('post') == p.str('id')))
+            ActionRow(
+              CupertinoIcons.person_2,
+              'Crea un Momento da questo post',
+              () {
+                Navigator.pop(c);
+                composeCommunity(c, 'communityMoment', post: p.str('id'));
+              },
+            ),
           if (p.str('kind') != 'story')
             ActionRow(
               CupertinoIcons.pin,
@@ -1473,21 +587,6 @@ class _TextDialogState extends State<_TextDialog> {
       children: [
         Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: auraBlue.withValues(alpha: .1),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: GIcon(
-                widget.obscure
-                    ? CupertinoIcons.lock
-                    : CupertinoIcons.square_pencil,
-                color: accent(c),
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 14),
             Expanded(
               child: Text(
                 widget.title,
@@ -2153,353 +1252,13 @@ class _CommentsState extends State<Comments> {
   }
 }
 
-class Explore extends StatefulWidget {
+class Explore extends StatelessWidget {
   const Explore({super.key, this.initialQuery = ''});
   final String initialQuery;
-  @override
-  State<Explore> createState() => _ExploreState();
-}
-
-class _ExploreState extends State<Explore> {
-  late String query = widget.initialQuery;
-  String category = 'Tutti';
-  bool showAll = false;
-  String mediaFilter = 'Tutti';
-  late final searchInput = TextEditingController(text: widget.initialQuery);
-  @override
-  void dispose() {
-    searchInput.dispose();
-    super.dispose();
-  }
-
-  void searchFor(String value) {
-    FocusScope.of(context).unfocus();
-    searchInput.text = value;
-    setState(() => query = value);
-    GpixScope.of(context, listen: false).rememberSearch(value);
-  }
 
   @override
-  Widget build(BuildContext c) {
-    final s = GpixScope.of(c);
-    final term = query.trim().toLowerCase();
-    final accountTerm = term.startsWith('@') ? term.substring(1) : term;
-    final users = s.users
-        .where(
-          (u) =>
-              u.str('id') != s.myId &&
-              !s.blocked(u.str('id')) &&
-              '${u.str('name')} ${u.str('username')}'.toLowerCase().contains(
-                accountTerm,
-              ),
-        )
-        .toList();
-    final source = switch (mediaFilter) {
-      'Reel' => s.reels,
-      'Post' => s.posts,
-      _ => [...s.posts, ...s.reels],
-    };
-    final posts = source.where((p) {
-      final author = p.str('author');
-      final match =
-          '${p.str('text')} ${p.str('location')} ${s.user(author).str('username')}'
-              .toLowerCase();
-      return !s.blocked(author) &&
-          !s.preferences.ids('muted').contains(author) &&
-          match.contains(accountTerm);
-    }).toList();
-    final featured = term.isEmpty && !showAll;
-    final visiblePosts = featured ? posts.take(4).toList() : posts;
-    final suggestedGroups = s.state
-        .rows('socialGroups')
-        .where((g) => g.str('title').toLowerCase().contains(term))
-        .take(3);
-    final showAccounts =
-        category == 'Persone' || (category == 'Tutti' && term.isNotEmpty);
-    final showPosts = category == 'Tutti';
-    return Material(
-      type: MaterialType.transparency,
-      child: SafeArea(
-        child: CustomScrollView(
-          key: const PageStorageKey('explore'),
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
-                child: Text(
-                  'Esplora',
-                  style: Theme.of(c).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: CommunityTabs(
-                const ['Tutti', 'Persone', 'Gruppi'],
-                category,
-                (label) => setState(() => category = label),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(17, 12, 17, 16),
-                child: TextField(
-                  controller: searchInput,
-                  textInputAction: TextInputAction.search,
-                  onSubmitted: searchFor,
-                  onChanged: (v) => setState(() => query = v),
-                  decoration: InputDecoration(
-                    hintText: 'Cerca persone, gruppi, eventi…',
-                    suffixIcon: query.isEmpty
-                        ? null
-                        : IconButton(
-                            tooltip: 'Svuota ricerca',
-                            onPressed: () => searchFor(''),
-                            icon: const GIcon(
-                              CupertinoIcons.xmark_circle_fill,
-                              size: 19,
-                            ),
-                          ),
-                    prefixIcon: const GIcon(
-                      CupertinoIcons.search,
-                      size: 19,
-                      color: muted,
-                    ),
-                    filled: true,
-                    fillColor: subdued(c),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.all(13),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(18),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            if (category == 'Gruppi')
-              SliverFillRemaining(child: CommunityDirectory(query: query)),
-            if (category == 'Tutti' && term.isNotEmpty)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Wrap(
-                    spacing: 8,
-                    children: [
-                      for (final option in const ['Tutti', 'Post', 'Reel'])
-                        ChoiceChip(
-                          label: Text(option),
-                          selected: mediaFilter == option,
-                          onSelected: (_) =>
-                              setState(() => mediaFilter = option),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            if (category != 'Gruppi' &&
-                query.isEmpty &&
-                s.searchHistory.isNotEmpty)
-              SliverToBoxAdapter(
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 18),
-                      child: Row(
-                        children: [
-                          const Expanded(
-                            child: Text(
-                              'Ricerche recenti',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () => s.clearSearchHistory(),
-                            child: const Text('Cancella cronologia'),
-                          ),
-                        ],
-                      ),
-                    ),
-                    for (final term in s.searchHistory)
-                      ListTile(
-                        leading: const GIcon(CupertinoIcons.clock, size: 20),
-                        title: Text(
-                          term,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        onTap: () => searchFor(term),
-                        trailing: IconButton(
-                          tooltip: 'Rimuovi ricerca',
-                          icon: const Icon(CupertinoIcons.xmark, size: 16),
-                          onPressed: () => s.removeSearch(term),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            if (showAccounts && users.isNotEmpty) ...[
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 18),
-                  child: Text(
-                    'Account',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                  ),
-                ),
-              ),
-              SliverList.list(
-                children: users
-                    .map(
-                      (u) => PersonTile(
-                        u.str('id'),
-                        onTap: () {
-                          s.rememberSearch(query);
-                          open(c, Profile(user: u.str('id')));
-                        },
-                      ),
-                    )
-                    .toList(),
-              ),
-            ],
-            if (showPosts && term.isEmpty && posts.isNotEmpty)
-              SliverToBoxAdapter(
-                child: ListTile(
-                  title: const Text(
-                    'Popolari',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  trailing: TextButton(
-                    onPressed: () => setState(() => showAll = !showAll),
-                    child: Text(showAll ? 'Mostra meno' : 'Vedi tutto'),
-                  ),
-                ),
-              ),
-            if (showPosts && posts.isNotEmpty)
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                sliver: SliverGrid(
-                  delegate: SliverChildBuilderDelegate(
-                    (c, i) => InkWell(
-                      onTap: () {
-                        s.rememberSearch(query);
-                        open(c, PostPage(id: visiblePosts[i].str('id')));
-                      },
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            if (visiblePosts[i].str('kind') == 'reel')
-                              ColoredBox(
-                                color: subdued(c),
-                                child: Center(
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(10),
-                                    child: Text(
-                                      visiblePosts[i].str(
-                                        'text',
-                                        s
-                                            .user(visiblePosts[i].str('author'))
-                                            .str('username'),
-                                      ),
-                                      maxLines: 3,
-                                      overflow: TextOverflow.ellipsis,
-                                      textAlign: TextAlign.center,
-                                      style: Theme.of(c).textTheme.labelMedium,
-                                    ),
-                                  ),
-                                ),
-                              )
-                            else
-                              MediaView(visiblePosts[i].str('media')),
-                            if (visiblePosts[i].str('kind') == 'reel')
-                              const Positioned(
-                                bottom: 8,
-                                right: 8,
-                                child: GIcon(
-                                  CupertinoIcons.play_rectangle_fill,
-                                  color: Colors.white,
-                                  size: 20,
-                                ),
-                              ),
-                            if (s.media(visiblePosts[i]).length > 1)
-                              const Positioned(
-                                top: 9,
-                                right: 9,
-                                child: GIcon(
-                                  CupertinoIcons.square_stack_fill,
-                                  color: Colors.white,
-                                  size: 17,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    childCount: visiblePosts.length,
-                  ),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: featured ? 2 : 3,
-                    mainAxisSpacing: 5,
-                    crossAxisSpacing: 5,
-                    childAspectRatio: featured ? 1.3 : .78,
-                  ),
-                ),
-              ),
-            if (category == 'Tutti' && suggestedGroups.isNotEmpty)
-              SliverToBoxAdapter(
-                child: Column(
-                  children: [
-                    const ListTile(
-                      title: Text(
-                        'Gruppi',
-                        style: TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                    for (final group in suggestedGroups)
-                      ListTile(
-                        leading: Avatar(
-                          group.str('owner'),
-                          image: group.str('cover').isEmpty
-                              ? null
-                              : group.str('cover'),
-                        ),
-                        title: Text(group.str('title')),
-                        subtitle: Text(
-                          'Gruppo pubblico · ${group.number('members').toInt()} membri',
-                        ),
-                        trailing: const GIcon(
-                          CupertinoIcons.chevron_right,
-                          size: 15,
-                        ),
-                        onTap: () =>
-                            open(c, CommunityGroup(id: group.str('id'))),
-                      ),
-                  ],
-                ),
-              ),
-            if (category != 'Gruppi' &&
-                (!showPosts || posts.isEmpty) &&
-                (!showAccounts || users.isEmpty))
-              const SliverToBoxAdapter(
-                child: EmptyState(
-                  CupertinoIcons.search,
-                  'Nessun risultato',
-                  'Prova un nome o una parola diversa.',
-                ),
-              ),
-            const SliverToBoxAdapter(child: SizedBox(height: 108)),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      DiscoverHome(initialQuery: initialQuery, detail: true);
 }
 
 class PostPage extends StatelessWidget {
@@ -2517,933 +1276,12 @@ class PostPage extends StatelessWidget {
         );
 }
 
-class Profile extends StatefulWidget {
+class Profile extends StatelessWidget {
+  const Profile({super.key, required this.user});
   final String user;
-  final bool root;
-  const Profile({super.key, required this.user, this.root = false});
-  @override
-  State<Profile> createState() => _ProfileState();
-}
-
-class _ProfileState extends State<Profile> {
-  int selected = 0;
-  bool showSuggestions = false;
-  final dismissedSuggestions = <String>{};
-  Future<void> switchAccount(BuildContext context, GpixStore store) async {
-    final chosen = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) => SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.sizeOf(context).height * .72,
-          ),
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            shrinkWrap: true,
-            children: [
-              Text(
-                'Cambia account',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 16),
-              SavedAccountTile(
-                account: store.me,
-                active: true,
-                trailing: Icon(
-                  CupertinoIcons.check_mark_circled_solid,
-                  color: accent(context),
-                ),
-              ),
-              for (final account in store.savedAccounts)
-                if (account.str('id') != store.myId)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: SavedAccountTile(
-                      account: account,
-                      onTap: () => Navigator.pop(context, account.str('id')),
-                      trailing: Icon(
-                        CupertinoIcons.chevron_right,
-                        size: 16,
-                        color: secondaryText(context),
-                      ),
-                    ),
-                  ),
-              const SizedBox(height: 18),
-              PrimaryButton(
-                'Aggiungi account',
-                onTap: () => Navigator.pop(context, ''),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (chosen == null || !context.mounted) return;
-    if (chosen.isEmpty) {
-      open(context, const Welcome(addingAccount: true));
-      return;
-    }
-    final navigator = Navigator.of(context);
-    await perform(context, () async {
-      await store.useSavedAccount(chosen);
-      if (navigator.mounted) navigator.popUntil((route) => route.isFirst);
-    });
-  }
 
   @override
-  Widget build(BuildContext c) {
-    final s = GpixScope.of(c),
-        u = s.user(widget.user),
-        own = widget.user == s.myId;
-    final posts = s.allPosts
-        .where(
-          (p) =>
-              !p.flag('archived') &&
-              (selected == 3
-                  ? p.str('kind') != 'story' &&
-                        p
-                            .str('text')
-                            .toLowerCase()
-                            .contains('@${u.str('username').toLowerCase()}')
-                  : selected == 2
-                  ? p.ids('reposts').contains(widget.user) &&
-                        p.str('kind') != 'story'
-                  : p.str('author') == widget.user &&
-                        p.str('kind') == (selected == 0 ? 'post' : 'reel')),
-        )
-        .toList();
-    final pinned = u.ids('pinnedPosts'),
-        ordered = u.ids('gridOrder'),
-        originalOrder = posts.map((p) => p.str('id')).toList();
-    if (selected == 0)
-      posts.sort((a, b) {
-        int rank(J p) {
-          final id = p.str('id');
-          final pin = pinned.indexOf(id);
-          if (pin >= 0) return pin;
-          final order = ordered.indexOf(id);
-          return 3 +
-              (order >= 0
-                  ? order
-                  : ordered.length + originalOrder.indexOf(p.str('id')));
-        }
-
-        return rank(a).compareTo(rank(b));
-      });
-    final highlights = s.highlights(widget.user);
-    return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: !widget.root,
-        centerTitle: false,
-        title: InkWell(
-          onTap: own ? () => switchAccount(c, s) : null,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (u.flag('private')) ...[
-                const GIcon(CupertinoIcons.lock, size: 15),
-                const SizedBox(width: 5),
-              ],
-              Flexible(
-                child: Text(
-                  u.str('username'),
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 21,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              if (own) const GIcon(CupertinoIcons.chevron_down, size: 15),
-            ],
-          ),
-        ),
-        actions: own
-            ? [
-                IconButton(
-                  tooltip: 'Crea',
-                  onPressed: () => createMenu(c),
-                  icon: const GIcon(CupertinoIcons.plus, size: 25),
-                ),
-                IconButton(
-                  tooltip: 'Richieste di seguirti',
-                  onPressed: () => open(c, const Requests()),
-                  icon: const GIcon(CupertinoIcons.person_2, size: 25),
-                ),
-                IconButton(
-                  tooltip: 'Menu profilo',
-                  icon: const GIcon(CupertinoIcons.line_horizontal_3, size: 26),
-                  onPressed: () => open(c, const Settings()),
-                ),
-              ]
-            : [
-                IconButton(
-                  tooltip: 'Opzioni profilo',
-                  icon: const GIcon(CupertinoIcons.ellipsis),
-                  onPressed: () => sheet(
-                    c,
-                    Column(
-                      children: [
-                        ActionRow(
-                          CupertinoIcons.star_fill,
-                          s.state.ids('closeFriends').contains(widget.user)
-                              ? 'Rimuovi dagli amici più stretti'
-                              : 'Aggiungi agli amici più stretti',
-                          () {
-                            Navigator.pop(c);
-                            perform(
-                              c,
-                              () => s.act('closeFriend', {
-                                'user': widget.user,
-                                'enabled': !s.state
-                                    .ids('closeFriends')
-                                    .contains(widget.user),
-                              }),
-                            );
-                          },
-                        ),
-                        ActionRow(CupertinoIcons.flag, 'Segnala', () {
-                          Navigator.pop(c);
-                          report(c, widget.user);
-                        }),
-                        ActionRow(
-                          CupertinoIcons.person_crop_circle_badge_xmark,
-                          s.blocked(widget.user) ? 'Sblocca' : 'Blocca',
-                          () async {
-                            Navigator.pop(c);
-                            if (await gpixAlert(
-                                  c,
-                                  'Bloccare ${u.str('username')}?',
-                                  'Non vedrai più i contenuti e le conversazioni con questo account.',
-                                  confirm: 'Blocca',
-                                  destructive: true,
-                                  cancel: true,
-                                ) &&
-                                c.mounted)
-                              perform(
-                                c,
-                                () => s.act('block', {
-                                  'user': widget.user,
-                                  'enabled': !s.blocked(widget.user),
-                                }),
-                              );
-                          },
-                          destructive: true,
-                        ),
-                        const SizedBox(height: 15),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-      ),
-      body: CustomScrollView(
-        key: PageStorageKey('profile-${widget.user}'),
-        slivers: [
-          SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  key: const ValueKey('profile-identity'),
-                  padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          SizedBox(
-                            width: 94,
-                            height:
-                                own ||
-                                    s.notes.any(
-                                      (n) => n.str('owner') == widget.user,
-                                    )
-                                ? 142
-                                : 92,
-                            child: Stack(
-                              alignment: Alignment.bottomCenter,
-                              clipBehavior: Clip.none,
-                              children: [
-                                InkWell(
-                                  onTap: () => s.stories(widget.user).isNotEmpty
-                                      ? open(c, StoryViewer(user: widget.user))
-                                      : own
-                                      ? open(c, const EditProfile())
-                                      : null,
-                                  child: Avatar(
-                                    widget.user,
-                                    size: 80,
-                                    ring: s.hasUnseenStories(widget.user),
-                                  ),
-                                ),
-                                if (own ||
-                                    s.notes.any(
-                                      (n) => n.str('owner') == widget.user,
-                                    ))
-                                  Positioned(
-                                    key: const ValueKey('profile-note'),
-                                    top: 0,
-                                    left: -4,
-                                    right: -4,
-                                    child: GestureDetector(
-                                      behavior: HitTestBehavior.opaque,
-                                      onTap: () => own
-                                          ? manageOwnNote(c)
-                                          : replyNote(
-                                              c,
-                                              s.notes.firstWhere(
-                                                (n) =>
-                                                    n.str('owner') ==
-                                                    widget.user,
-                                              ),
-                                            ),
-                                      child: NoteBubble(
-                                        text:
-                                            s.notes
-                                                .where(
-                                                  (n) =>
-                                                      n.str('owner') ==
-                                                      widget.user,
-                                                )
-                                                .firstOrNull
-                                                ?.str('text') ??
-                                            'Lascia una nota…',
-                                        placeholder: !s.notes.any(
-                                          (n) => n.str('owner') == widget.user,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                if (own)
-                                  Positioned(
-                                    right: 0,
-                                    bottom: -1,
-                                    child: InkWell(
-                                      onTap: () => open(
-                                        c,
-                                        const Composer(kind: 'story'),
-                                      ),
-                                      child: Container(
-                                        width: 28,
-                                        height: 28,
-                                        decoration: BoxDecoration(
-                                          color: foreground(c),
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: surface(c),
-                                            width: 2.5,
-                                          ),
-                                        ),
-                                        child: GIcon(
-                                          CupertinoIcons.plus,
-                                          color: surface(c),
-                                          size: 19,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  u.str('name'),
-                                  style: const TextStyle(
-                                    fontSize: 19,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                if (u.str('pronouns').isNotEmpty)
-                                  Text(
-                                    u.str('pronouns'),
-                                    style: const TextStyle(
-                                      color: muted,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                const SizedBox(height: 14),
-                                Row(
-                                  key: const ValueKey('profile-stats'),
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    stat(
-                                      u.str(
-                                        'postCount',
-                                        '${s.allPosts.where((p) => p.str('author') == widget.user && p.str('kind') != 'story' && !p.flag('archived')).length}',
-                                      ),
-                                      'post',
-                                      null,
-                                    ),
-                                    stat(
-                                      u.str('followers', '0'),
-                                      'follower',
-                                      () => open(
-                                        c,
-                                        Connections(
-                                          user: widget.user,
-                                          initial: 0,
-                                        ),
-                                      ),
-                                    ),
-                                    stat(
-                                      u.str('following', '0'),
-                                      'seguiti',
-                                      () => open(
-                                        c,
-                                        Connections(
-                                          user: widget.user,
-                                          initial: 1,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (u.str('bio').isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        Text(
-                          u.str('bio').replaceAll(r'\n', '\n'),
-                          style: const TextStyle(fontSize: 13, height: 1.35),
-                        ),
-                      ],
-                      const SizedBox(height: 8),
-                      ProfileLinkChips(links: u.rows('links'), own: own),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: own
-                            ? [
-                                Expanded(
-                                  child: smallButton(
-                                    'Modifica profilo',
-                                    () => open(c, const EditProfile()),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Builder(
-                                    builder: (buttonContext) => smallButton(
-                                      'Condividi profilo',
-                                      () => perform(buttonContext, () async {
-                                        final box =
-                                            buttonContext.findRenderObject()
-                                                as RenderBox;
-                                        await SharePlus.instance.share(
-                                          ShareParams(
-                                            text:
-                                                'Seguimi su GPIX: @${u.str('username')}',
-                                            sharePositionOrigin:
-                                                box.localToGlobal(Offset.zero) &
-                                                box.size,
-                                          ),
-                                        );
-                                      }),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 7),
-                                SizedBox(
-                                  width: 35,
-                                  height: 35,
-                                  child: IconButton(
-                                    tooltip: 'Persone suggerite',
-                                    style: IconButton.styleFrom(
-                                      backgroundColor: subdued(c),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      padding: EdgeInsets.zero,
-                                    ),
-                                    onPressed: () => setState(
-                                      () => showSuggestions = !showSuggestions,
-                                    ),
-                                    icon: const GIcon(
-                                      CupertinoIcons.person_add,
-                                      size: 20,
-                                    ),
-                                  ),
-                                ),
-                              ]
-                            : [
-                                Expanded(
-                                  child: smallButton(
-                                    s.follows(widget.user)
-                                        ? s.state
-                                                  .ids('closeFriends')
-                                                  .contains(widget.user)
-                                              ? 'Amici più stretti ⌄'
-                                              : 'Segui già ⌄'
-                                        : s.state
-                                              .ids('pending')
-                                              .contains(widget.user)
-                                        ? 'Richiesta inviata'
-                                        : 'Segui',
-                                    () => s.follows(widget.user)
-                                        ? relationshipMenu(c, widget.user)
-                                        : perform(
-                                            c,
-                                            () => s.act('follow', {
-                                              'user': widget.user,
-                                              'enabled':
-                                                  !s.follows(widget.user) &&
-                                                  !s.state
-                                                      .ids('pending')
-                                                      .contains(widget.user),
-                                            }),
-                                          ),
-                                    primary:
-                                        !s.follows(widget.user) &&
-                                        !s.state
-                                            .ids('pending')
-                                            .contains(widget.user),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: smallButton(
-                                    'Messaggio',
-                                    () => perform(c, () async {
-                                      final id = await s.openThread(
-                                        widget.user,
-                                      );
-                                      if (c.mounted) open(c, Chat(id: id));
-                                    }),
-                                  ),
-                                ),
-                              ],
-                      ),
-                      const SizedBox(height: 23),
-                    ],
-                  ),
-                ),
-                if (own || highlights.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
-                    child: Text(
-                      'In evidenza',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                if (own || highlights.isNotEmpty)
-                  SizedBox(
-                    height:
-                        86 +
-                        (MediaQuery.textScalerOf(c).scale(11) - 11).clamp(
-                          0.0,
-                          35.0,
-                        ),
-                    child: ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 19),
-                      scrollDirection: Axis.horizontal,
-                      itemCount: highlights.length + (own ? 1 : 0),
-                      separatorBuilder: (_, i) => const SizedBox(width: 7),
-                      itemBuilder: (c, i) {
-                        if (own && i == 0)
-                          return InkWell(
-                            onTap: () => createHighlight(c),
-                            child: const SizedBox(
-                              width: 65,
-                              child: Column(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 27,
-                                    backgroundColor: Colors.transparent,
-                                    child: GIcon(
-                                      CupertinoIcons.plus_circle,
-                                      size: 42,
-                                    ),
-                                  ),
-                                  SizedBox(height: 5),
-                                  Text('Nuova', style: TextStyle(fontSize: 11)),
-                                ],
-                              ),
-                            ),
-                          );
-                        final h = highlights[i - (own ? 1 : 0)],
-                            ids = h
-                                .ids('posts')
-                                .where((id) => s.post(id).isNotEmpty)
-                                .toList();
-                        return InkWell(
-                          onTap: () => ids.isEmpty
-                              ? null
-                              : open(
-                                  c,
-                                  StoryViewer(user: widget.user, ids: ids),
-                                ),
-                          onLongPress: own
-                              ? () => sheet(
-                                  c,
-                                  ActionRow(
-                                    CupertinoIcons.trash,
-                                    'Elimina raccolta',
-                                    () {
-                                      Navigator.pop(c);
-                                      perform(
-                                        c,
-                                        () => s.act('deleteHighlight', {
-                                          'id': h['id'],
-                                        }),
-                                      );
-                                    },
-                                    destructive: true,
-                                  ),
-                                )
-                              : null,
-                          child: SizedBox(
-                            width: 65,
-                            child: Column(
-                              children: [
-                                ClipOval(
-                                  child: SizedBox.square(
-                                    dimension: 54,
-                                    child: MediaView(
-                                      ids.isEmpty
-                                          ? ''
-                                          : s.post(ids.first).str('media'),
-                                      fit: BoxFit.cover,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 5),
-                                Text(
-                                  h.str('title'),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: 11),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                if (own || highlights.isNotEmpty) const SizedBox(height: 24),
-                if (own && showSuggestions) _suggestions(c),
-                Row(
-                  children: [
-                    for (var i = 0; i < 4; i++)
-                      Expanded(
-                        child: InkWell(
-                          onTap: () => setState(() => selected = i),
-                          child: Container(
-                            height: 47,
-                            decoration: BoxDecoration(
-                              border: Border(
-                                bottom: BorderSide(
-                                  color: selected == i
-                                      ? auraBlue
-                                      : Theme.of(c).dividerColor,
-                                  width: selected == i ? 1.5 : .5,
-                                ),
-                              ),
-                            ),
-                            child: GIcon(
-                              i == 0
-                                  ? CupertinoIcons.square_grid_2x2
-                                  : i == 1
-                                  ? CupertinoIcons.play_rectangle
-                                  : i == 2
-                                  ? CupertinoIcons.repeat
-                                  : CupertinoIcons.person_crop_square,
-                              size: 23,
-                              color: selected == i ? auraBlue : muted,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          if (s.blocked(widget.user))
-            const SliverToBoxAdapter(
-              child: EmptyState(
-                CupertinoIcons.person_crop_circle_badge_xmark,
-                'Account bloccato',
-                'Puoi sbloccarlo dal menu del profilo.',
-              ),
-            )
-          else if (u.flag('private') && !own && !s.follows(widget.user))
-            const SliverToBoxAdapter(
-              child: EmptyState(
-                CupertinoIcons.lock,
-                'Questo account è privato',
-                'Segui questo account per vedere i suoi contenuti.',
-              ),
-            )
-          else if (posts.isEmpty)
-            SliverToBoxAdapter(
-              child: EmptyState(
-                CupertinoIcons.camera,
-                selected == 0
-                    ? 'I tuoi momenti, qui'
-                    : selected == 1
-                    ? 'Nessun reel'
-                    : selected == 2
-                    ? 'Nessuna ripubblicazione'
-                    : 'Nessuna menzione',
-                '${own ? 'Condividi qualcosa che ti rappresenta.' : 'I nuovi contenuti appariranno qui.'}',
-                action: own
-                    ? PrimaryButton(
-                        'Crea',
-                        onTap: () => open(
-                          c,
-                          Composer(kind: selected == 0 ? 'post' : 'reel'),
-                        ),
-                      )
-                    : null,
-              ),
-            )
-          else
-            SliverGrid(
-              delegate: SliverChildBuilderDelegate(
-                (c, i) => InkWell(
-                  onTap: () => open(
-                    c,
-                    posts[i].str('kind') != 'reel'
-                        ? PostPage(id: posts[i].str('id'))
-                        : Reels(initial: posts[i].str('id')),
-                  ),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      posts[i].str('kind') != 'reel'
-                          ? MediaView(posts[i].str('media'))
-                          : const ColoredBox(
-                              color: ink,
-                              child: GIcon(
-                                CupertinoIcons.play_fill,
-                                color: Colors.white,
-                              ),
-                            ),
-                      if (pinned.contains(posts[i].str('id')))
-                        Positioned(
-                          top: 7,
-                          right: 7,
-                          child: Container(
-                            key: ValueKey('pinned-${posts[i].str('id')}'),
-                            padding: const EdgeInsets.all(5),
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const GIcon(
-                              CupertinoIcons.pin_fill,
-                              size: 17,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                childCount: posts.length,
-              ),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                crossAxisSpacing: 2,
-                mainAxisSpacing: 2,
-                childAspectRatio: 3 / 4,
-              ),
-            ),
-          const SliverToBoxAdapter(child: SizedBox(height: 115)),
-        ],
-      ),
-    );
-  }
-
-  Widget _suggestions(BuildContext c) {
-    final s = GpixScope.of(c);
-    final users = s.users
-        .where(
-          (u) =>
-              u.str('id') != s.myId &&
-              !s.follows(u.str('id')) &&
-              !s.blocked(u.str('id')) &&
-              !dismissedSuggestions.contains(u.str('id')),
-        )
-        .take(12)
-        .toList();
-    if (users.isEmpty) return const SizedBox.shrink();
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 10, 4),
-          child: Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Persone suggerite',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-              ),
-              TextButton(
-                onPressed: () => open(c, const Explore()),
-                child: const Text(
-                  'Mostra tutti',
-                  style: TextStyle(fontSize: 12),
-                ),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(
-          height: 190,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            itemCount: users.length,
-            separatorBuilder: (_, i) => const SizedBox(width: 10),
-            itemBuilder: (c, i) {
-              final u = users[i],
-                  id = u.str('id'),
-                  pending = s.state.ids('pending').contains(u.str('id'));
-              return Container(
-                width: 148,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Theme.of(c).dividerColor),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Stack(
-                  children: [
-                    Column(
-                      children: [
-                        const SizedBox(height: 3),
-                        InkWell(
-                          onTap: () => open(c, Profile(user: id)),
-                          child: Avatar(id, size: 70),
-                        ),
-                        const SizedBox(height: 9),
-                        Text(
-                          u.str('name'),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                          ),
-                        ),
-                        Text(
-                          '@${u.str('username')}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 10, color: muted),
-                        ),
-                        const Spacer(),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 31,
-                          child: FilledButton(
-                            onPressed: () => perform(
-                              c,
-                              () => s.act('follow', {
-                                'user': id,
-                                'enabled': !pending,
-                              }),
-                            ),
-                            style: FilledButton.styleFrom(
-                              padding: EdgeInsets.zero,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            child: Text(
-                              pending ? 'Richiesta inviata' : 'Segui',
-                              style: const TextStyle(fontSize: 11),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    Positioned(
-                      top: -8,
-                      right: -8,
-                      child: IconButton(
-                        tooltip: 'Nascondi suggerimento',
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () =>
-                            setState(() => dismissedSuggestions.add(id)),
-                        icon: const GIcon(CupertinoIcons.xmark, size: 15),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 20),
-      ],
-    );
-  }
-
-  Widget stat(String value, String label, VoidCallback? tap) => Expanded(
-    child: InkWell(
-      onTap: tap,
-      borderRadius: BorderRadius.circular(8),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 44),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              value,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-
-  Widget smallButton(String text, VoidCallback tap, {bool primary = false}) =>
-      ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 46),
-        child: FilledButton(
-          onPressed: tap,
-          style: FilledButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            backgroundColor: primary ? auraBlue : subdued(context),
-            foregroundColor: primary ? Colors.white : foreground(context),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-          child: Text(
-            text,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-          ),
-        ),
-      );
+  Widget build(BuildContext context) => ProfileHome(user: user, detail: true);
 }
 
 Future<void> addStoryHighlight(BuildContext c, J story) async {
@@ -3716,32 +1554,20 @@ class _EditProfileState extends State<EditProfile> {
             (key: 'pronouns', label: 'Pronomi', max: 40),
           ])
             Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    field.label,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 5),
-                  TextField(
-                    key: ValueKey('edit-profile-${field.key}'),
-                    controller: fields[field.key],
-                    maxLength: field.max,
-                    minLines: field.key == 'bio' ? 2 : 1,
-                    maxLines: field.key == 'bio' ? 5 : 1,
-                    keyboardType: field.key == 'website'
-                        ? TextInputType.url
-                        : null,
-                    decoration: InputDecoration(
-                      hintText: field.key == 'website' ? 'https://' : null,
-                      counterText: '',
-                      filled: false,
-                      isDense: true,
-                    ),
-                  ),
-                ],
+              padding: const EdgeInsets.only(bottom: 10),
+              child: TextField(
+                key: ValueKey('edit-profile-${field.key}'),
+                controller: fields[field.key],
+                maxLength: field.max,
+                minLines: field.key == 'bio' ? 2 : 1,
+                maxLines: field.key == 'bio' ? 5 : 1,
+                keyboardType: field.key == 'website' ? TextInputType.url : null,
+                decoration: InputDecoration(
+                  labelText: field.label,
+                  hintText: field.key == 'website' ? 'https://' : null,
+                  alignLabelWithHint: field.key == 'bio',
+                  counterText: '',
+                ),
               ),
             ),
           const SizedBox(height: 20),
@@ -3871,41 +1697,139 @@ class Activity extends StatefulWidget {
 }
 
 class _ActivityState extends State<Activity> {
+  static const filters = ['Tutte', 'Mi piace', 'Commenti', 'Follower'];
+  static const headings = [
+    'In evidenza',
+    'Oggi',
+    'Ieri',
+    'Ultimi 7 giorni',
+    'Precedenti',
+  ];
+
+  int selected = 0;
   bool unreadOnly = false;
-  String activityFilter = 'Tutte';
+  bool menuOpen = false;
   final deciding = <String>{};
+  final scroll = ScrollController();
+
+  @override
+  void dispose() {
+    scroll.dispose();
+    super.dispose();
+  }
+
+  void selectFilter(int filter) {
+    if (selected == filter) return;
+    setState(() => selected = filter);
+    if (scroll.hasClients) scroll.jumpTo(0);
+  }
+
+  Future<void> showOptions(BuildContext anchor, GpixStore store) async {
+    if (menuOpen) return;
+    menuOpen = true;
+    final result = await anchoredMenu<String>(
+      anchor,
+      [
+        dropdownRow(
+          anchor,
+          'settings',
+          'Impostazioni notifiche',
+          CupertinoIcons.gear_alt,
+        ),
+        dropdownRow(
+          anchor,
+          'unread',
+          unreadOnly ? 'Mostra tutte' : 'Solo da leggere',
+          CupertinoIcons.envelope_badge,
+          selected: unreadOnly,
+        ),
+        dropdownRow(
+          anchor,
+          'read',
+          'Segna tutte come lette',
+          CupertinoIcons.check_mark_circled,
+          enabled: store.hasActivity,
+        ),
+      ],
+      alignRight: true,
+      width: 236,
+      label: 'Opzioni attività',
+    );
+    menuOpen = false;
+    if (!mounted) return;
+    switch (result) {
+      case 'settings':
+        open(context, const PushSettings());
+      case 'unread':
+        setState(() => unreadOnly = !unreadOnly);
+        if (scroll.hasClients) scroll.jumpTo(0);
+      case 'read':
+        await perform(context, () => store.act('notificationsRead'));
+    }
+  }
 
   Future<void> decide(GpixStore store, String id, bool accept) async {
     if (!deciding.add(id)) return;
     setState(() {});
-    await perform(
-      context,
-      () => store.act('accept', {'user': id, 'enabled': accept}),
-    );
-    if (mounted) setState(() => deciding.remove(id));
+    try {
+      await perform(
+        context,
+        () => store.act('accept', {'user': id, 'enabled': accept}),
+      );
+    } finally {
+      if (mounted) setState(() => deciding.remove(id));
+    }
   }
 
-  @override
-  Widget build(BuildContext c) {
-    final s = GpixScope.of(c);
-    final notifications = s.socialNotifications
-      ..sort((a, b) => b.number('created').compareTo(a.number('created')));
-    final unread = notifications.any((n) => !n.flag('seen'));
-    final visible = notifications.where(
-      (n) =>
-          (!unreadOnly || !n.flag('seen')) &&
-          (activityFilter == 'Tutte' ||
-              (activityFilter == 'Mi piace' &&
-                  ['like', 'storyLike', 'noteLike'].contains(n.str('type'))) ||
-              (activityFilter == 'Commenti' && n.str('type') == 'comment') ||
-              (activityFilter == 'Follower' &&
-                  [
-                    'follow',
-                    'followRequest',
-                    'followAccepted',
-                  ].contains(n.str('type')))),
-    );
-    final requests = s.state.ids('requests');
+  String _label(J notification, J post) {
+    final custom = notification.str('message').trim();
+    if (custom.isNotEmpty) return custom;
+    return switch (notification.str('type')) {
+      'comment' => 'ha commentato il tuo post.',
+      'storyLike' => 'ha messo Mi piace alla tua storia.',
+      'like' when post.str('kind') == 'story' =>
+        'ha messo Mi piace alla tua storia.',
+      'like' => 'ha messo Mi piace al tuo post.',
+      'follow' => 'ha iniziato a seguirti.',
+      'followRequest' => 'ha chiesto di seguirti.',
+      'followAccepted' => 'ha accettato la tua richiesta.',
+      'repost' => 'ha ripubblicato il tuo post.',
+      'noteLike' => 'ha messo Mi piace alla tua nota.',
+      _ => 'ha interagito con te.',
+    };
+  }
+
+  Future<void> openNotification(GpixStore store, J notification) async {
+    await perform(context, () async {
+      if (!notification.flag('seen')) {
+        await store.act('notificationsRead', {'id': notification['id']});
+      }
+      if (!mounted) return;
+      final type = notification.str('type');
+      final actor = notification.str('actor');
+      final post = store.post(notification.str('ref'));
+      if (type == 'followRequest') {
+        open(context, const Requests());
+      } else if (type == 'noteLike') {
+        manageOwnNote(context);
+      } else if (type == 'storyLike' || post.str('kind') == 'story') {
+        if (post.isNotEmpty && post.number('expires') > now) {
+          open(
+            context,
+            StoryViewer(user: post.str('author'), ids: [post.str('id')]),
+          );
+        } else {
+          notice(context, 'Questa storia non è più disponibile');
+        }
+      } else if (post.isNotEmpty) {
+        open(context, PostPage(id: post.str('id')));
+      } else if (actor.isNotEmpty) {
+        open(context, Profile(user: actor));
+      }
+    });
+  }
+
+  List<List<J>> _sections(List<J> notifications) {
     final date = DateTime.now();
     double midnight(int offset) =>
         DateTime(
@@ -3914,393 +1838,451 @@ class _ActivityState extends State<Activity> {
           date.day - offset,
         ).millisecondsSinceEpoch /
         1000;
-    String section(J notification) {
-      if (notification.flag('highlighted') ||
-          notification.str('type') == 'system') {
-        return 'In evidenza';
-      }
-      final created = notification.number('created');
-      if (created >= midnight(0)) return 'Oggi';
-      if (created >= midnight(1)) return 'Ieri';
-      if (created >= midnight(6)) return 'Ultimi 7 giorni';
-      return 'Precedenti';
+    final today = midnight(0), yesterday = midnight(1), week = midnight(7);
+    final rows = List.generate(headings.length, (_) => <J>[]);
+    for (final item in notifications) {
+      final type = item.str('type');
+      if (unreadOnly && item.flag('seen')) continue;
+      final matches = switch (selected) {
+        1 => const ['like', 'storyLike', 'noteLike'].contains(type),
+        2 => type == 'comment',
+        3 => const ['follow', 'followRequest', 'followAccepted'].contains(type),
+        _ => true,
+      };
+      if (!matches) continue;
+      final time = item.number('created');
+      final index = item.flag('highlighted') || type == 'system'
+          ? 0
+          : time >= today
+          ? 1
+          : time >= yesterday
+          ? 2
+          : time >= week
+          ? 3
+          : 4;
+      rows[index].add(item);
     }
+    return rows;
+  }
 
-    Widget dot(Color color) => CircleAvatar(radius: 4, backgroundColor: color);
-    final surface = Theme.of(c).brightness == Brightness.dark
-        ? Colors.black
-        : Colors.white;
-
-    return Scaffold(
-      backgroundColor: surface,
-      appBar: AppBar(
-        backgroundColor: surface,
-        surfaceTintColor: Colors.transparent,
-        centerTitle: false,
-        title: const Text(
-          'Attività',
-          style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
-        ),
-        actions: [
-          PopupMenuButton<String>(
-            tooltip: 'Opzioni attività',
-            icon: const GIcon(CupertinoIcons.ellipsis),
-            onSelected: (value) {
-              if (value == 'read') {
-                perform(c, () => s.act('notificationsRead'));
-              } else {
-                setState(() => unreadOnly = !unreadOnly);
-              }
-            },
-            itemBuilder: (_) => [
-              PopupMenuItem(
-                value: 'filter',
-                child: Text(unreadOnly ? 'Tutte le attività' : 'Da leggere'),
-              ),
-              PopupMenuItem(
-                value: 'read',
-                enabled: unread,
-                child: const Text('Segna tutto come letto'),
-              ),
-            ],
-          ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: () => s.sync(silent: true),
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
-          physics: const AlwaysScrollableScrollPhysics(),
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(bottom: 18),
-              child: Text(
-                'Le persone, le interazioni, le tue novità.',
-                style: TextStyle(color: secondaryText(c)),
+  @override
+  Widget build(BuildContext context) {
+    final store = GpixScope.of(context);
+    final requests = store.state
+        .ids('requests')
+        .where((id) => !store.blocked(id))
+        .toSet();
+    final notifications = store.socialNotifications;
+    final sections = _sections(notifications);
+    final allEmpty = sections.every((section) => section.isEmpty);
+    final colors = Theme.of(context).colorScheme;
+    return AccountSheetBackdrop(
+      child: Scaffold(
+        appBar: AppBar(
+          centerTitle: false,
+          titleSpacing: 0,
+          leading: const BackButton(),
+          title: Tooltip(
+            message: 'Cambia account',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => inboxAccounts(context, store),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 4,
+                  vertical: 10,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        store.me.str('username', 'Attività'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 7),
+                    GIcon(
+                      CupertinoIcons.chevron_down,
+                      size: 12,
+                      color: secondaryText(context),
+                    ),
+                    if (notifications.any((item) => !item.flag('seen'))) ...[
+                      const SizedBox(width: 8),
+                      const CircleAvatar(radius: 3.5, backgroundColor: danger),
+                    ],
+                  ],
+                ),
               ),
             ),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
+          ),
+          actions: [
+            Builder(
+              builder: (anchor) => IconButton(
+                tooltip: 'Opzioni attività',
+                icon: const GIcon(CupertinoIcons.bell, size: 23),
+                onPressed: () => showOptions(anchor, store),
+              ),
+            ),
+            const SizedBox(width: 6),
+          ],
+        ),
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
               child: Row(
                 children: [
-                  for (final value in [
-                    'Tutte',
-                    'Mi piace',
-                    'Commenti',
-                    'Follower',
-                  ])
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        label: Text(value),
-                        selected: activityFilter == value,
-                        onSelected: (_) =>
-                            setState(() => activityFilter = value),
-                      ),
+                  Expanded(
+                    child: Text(
+                      'Attività',
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -.65,
+                          ),
+                    ),
+                  ),
+                  if (unreadOnly)
+                    TextButton.icon(
+                      onPressed: () => setState(() => unreadOnly = false),
+                      icon: const GIcon(CupertinoIcons.xmark, size: 12),
+                      label: const Text('Da leggere'),
                     ),
                 ],
               ),
             ),
-            const SizedBox(height: 18),
-            Container(
-              decoration: BoxDecoration(
-                color: subdued(c),
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: Theme.of(c).dividerColor),
-              ),
-              padding: const EdgeInsets.all(14),
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: SizedBox.square(
-                  dimension: 54,
-                  child: requests.isEmpty
-                      ? CircleAvatar(
-                          backgroundColor: subdued(c),
-                          child: const GIcon(CupertinoIcons.person_add),
-                        )
-                      : Stack(
-                          children: [
-                            Avatar(
-                              requests.first,
-                              size: requests.length > 1 ? 40 : 54,
-                            ),
-                            if (requests.length > 1)
-                              Align(
-                                alignment: Alignment.bottomRight,
-                                child: DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: surface,
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(2),
-                                    child: Avatar(requests[1], size: 40),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                ),
-                title: const Text(
-                  'Richieste di seguirti',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-                subtitle: Text(
-                  requests.isEmpty
-                      ? 'Nessuna richiesta in attesa'
-                      : "${s.user(requests.first).str('username')}${requests.length > 1 ? ' + altri ${requests.length - 1}' : ''}",
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (requests.isNotEmpty) ...[
-                      dot(auraBlue),
-                      const SizedBox(width: 10),
-                    ],
-                    const GIcon(CupertinoIcons.chevron_right, size: 18),
-                  ],
-                ),
-                onTap: () => open(c, const Requests()),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 13),
+              child: CommunityTabs(
+                filters,
+                filters[selected],
+                (label) => selectFilter(filters.indexOf(label)),
               ),
             ),
-            if (visible.isEmpty)
-              EmptyState(
-                CupertinoIcons.heart,
-                unreadOnly ? 'Tutto letto' : 'Nessuna nuova attività',
-                'Qui trovi like, commenti e nuovi follower.',
-              ),
-            for (final name in [
-              'In evidenza',
-              'Oggi',
-              'Ieri',
-              'Ultimi 7 giorni',
-              'Precedenti',
-            ])
-              if (visible.any((n) => section(n) == name)) ...[
-                Padding(
-                  padding: const EdgeInsets.only(top: 22, bottom: 6),
-                  child: Text(
-                    name,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                    ),
+            Expanded(
+              child: SectionSwipe(
+                section: selected,
+                onStep: (step) {
+                  final next = selected + step;
+                  if (next >= 0 && next < filters.length) selectFilter(next);
+                },
+                child: RefreshIndicator(
+                  onRefresh: () => store.sync(silent: true),
+                  child: CustomScrollView(
+                    controller: scroll,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      if (selected == 0 || selected == 3)
+                        SliverToBoxAdapter(
+                          child: _requestSummary(context, store, requests),
+                        ),
+                      if (allEmpty)
+                        SliverToBoxAdapter(
+                          child: EmptyState(
+                            CupertinoIcons.heart,
+                            unreadOnly
+                                ? 'Tutto letto'
+                                : 'Nessuna nuova attività',
+                            unreadOnly
+                                ? 'Le nuove attività appariranno qui.'
+                                : 'Qui trovi Mi piace, commenti e nuovi follower.',
+                          ),
+                        ),
+                      for (final (index, section) in sections.indexed)
+                        if (section.isNotEmpty) ...[
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 19, 16, 7),
+                              child: Text(
+                                headings[index],
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800,
+                                  color: colors.onSurface,
+                                ),
+                              ),
+                            ),
+                          ),
+                          SliverList.builder(
+                            itemCount: section.length,
+                            itemBuilder: (context, row) => _notificationRow(
+                              context,
+                              store,
+                              section[row],
+                              requests,
+                            ),
+                          ),
+                        ],
+                      SliverToBoxAdapter(
+                        child: SizedBox(
+                          height: MediaQuery.paddingOf(context).bottom + 20,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                for (final n in visible.where((n) => section(n) == name))
-                  Builder(
-                    builder: (c) {
-                      final actor = n.str('actor');
-                      final pending =
-                          n.str('type') == 'followRequest' &&
-                          requests.contains(actor);
-                      final label = n.str('message').isNotEmpty
-                          ? n.str('message')
-                          : switch (n.str('type')) {
-                              'comment' => 'ha commentato il tuo post.',
-                              'like' =>
-                                s.post(n.str('ref')).str('kind') == 'story'
-                                    ? 'ha messo Mi piace alla tua storia.'
-                                    : 'ha messo Mi piace al tuo post.',
-                              'storyLike' =>
-                                'ha messo Mi piace alla tua storia.',
-                              'follow' => 'ha iniziato a seguirti.',
-                              'followRequest' => 'ha chiesto di seguirti.',
-                              'followAccepted' =>
-                                'ha accettato la tua richiesta.',
-                              'repost' => 'ha ripubblicato il tuo post.',
-                              'message' => 'ti ha inviato un messaggio.',
-                              'messageReaction' =>
-                                'ha reagito a un tuo messaggio.',
-                              'noteLike' => 'ha messo Mi piace alla tua nota.',
-                              'call' => 'ti ha chiamato.',
-                              _ => 'ha interagito con te.',
-                            };
-                      final actions = Wrap(
-                        spacing: 5,
-                        children: [
-                          for (final accept in [true, false])
-                            FilledButton(
-                              onPressed: deciding.contains(actor)
-                                  ? null
-                                  : () => decide(s, actor, accept),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: accept ? auraBlue : subdued(c),
-                                foregroundColor: accept
-                                    ? Colors.white
-                                    : foreground(c),
-                                minimumSize: const Size(44, 44),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 9,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(9),
-                                ),
-                              ),
-                              child: Text(
-                                accept ? 'Conferma' : 'Elimina',
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                            ),
-                        ],
-                      );
-                      return LayoutBuilder(
-                        builder: (c, constraints) {
-                          final inline =
-                              constraints.maxWidth >= 355 &&
-                              MediaQuery.textScalerOf(c).scale(12) < 15;
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: !n.flag('seen')
-                                  ? auraBlue.withValues(alpha: .055)
-                                  : subdued(c).withValues(alpha: .4),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              minVerticalPadding: 10,
-                              horizontalTitleGap: 12,
-                              leading: actor.isEmpty
-                                  ? CircleAvatar(
-                                      radius: 26,
-                                      backgroundColor: subdued(c),
-                                      child: const GIcon(CupertinoIcons.bell),
-                                    )
-                                  : Avatar(actor, size: 52),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text.rich(
-                                    TextSpan(
-                                      children: [
-                                        if (actor.isNotEmpty)
-                                          TextSpan(
-                                            text:
-                                                "${s.user(actor).str('username')} ",
-                                            style: TextStyle(
-                                              color: foreground(c),
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                        TextSpan(
-                                          text: label,
-                                          style: TextStyle(
-                                            color: foreground(c),
-                                          ),
-                                        ),
-                                        TextSpan(
-                                          text: '  ${relative(n['created'])}',
-                                          style: const TextStyle(color: muted),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (pending && !inline) actions,
-                                ],
-                              ),
-                              trailing: pending && inline
-                                  ? actions
-                                  : Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        if (s.post(n.str('ref')).isNotEmpty &&
-                                            s
-                                                .media(s.post(n.str('ref')))
-                                                .isNotEmpty)
-                                          Padding(
-                                            padding: const EdgeInsets.only(
-                                              right: 10,
-                                            ),
-                                            child: ClipRRect(
-                                              borderRadius:
-                                                  BorderRadius.circular(9),
-                                              child: MediaView(
-                                                s
-                                                    .media(s.post(n.str('ref')))
-                                                    .first,
-                                                width: 42,
-                                                height: 52,
-                                                fit: BoxFit.cover,
-                                              ),
-                                            ),
-                                          ),
-                                        if (!pending && !n.flag('seen'))
-                                          dot(auraBlue),
-                                      ],
-                                    ),
-                              onTap: () => perform(c, () async {
-                                await s.act('notificationsRead', {
-                                  'id': n['id'],
-                                });
-                                if (!c.mounted) return;
-                                if (n.str('type') == 'followRequest') {
-                                  open(c, const Requests());
-                                } else if (n.str('type') == 'messageReaction') {
-                                  final thread = s.threads
-                                      .where(
-                                        (t) => t
-                                            .rows('messages')
-                                            .any(
-                                              (m) =>
-                                                  m.str('id') == n.str('ref'),
-                                            ),
-                                      )
-                                      .firstOrNull;
-                                  if (thread != null) {
-                                    open(c, Chat(id: thread.str('id')));
-                                  } else {
-                                    notice(
-                                      c,
-                                      'Il messaggio non è più disponibile',
-                                    );
-                                  }
-                                } else if (n.str('type') == 'noteLike') {
-                                  manageOwnNote(c);
-                                } else if (n.str('type') == 'storyLike' ||
-                                    (n.str('type') == 'like' &&
-                                        s.post(n.str('ref')).str('kind') ==
-                                            'story')) {
-                                  final story = s.post(n.str('ref'));
-                                  if (story.isNotEmpty &&
-                                      story.number('expires') > now) {
-                                    open(
-                                      c,
-                                      StoryViewer(
-                                        user: story.str('author'),
-                                        ids: [story.str('id')],
-                                      ),
-                                    );
-                                  } else {
-                                    notice(
-                                      c,
-                                      'Questa storia non è più disponibile',
-                                    );
-                                  }
-                                } else if (s.post(n.str('ref')).isNotEmpty) {
-                                  open(c, PostPage(id: n.str('ref')));
-                                } else if (actor.isNotEmpty) {
-                                  open(c, Profile(user: actor));
-                                }
-                              }),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
-              ],
+              ),
+            ),
           ],
         ),
       ),
     );
   }
+
+  Widget _requestSummary(
+    BuildContext context,
+    GpixStore store,
+    Set<String> requests,
+  ) {
+    final colors = Theme.of(context).colorScheme;
+    final multiple = requests.length > 1;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+      child: Material(
+        color: colors.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+          side: BorderSide(color: colors.outlineVariant),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 4,
+          ),
+          horizontalTitleGap: 11,
+          leading: SizedBox.square(
+            dimension: 48,
+            child: requests.isEmpty
+                ? CircleAvatar(
+                    backgroundColor: subdued(context),
+                    child: GIcon(
+                      CupertinoIcons.person_add,
+                      color: foreground(context),
+                      size: 20,
+                    ),
+                  )
+                : Stack(
+                    children: [
+                      Avatar(requests.first, size: multiple ? 34 : 48),
+                      if (multiple)
+                        Align(
+                          alignment: Alignment.bottomRight,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: colors.surfaceContainerLow,
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(2),
+                              child: Avatar(requests.elementAt(1), size: 32),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
+          title: const Text(
+            'Richieste di seguirti',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          ),
+          subtitle: Text(
+            requests.isEmpty
+                ? 'Nessuna richiesta in attesa'
+                : '${store.user(requests.first).str('username')}${multiple ? ' + altri ${requests.length - 1}' : ''}',
+            style: TextStyle(color: secondaryText(context), fontSize: 12),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (requests.isNotEmpty) ...[
+                CircleAvatar(radius: 3.5, backgroundColor: accent(context)),
+                const SizedBox(width: 8),
+              ],
+              GIcon(
+                CupertinoIcons.chevron_right,
+                size: 15,
+                color: secondaryText(context),
+              ),
+            ],
+          ),
+          onTap: () => open(context, const Requests()),
+        ),
+      ),
+    );
+  }
+
+  Widget _notificationRow(
+    BuildContext context,
+    GpixStore store,
+    J item,
+    Set<String> requests,
+  ) {
+    final actor = item.str('actor');
+    final post = store.post(item.str('ref'));
+    final type = item.str('type');
+    final unread = !item.flag('seen');
+    final pending = type == 'followRequest' && requests.contains(actor);
+    final thumbnail = post.str('kind') == 'reel'
+        ? post.obj('style').str('cover')
+        : store.media(post).firstOrNull ?? '';
+    final time = item.number('created');
+    final badge = switch (type) {
+      'like' ||
+      'storyLike' ||
+      'noteLike' => (CupertinoIcons.heart_fill, danger),
+      'comment' => (CupertinoIcons.chat_bubble_fill, accent(context)),
+      'follow' ||
+      'followRequest' ||
+      'followAccepted' => (CupertinoIcons.person_add, accent(context)),
+      'repost' => (CupertinoIcons.repeat, accent(context)),
+      _ => null,
+    };
+    final avatar = actor.isEmpty
+        ? CircleAvatar(
+            radius: 23,
+            backgroundColor: subdued(context),
+            child: GIcon(
+              CupertinoIcons.bell,
+              color: foreground(context),
+              size: 20,
+            ),
+          )
+        : Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Avatar(actor, size: 46),
+              if (badge != null)
+                Positioned(
+                  right: -2,
+                  bottom: -2,
+                  child: Container(
+                    width: 18,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: badge.$2,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: surface(context), width: 1.5),
+                    ),
+                    child: GIcon(badge.$1, size: 10, color: Colors.white),
+                  ),
+                ),
+            ],
+          );
+    final description = Text.rich(
+      TextSpan(
+        children: [
+          if (actor.isNotEmpty)
+            TextSpan(
+              text: '${store.user(actor).str('username')} ',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          TextSpan(text: _label(item, post)),
+          if (time > 0)
+            TextSpan(
+              text: '  ${relative(time)}',
+              style: TextStyle(color: secondaryText(context), fontSize: 12),
+            ),
+        ],
+      ),
+      style: TextStyle(fontSize: 14, height: 1.28, color: foreground(context)),
+    );
+    return Padding(
+      key: ValueKey(item.str('id')),
+      padding: const EdgeInsets.fromLTRB(12, 1, 12, 1),
+      child: Material(
+        color: unread
+            ? accent(context).withValues(alpha: .06)
+            : surface(context),
+        borderRadius: BorderRadius.circular(13),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(13),
+          onTap: () => openNotification(store, item),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(5, 9, 7, 9),
+            child: LayoutBuilder(
+              builder: (context, size) {
+                final inline =
+                    pending &&
+                    size.maxWidth >= 342 &&
+                    MediaQuery.textScalerOf(context).scale(13) < 15;
+                return Row(
+                  children: [
+                    avatar,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          description,
+                          if (pending && !inline) ...[
+                            const SizedBox(height: 4),
+                            _requestActions(context, store, actor),
+                          ],
+                        ],
+                      ),
+                    ),
+                    if (inline) ...[
+                      const SizedBox(width: 8),
+                      _requestActions(context, store, actor),
+                    ],
+                    if (!pending && thumbnail.isNotEmpty) ...[
+                      const SizedBox(width: 9),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: MediaView(
+                          thumbnail,
+                          width: 44,
+                          height: 47,
+                          thumbnail: true,
+                        ),
+                      ),
+                    ],
+                    if (!pending && unread) ...[
+                      const SizedBox(width: 7),
+                      CircleAvatar(radius: 3, backgroundColor: accent(context)),
+                    ],
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _requestActions(BuildContext context, GpixStore store, String actor) =>
+      Wrap(
+        spacing: 6,
+        children: [
+          for (final accept in [true, false])
+            FilledButton(
+              onPressed: deciding.contains(actor)
+                  ? null
+                  : () => decide(store, actor, accept),
+              style: FilledButton.styleFrom(
+                backgroundColor: accept ? auraBlue : subdued(context),
+                foregroundColor: accept ? Colors.white : foreground(context),
+                minimumSize: const Size(44, 35),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              child: Text(accept ? 'Conferma' : 'Elimina'),
+            ),
+        ],
+      );
 }
 
 class Requests extends StatefulWidget {
@@ -4356,7 +2338,7 @@ class _RequestsState extends State<Requests> {
               36,
             ),
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            backgroundColor: accept ? const Color(0xff4f57ff) : subdued(c),
+            backgroundColor: accept ? auraBlue : subdued(c),
             foregroundColor: accept ? Colors.white : foreground(c),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(9),
@@ -4398,15 +2380,11 @@ class _RequestsState extends State<Requests> {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 14),
-            child: OutlinedButton(
-              style: OutlinedButton.styleFrom(
+            child: TextButton(
+              style: TextButton.styleFrom(
                 minimumSize: const Size(78, 44),
                 padding: const EdgeInsets.symmetric(horizontal: 14),
-                foregroundColor: const Color(0xff4f57ff),
-                side: BorderSide(
-                  color: Theme.of(c).dividerColor.withValues(alpha: .35),
-                ),
-                shape: const StadiumBorder(),
+                foregroundColor: auraBlue,
               ),
               onPressed: busy
                   ? null
@@ -4415,7 +2393,7 @@ class _RequestsState extends State<Requests> {
                       selected.clear();
                     }),
               child: Text(
-                editing ? 'Fine' : 'Gestisci',
+                editing ? 'Fine' : 'Modifica',
                 style: const TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 14,
@@ -4792,16 +2770,27 @@ class _SettingsState extends State<Settings> {
           ? null
           : Text(
               subtitle,
-              style: const TextStyle(color: muted, fontSize: 12, height: 1.35),
+              style: TextStyle(
+                color: secondaryText(c),
+                fontSize: 12,
+                height: 1.35,
+              ),
             ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (value != null) ...[
-            Text(value, style: const TextStyle(color: muted, fontSize: 12)),
+            Text(
+              value,
+              style: TextStyle(color: secondaryText(c), fontSize: 12),
+            ),
             const SizedBox(width: 8),
           ],
-          const GIcon(CupertinoIcons.chevron_right, size: 17, color: muted),
+          GIcon(
+            CupertinoIcons.chevron_right,
+            size: 15,
+            color: secondaryText(c),
+          ),
         ],
       ),
       onTap: tap,
@@ -5070,42 +3059,24 @@ class _SettingsState extends State<Settings> {
       final group = groups.firstWhere((group) => group.$1 == area);
       return Scaffold(
         appBar: AppBar(title: pageTitle(area)),
-        body: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Container(
-              padding: const EdgeInsets.all(22),
-              margin: const EdgeInsets.only(bottom: 20),
-              decoration: BoxDecoration(
-                color: subdued(c),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  GIcon(group.$3, size: 30, color: accent(c)),
-                  const SizedBox(height: 14),
-                  Text(
-                    group.$2,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            for (final entry in group.$4)
-              Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                decoration: BoxDecoration(
-                  color: subdued(c),
-                  borderRadius: BorderRadius.circular(18),
+        body: SectionSwipe(
+          onStep: (step) {
+            final next = groups.indexWhere((group) => group.$1 == area) + step;
+            if (next >= 0 && next < groups.length) {
+              Navigator.of(c).pushReplacement(
+                MaterialPageRoute<void>(
+                  builder: (_) => Settings._category(groups[next].$1),
                 ),
-                child: entry.$2,
-              ),
-            if (area == 'Account') access,
-          ],
+              );
+            }
+          },
+          child: ListView(
+            padding: const EdgeInsets.only(top: 8, bottom: 24),
+            children: [
+              for (final entry in group.$4) entry.$2,
+              if (area == 'Account') access,
+            ],
+          ),
         ),
       );
     }
@@ -5147,139 +3118,76 @@ class _SettingsState extends State<Settings> {
             ),
           ),
           if (filter.isEmpty) ...[
-            Container(
-              margin: const EdgeInsets.fromLTRB(16, 0, 16, 22),
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: subdued(c),
-                borderRadius: BorderRadius.circular(24),
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 17,
+                vertical: 6,
               ),
-              child: InkWell(
-                onTap: () => open(c, const EditProfile()),
-                child: Row(
-                  children: [
-                    Avatar(s.myId, size: 48),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            s.me.str('name'),
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          Text(
-                            '@${s.me.str('username')}',
-                            style: TextStyle(
-                              color: secondaryText(c),
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const GIcon(CupertinoIcons.chevron_right, size: 17),
-                  ],
-                ),
+              leading: Avatar(s.myId, size: 48),
+              title: Text(
+                s.me.str('name'),
+                style: const TextStyle(fontWeight: FontWeight.w700),
               ),
+              subtitle: Text('@${s.me.str('username')}'),
+              trailing: const GIcon(CupertinoIcons.chevron_right, size: 17),
+              onTap: () => open(c, const EditProfile()),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
-              child: Text(
-                'Il tuo spazio, le tue regole',
-                style: const TextStyle(
-                  fontSize: 21,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-            for (final group in groups)
-              Container(
-                margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                decoration: BoxDecoration(
-                  color: surface(c),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Theme.of(c).dividerColor),
-                ),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 7,
-                  ),
-                  leading: Container(
-                    padding: const EdgeInsets.all(11),
+            const Divider(height: 19),
+            for (final group in groups) ...[
+              ListTile(
+                onTap: () => open(c, Settings._category(group.$1)),
+                leading: SizedBox.square(
+                  dimension: 40,
+                  child: DecoratedBox(
                     decoration: BoxDecoration(
                       color: subdued(c),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: GIcon(group.$3, size: 22),
                   ),
-                  title: Text(
-                    group.$1,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  subtitle: Text(
-                    group.$2,
-                    style: TextStyle(fontSize: 12, color: secondaryText(c)),
-                  ),
-                  trailing: const GIcon(CupertinoIcons.chevron_right, size: 15),
-                  onTap: () => open(c, Settings._category(group.$1)),
                 ),
-              ),
-            Container(
-              margin: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              decoration: BoxDecoration(
-                color: subdued(c),
-                borderRadius: BorderRadius.circular(22),
-              ),
-              child: Column(
-                children: [
-                  row(
-                    CupertinoIcons.bell,
-                    'La tua attività',
-                    () => open(c, const Activity()),
-                  ),
-                  row(
-                    CupertinoIcons.bookmark,
-                    'Elementi salvati',
-                    () => open(c, const CollectionPage(kind: 'saved')),
-                  ),
-                  row(
-                    CupertinoIcons.calendar,
-                    'Eventi e momenti',
-                    () => open(
-                      c,
-                      const Scaffold(
-                        body: SafeArea(child: CommunityDirectory()),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-              decoration: BoxDecoration(
-                color: danger.withValues(alpha: .06),
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: ListTile(
-                leading: const GIcon(
-                  CupertinoIcons.square_arrow_left,
-                  color: danger,
-                ),
-                title: const Text(
-                  'Esci',
-                  style: TextStyle(color: danger, fontWeight: FontWeight.w700),
+                title: Text(
+                  group.$1,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
                 subtitle: Text(
-                  '@${s.me.str('username')}',
-                  style: TextStyle(fontSize: 12, color: secondaryText(c)),
+                  group.$2,
+                  style: TextStyle(color: secondaryText(c), fontSize: 12),
                 ),
-                onTap: () => _logout(c, s),
+                trailing: const GIcon(CupertinoIcons.chevron_right, size: 15),
+              ),
+            ],
+            const Divider(height: 21),
+            row(
+              CupertinoIcons.bell,
+              'La tua attività',
+              () => open(c, const Activity()),
+            ),
+            row(
+              CupertinoIcons.bookmark,
+              'Elementi salvati',
+              () => open(c, const CollectionPage(kind: 'saved')),
+            ),
+            row(
+              CupertinoIcons.calendar,
+              'Eventi e momenti',
+              () => open(
+                c,
+                const Scaffold(body: SafeArea(child: CommunityDirectory())),
+              ),
+            ),
+            access,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+              child: OutlinedButton.icon(
+                onPressed: () => _logout(c, s),
+                style: OutlinedButton.styleFrom(foregroundColor: danger),
+                icon: const GIcon(
+                  CupertinoIcons.square_arrow_left,
+                  size: 20,
+                  color: danger,
+                ),
+                label: const Text('Esci'),
               ),
             ),
           ] else if (results.isEmpty)
@@ -5621,62 +3529,45 @@ Future<void> createMenu(BuildContext c) async {
     c,
     Builder(
       builder: (menu) {
-        Widget tile(String label, IconData icon) => Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(0, 72),
-                foregroundColor: foreground(menu),
-              ),
-              onPressed: () => Navigator.pop(menu, label),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [GIcon(icon), const SizedBox(height: 5), Text(label)],
-              ),
-            ),
-          ),
-        );
         return Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           child: Column(
             children: [
-              ListTile(
-                title: const Text(
-                  'Crea',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 22),
-                ),
-                trailing: PopupMenuButton<String>(
-                  tooltip: 'Altre creazioni',
-                  icon: const GIcon(CupertinoIcons.ellipsis),
-                  onSelected: (value) => Navigator.pop(menu, value),
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(
-                      value: 'Istantanee',
-                      child: Text('Istantanee'),
+              Text('Crea', style: Theme.of(menu).textTheme.titleLarge),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.center,
+                children: [
+                  for (final mode in CreationMode.values)
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                        backgroundColor: subdued(menu),
+                        foregroundColor: foreground(menu),
+                      ),
+                      icon: GIcon(mode.icon, size: 21),
+                      label: Text(mode.label),
+                      onPressed: () => Navigator.pop(menu, mode.name),
                     ),
-                    PopupMenuItem(value: 'Bozze', child: Text('Bozze')),
-                  ],
-                ),
-              ),
-              Row(
-                children: [
-                  tile('Post', CupertinoIcons.square_pencil),
-                  tile('Storia', CupertinoIcons.camera),
                 ],
               ),
-              Row(
-                children: [
-                  tile('Reel', CupertinoIcons.play_rectangle),
-                  tile('Diretta', CupertinoIcons.dot_radiowaves_left_right),
-                ],
+              const SizedBox(height: 14),
+              const Divider(height: 1),
+              ActionRow(
+                CupertinoIcons.person_2,
+                'Momento',
+                () => Navigator.pop(menu, 'moment'),
               ),
-              const Divider(),
-              ListTile(
-                leading: const GIcon(CupertinoIcons.person_2),
-                title: const Text('Momento'),
-                trailing: const GIcon(CupertinoIcons.chevron_right, size: 16),
-                onTap: () => Navigator.pop(menu, 'Momento'),
+              ActionRow(
+                CupertinoIcons.person_3,
+                'Gruppo',
+                () => Navigator.pop(menu, 'group'),
+              ),
+              ActionRow(
+                CupertinoIcons.doc_text,
+                'Bozze',
+                () => Navigator.pop(menu, 'drafts'),
               ),
             ],
           ),
@@ -5686,20 +3577,17 @@ Future<void> createMenu(BuildContext c) async {
   );
   if (selected == null || !c.mounted) return;
   switch (selected) {
-    case 'Post':
-      open(c, const Composer(kind: 'post'));
-    case 'Storia':
-      open(c, const Composer(kind: 'story'));
-    case 'Reel':
-      open(c, const Composer(kind: 'reel'));
-    case 'Diretta':
-      open(c, const LiveSetup());
-    case 'Bozze':
-      open(c, const DraftList());
-    case 'Momento':
+    case 'drafts':
+      await open(c, const DraftList());
+    case 'group':
+      await composeCommunity(c, 'communityGroup');
+    case 'moment':
       await composeCommunity(c, 'communityMoment');
-    case 'Istantanee':
-      open(c, const InstantComposer(autoCapture: true));
+    default:
+      await open(
+        c,
+        CreationStudio(initial: CreationMode.values.byName(selected)),
+      );
   }
 }
 

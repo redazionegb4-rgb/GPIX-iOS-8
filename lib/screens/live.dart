@@ -29,7 +29,9 @@ Future<void> createLive(BuildContext c, {String? initialTitle}) async {
 }
 
 class LiveSetup extends StatefulWidget {
-  const LiveSetup({super.key});
+  const LiveSetup({super.key, this.modePicker});
+
+  final Widget? modePicker;
 
   @override
   State<LiveSetup> createState() => _LiveSetupState();
@@ -203,33 +205,23 @@ class _LiveSetupState extends State<LiveSetup> with WidgetsBindingObserver {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Text(
-                        'Sei pronto ad andare live?',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
+                      if (!starting)
+                        TextField(
+                          controller: title,
+                          maxLength: 100,
+                          style: const TextStyle(color: Colors.white),
+                          decoration:
+                              mediaInputDecoration(
+                                c,
+                                'Titolo della diretta',
+                              ).copyWith(
+                                counterText: '',
+                                prefixIcon: const GIcon(
+                                  CupertinoIcons.textformat,
+                                  color: Colors.white70,
+                                ),
+                              ),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Un momento da vivere insieme, in tempo reale.',
-                        style: TextStyle(color: Colors.white70),
-                      ),
-                      const SizedBox(height: 18),
-                      TextField(
-                        controller: title,
-                        maxLength: 100,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: const InputDecoration(
-                          hintText: 'Dai un titolo alla diretta',
-                          counterText: '',
-                          prefixIcon: GIcon(
-                            CupertinoIcons.textformat,
-                            color: Colors.white70,
-                          ),
-                        ),
-                      ),
                       const SizedBox(height: 14),
                       FilledButton.icon(
                         icon: const GIcon(
@@ -252,7 +244,10 @@ class _LiveSetupState extends State<LiveSetup> with WidgetsBindingObserver {
                                 updatePreview(true);
                               },
                       ),
-                      const SizedBox(height: 18),
+                      if (!starting && widget.modePicker != null)
+                        widget.modePicker!
+                      else
+                        const SizedBox(height: 18),
                     ],
                   ),
                 ),

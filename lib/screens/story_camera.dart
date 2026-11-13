@@ -70,13 +70,13 @@ Future<String> storyComposite(
 class StoryCamera extends StatefulWidget {
   final ValueChanged<String> onMedia, onMode;
   final VoidCallback onCreate;
-  final bool showModes;
+  final Widget? modePicker;
   const StoryCamera({
     super.key,
     required this.onMedia,
     required this.onMode,
     required this.onCreate,
-    this.showModes = true,
+    this.modePicker,
   });
   @override
   State<StoryCamera> createState() => _StoryCameraState();
@@ -92,7 +92,8 @@ class _StoryCameraState extends State<StoryCamera> with WidgetsBindingObserver {
       grid = false,
       audio = true,
       hold = false,
-      recording = false;
+      recording = false,
+      moreTools = false;
   Timer? timer;
   final captures = <String>[];
   @override
@@ -425,23 +426,38 @@ class _StoryCameraState extends State<StoryCamera> with WidgetsBindingObserver {
                                 captures.clear();
                               });
                             }),
-                            tool(CupertinoIcons.square_split_2x2, 'Layout', () {
-                              setState(() {
-                                mode = 'Layout';
-                                cells = cells == 2 ? 4 : 2;
-                                captures.clear();
-                              });
-                            }),
+                            if (moreTools)
+                              tool(
+                                CupertinoIcons.square_split_2x2,
+                                'Layout',
+                                () {
+                                  setState(() {
+                                    mode = 'Layout';
+                                    cells = cells == 2 ? 4 : 2;
+                                    captures.clear();
+                                  });
+                                },
+                              ),
+                            if (moreTools)
+                              tool(
+                                CupertinoIcons.stop_circle,
+                                'Senza tenere premuto',
+                                () {
+                                  setState(
+                                    () => mode = mode == 'Senza tenere premuto'
+                                        ? 'Storia'
+                                        : 'Senza tenere premuto',
+                                  );
+                                },
+                              ),
                             tool(
-                              CupertinoIcons.stop_circle,
-                              'Senza tenere premuto',
-                              () {
-                                setState(
-                                  () => mode = mode == 'Senza tenere premuto'
-                                      ? 'Storia'
-                                      : 'Senza tenere premuto',
-                                );
-                              },
+                              moreTools
+                                  ? CupertinoIcons.chevron_up
+                                  : CupertinoIcons.chevron_down,
+                              moreTools
+                                  ? 'Riduci strumenti'
+                                  : 'Altri strumenti',
+                              () => setState(() => moreTools = !moreTools),
                             ),
                           ],
                         ),
@@ -557,41 +573,57 @@ class _StoryCameraState extends State<StoryCamera> with WidgetsBindingObserver {
                           ),
                         ),
                         Expanded(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              for (final item
-                                  in widget.showModes
-                                      ? ['POST', 'STORIA', 'REEL']
-                                      : <String>[])
-                                TextButton(
-                                  style: TextButton.styleFrom(
-                                    minimumSize: const Size(0, 36),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                    ),
-                                  ),
-                                  onPressed: item == 'STORIA'
-                                      ? null
-                                      : () => widget.onMode(
-                                          item.toLowerCase() == 'post'
-                                              ? 'post'
-                                              : 'reel',
+                          child:
+                              (widget.modePicker != null
+                                  ? IgnorePointer(
+                                      ignoring: recording || busy,
+                                      child: widget.modePicker,
+                                    )
+                                  : null) ??
+                              SectionSwipe(
+                                enabled: !recording && !busy,
+                                onStep: (step) =>
+                                    widget.onMode(step < 0 ? 'post' : 'reel'),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    for (final item in [
+                                      'POST',
+                                      'STORIA',
+                                      'REEL',
+                                    ])
+                                      TextButton(
+                                        style: TextButton.styleFrom(
+                                          minimumSize: const Size(0, 36),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                          ),
                                         ),
-                                  child: Text(
-                                    item,
-                                    style: TextStyle(
-                                      color: item == 'STORIA'
-                                          ? accent(c)
-                                          : secondaryText(c),
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 1,
-                                    ),
-                                  ),
+                                        onPressed:
+                                            item == 'STORIA' ||
+                                                recording ||
+                                                busy
+                                            ? null
+                                            : () => widget.onMode(
+                                                item.toLowerCase() == 'post'
+                                                    ? 'post'
+                                                    : 'reel',
+                                              ),
+                                        child: Text(
+                                          item,
+                                          style: TextStyle(
+                                            color: item == 'STORIA'
+                                                ? accent(c)
+                                                : secondaryText(c),
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            letterSpacing: 1,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
                                 ),
-                            ],
-                          ),
+                              ),
                         ),
                         IconButton(
                           tooltip: 'Cambia fotocamera',

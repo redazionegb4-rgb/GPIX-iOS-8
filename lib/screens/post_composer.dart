@@ -389,7 +389,11 @@ class _PostComposerState extends State<PostComposer> {
   Future<void> selectPhoto(GalleryPhoto photo, {bool toggle = false}) async {
     final selected = copied[photo.id];
     if (!toggle && selected != null && files.contains(selected)) {
-      openPhotoPreview(context, selected);
+      openPhotoGallery(
+        context,
+        List.of(files),
+        initial: files.indexOf(selected),
+      );
       return;
     }
     if (copying) return;
@@ -556,7 +560,7 @@ class _PostComposerState extends State<PostComposer> {
       onPageChanged: (i) => setState(() => index = i),
       itemBuilder: (c, i) => step == 0
           ? InkWell(
-              onTap: () => openPhotoPreview(c, files[i]),
+              onTap: () => openPhotoGallery(c, List.of(files), initial: i),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -720,10 +724,11 @@ class _PostComposerState extends State<PostComposer> {
             color: foreground(c),
           ),
         ),
-        title: Text(
-          step == 1 ? 'Modifica post' : 'Nuovo post',
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
-        ),
+        title: Text(switch (step) {
+          1 => 'Modifica post',
+          2 => 'Condividi post',
+          _ => 'Nuovo post',
+        }, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
         actions: [
           if (step != 2)
             TextButton.icon(
@@ -795,11 +800,24 @@ class _PostComposerState extends State<PostComposer> {
               ),
             )
           : null,
-      body: step == 0
-          ? selectPage(c)
-          : step == 1
-          ? editPage(c)
-          : share(c),
+      body: TweenAnimationBuilder<double>(
+        key: ValueKey(step),
+        tween: Tween(begin: MediaQuery.disableAnimationsOf(c) ? 1 : 0, end: 1),
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        builder: (_, value, child) => Opacity(
+          opacity: value,
+          child: FractionalTranslation(
+            translation: Offset((1 - value) * .025, 0),
+            child: child,
+          ),
+        ),
+        child: switch (step) {
+          0 => selectPage(c),
+          1 => editPage(c),
+          _ => share(c),
+        },
+      ),
     );
   }
 
@@ -834,39 +852,56 @@ class _PostComposerState extends State<PostComposer> {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           child: Row(
             children: [
-              TextButton(
-                onPressed: () => pick(),
-                child: Row(
-                  children: [
-                    Text(
-                      'Recenti',
-                      style: TextStyle(
-                        color: foreground(c),
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                      ),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: () => pick(),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
                     ),
-                    SizedBox(width: 6),
-                    GIcon(
-                      CupertinoIcons.chevron_down,
-                      color: foreground(c),
-                      size: 15,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            'Recenti',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: foreground(c),
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 6),
+                        GIcon(
+                          CupertinoIcons.chevron_down,
+                          color: foreground(c),
+                          size: 15,
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
-              const Spacer(),
               TextButton.icon(
                 onPressed: () => setState(() {
                   multiple = !multiple;
                   if (!multiple && files.length > 1) {
-                    files = [files[index]];
+                    files = [files[index.clamp(0, files.length - 1)]];
                     index = 0;
                   }
                 }),
                 style: TextButton.styleFrom(
                   backgroundColor: multiple ? blue : subdued(c),
                   foregroundColor: multiple ? Colors.white : foreground(c),
+                  padding: const EdgeInsets.symmetric(horizontal: 11),
+                  textStyle: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 icon: GIcon(
                   CupertinoIcons.square_on_square,
@@ -1603,14 +1638,14 @@ class _PostComposerState extends State<PostComposer> {
       children: [
         const SizedBox(height: 12),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             child: LayoutBuilder(
               builder: (c, box) => SizedBox(
                 height: (box.maxWidth / aspect).clamp(
                   180.0,
-                  MediaQuery.sizeOf(c).height * .46,
+                  MediaQuery.sizeOf(c).height * .36,
                 ),
                 child: Stack(
                   fit: StackFit.expand,
@@ -1656,7 +1691,10 @@ class _PostComposerState extends State<PostComposer> {
         Container(
           margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
           padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(color: Theme.of(c).canvasColor),
+          decoration: BoxDecoration(
+            color: subdued(c),
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: TextField(
             controller: caption,
             maxLength: 2200,

@@ -117,63 +117,64 @@ class NoteBubble extends StatelessWidget {
   const NoteBubble({super.key, required this.text, this.placeholder = false});
   @override
   Widget build(BuildContext c) {
-    final fill = Theme.of(c).brightness == Brightness.dark
-        ? subdued(c)
-        : surface(c);
-    return SizedBox(
-      height: 65,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            key: const ValueKey('note-bubble-body'),
-            height: 48,
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: fill,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x16000000),
-                  blurRadius: 12,
-                  offset: Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Text(
-              text,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12,
-                height: 1.15,
-                color: placeholder ? secondaryText(c) : foreground(c),
-              ),
-            ),
-          ),
-          Positioned(
-            top: 49,
-            left: 22,
-            child: Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(color: fill, shape: BoxShape.circle),
-            ),
-          ),
-          Positioned(
-            top: 59,
-            left: 28,
-            child: Container(
-              width: 5,
-              height: 5,
-              decoration: BoxDecoration(color: fill, shape: BoxShape.circle),
-            ),
-          ),
-        ],
+    final theme = Theme.of(c);
+    final fill = theme.brightness == Brightness.dark
+        ? theme.colorScheme.surfaceContainerHighest
+        : const Color(0xfff8f9fb);
+    final border = theme.dividerColor;
+    Widget dot(double size) => Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: fill,
+        border: Border.all(color: border),
+        shape: BoxShape.circle,
       ),
+    );
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          key: const ValueKey('note-bubble-body'),
+          constraints: const BoxConstraints(minHeight: 37),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: fill,
+            border: Border.all(color: border),
+            borderRadius: BorderRadius.circular(15),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x12000000),
+                blurRadius: 8,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Text(
+            text,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.15,
+              color: placeholder ? secondaryText(c) : foreground(c),
+            ),
+          ),
+        ),
+        const SizedBox(height: 2),
+        Padding(
+          padding: const EdgeInsets.only(left: 19),
+          child: Align(alignment: Alignment.centerLeft, child: dot(6)),
+        ),
+        const SizedBox(height: 2),
+        Padding(
+          padding: const EdgeInsets.only(left: 26),
+          child: Align(alignment: Alignment.centerLeft, child: dot(4)),
+        ),
+      ],
     );
   }
 }
@@ -204,24 +205,34 @@ class _NotesTrayState extends State<NotesTray> {
   Widget build(BuildContext c) {
     final s = GpixScope.of(c), notes = s.notes;
     final own = notes.where((n) => n.str('owner') == s.myId).firstOrNull;
+    final textSize = MediaQuery.textScalerOf(
+      c,
+    ).scale(12).clamp(12.0, double.infinity);
+    final bubbleHeight = 34 + textSize * 2.4;
     return SizedBox(
-      height: 170,
+      height: bubbleHeight + 86 + textSize * 1.25,
       child: ListView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
         children: [
-          tile(c, s.myId, own, own: true),
+          tile(c, s.myId, own, bubbleHeight, own: true),
           for (final n in notes.where((n) => n.str('owner') != s.myId))
-            tile(c, n.str('owner'), n),
+            tile(c, n.str('owner'), n, bubbleHeight),
         ],
       ),
     );
   }
 
-  Widget tile(BuildContext c, String id, J? note, {bool own = false}) {
+  Widget tile(
+    BuildContext c,
+    String id,
+    J? note,
+    double bubbleHeight, {
+    bool own = false,
+  }) {
     final s = GpixScope.of(c);
     return SizedBox(
-      width: 106,
+      width: 96,
       child: InkWell(
         onTap: () => own ? manageOwnNote(c) : replyNote(c, note!),
         onDoubleTap: own || note == null
@@ -234,31 +245,32 @@ class _NotesTrayState extends State<NotesTray> {
                   'enabled': true,
                 }),
               ),
+        borderRadius: BorderRadius.circular(16),
         child: Column(
           children: [
             SizedBox(
-              width: 106,
-              height: 130,
-              child: Stack(
+              width: 84,
+              height: bubbleHeight,
+              child: Align(
                 alignment: Alignment.bottomCenter,
+                child: NoteBubble(
+                  text: note?.str('text') ?? 'Lascia una nota…',
+                  placeholder: note == null,
+                ),
+              ),
+            ),
+            const SizedBox(height: 3),
+            SizedBox(
+              width: 74,
+              height: 65,
+              child: Stack(
+                alignment: Alignment.center,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 3),
-                    child: Avatar(id, size: 76),
-                  ),
-                  Positioned(
-                    top: 3,
-                    left: 3,
-                    right: 3,
-                    child: NoteBubble(
-                      text: note?.str('text') ?? 'Lascia una nota…',
-                      placeholder: note == null,
-                    ),
-                  ),
+                  Avatar(id, size: 64),
                   if (note?.flag('likedByMe') == true ||
                       own && (note?.number('likesCount') ?? 0) > 0)
                     Positioned(
-                      right: 12,
+                      right: 0,
                       bottom: 0,
                       child: Container(
                         padding: const EdgeInsets.all(4),
@@ -276,7 +288,7 @@ class _NotesTrayState extends State<NotesTray> {
                   if (note?.str('audience') == 'close')
                     const Positioned(
                       bottom: 2,
-                      right: 16,
+                      right: 0,
                       child: GIcon(
                         CupertinoIcons.star_circle_fill,
                         color: Colors.green,
@@ -293,7 +305,8 @@ class _NotesTrayState extends State<NotesTray> {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 12,
-                color: own ? muted : foreground(c),
+                height: 1.2,
+                color: own ? secondaryText(c) : foreground(c),
               ),
             ),
           ],

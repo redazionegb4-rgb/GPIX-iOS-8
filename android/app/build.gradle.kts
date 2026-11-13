@@ -25,7 +25,7 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         ndk { abiFilters += setOf("armeabi-v7a", "arm64-v8a", "x86_64") }
-        minSdk = maxOf(flutter.minSdkVersion, 23)
+        minSdk = maxOf(flutter.minSdkVersion, 24)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -43,6 +43,8 @@ android {
         release {
             // Public beta signing key. Replace before production.
             signingConfig = signingConfigs.getByName("beta")
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 }

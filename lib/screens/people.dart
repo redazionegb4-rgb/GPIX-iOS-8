@@ -42,11 +42,11 @@ class _ConnectionsState extends State<Connections>
         title: pageTitle(u.str('username')),
         bottom: TabBar(
           controller: tabs,
-          labelColor: ink,
-          unselectedLabelColor: muted,
-          indicatorColor: ink,
+          labelColor: foreground(c),
+          unselectedLabelColor: secondaryText(c),
+          indicatorColor: foreground(c),
           indicatorSize: TabBarIndicatorSize.tab,
-          dividerColor: line,
+          dividerColor: Theme.of(c).dividerColor,
           tabs: [
             Tab(text: '${u.str('followers', '0')} follower'),
             Tab(text: '${u.str('following', '0')} seguiti'),
@@ -68,13 +68,13 @@ class _ConnectionsState extends State<Connections>
                     onChanged: (_) => setState(() {}),
                     decoration: InputDecoration(
                       hintText: 'Cerca',
-                      prefixIcon: const GIcon(
+                      prefixIcon: GIcon(
                         CupertinoIcons.search,
                         size: 19,
-                        color: muted,
+                        color: secondaryText(c),
                       ),
                       filled: true,
-                      fillColor: soft,
+                      fillColor: subdued(c),
                       isDense: true,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(11),

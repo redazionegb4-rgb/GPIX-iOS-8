@@ -21,6 +21,7 @@ import 'social.dart';
 import 'video.dart';
 import 'emoji_picker.dart';
 import 'giphy.dart';
+import 'music_picker.dart';
 import 'story_stickers.dart';
 import 'story_camera.dart';
 import 'post_composer.dart';
@@ -42,6 +43,7 @@ class StoryCanvas extends StatelessWidget {
   final void Function(int, Offset)? onStickerMove;
   final ValueChanged<int>? onStickerTap;
   final ValueChanged<J>? onStickerAction;
+  final ValueChanged<int>? onStickerVote;
   const StoryCanvas({
     super.key,
     required this.story,
@@ -52,6 +54,7 @@ class StoryCanvas extends StatelessWidget {
     this.onStickerMove,
     this.onStickerTap,
     this.onStickerAction,
+    this.onStickerVote,
   });
   @override
   Widget build(BuildContext c) {
@@ -158,42 +161,8 @@ class StoryCanvas extends StatelessWidget {
                   ),
                 ),
               ),
-            for (var i = 0; i < style.rows('stickers').length; i++)
-              Positioned(
-                left:
-                    box.maxWidth *
-                    style.rows('stickers')[i].number('x', .4).clamp(0, .8),
-                top:
-                    box.maxHeight *
-                    style.rows('stickers')[i].number('y', .5).clamp(0, .85),
-                child: GestureDetector(
-                  onTap: editing
-                      ? () => onStickerTap?.call(i)
-                      : onStickerAction == null ||
-                            !interactiveStoryStickers.contains(
-                              style.rows('stickers')[i].str('type'),
-                            )
-                      ? null
-                      : () => onStickerAction!(style.rows('stickers')[i]),
-                  onPanUpdate: editing
-                      ? (d) => onStickerMove?.call(
-                          i,
-                          Offset(
-                            d.delta.dx / box.maxWidth,
-                            d.delta.dy / box.maxHeight,
-                          ),
-                        )
-                      : null,
-                  child: Transform.rotate(
-                    angle: style.rows('stickers')[i].number('angle'),
-                    child: StoryStickerFace(
-                      sticker: style.rows('stickers')[i],
-                      post: story,
-                      editing: editing,
-                    ),
-                  ),
-                ),
-              ),
+            for (final (index, sticker) in style.rows('stickers').indexed)
+              _canvasSticker(box, story, sticker, index),
             if (style.str('caption').isNotEmpty)
               Positioned(
                 bottom: 16,
@@ -225,6 +194,98 @@ class StoryCanvas extends StatelessWidget {
       ),
     );
   }
+
+  Widget _canvasSticker(BoxConstraints box, J story, J sticker, int index) {
+    final type = sticker.str('type');
+    final interactiveVote = const {'poll', 'slider', 'rating'}.contains(type);
+    final size = sticker.number('size', 52).clamp(28, 94).toDouble();
+    final width = (interactiveVote ? size * 4.5 : 216.0).clamp(
+      0.0,
+      (box.maxWidth - 16).clamp(0.0, 250.0),
+    );
+    return Positioned.fill(
+      child: CustomSingleChildLayout(
+        delegate: _StickerPosition(
+          sticker.number('x', .4),
+          sticker.number('y', .5),
+          width,
+        ),
+        child: Builder(
+          builder: (target) => GestureDetector(
+            onTap: editing
+                ? () => onStickerTap?.call(index)
+                : onStickerAction != null &&
+                      interactiveStoryStickers.contains(type)
+                ? () => onStickerAction!({...sticker, 'position': index})
+                : null,
+            onPanUpdate: editing
+                ? (details) {
+                    final bounds = target.size ?? Size.zero;
+                    final limitX = (1 - bounds.width / box.maxWidth).clamp(
+                      0.0,
+                      1.0,
+                    );
+                    final limitY = (1 - bounds.height / box.maxHeight).clamp(
+                      0.0,
+                      1.0,
+                    );
+                    final oldX = sticker.number('x', .4);
+                    final oldY = sticker.number('y', .5);
+                    onStickerMove?.call(
+                      index,
+                      Offset(
+                        (oldX.clamp(0.0, limitX) +
+                                    details.delta.dx / box.maxWidth)
+                                .clamp(0.0, limitX) -
+                            oldX,
+                        (oldY.clamp(0.0, limitY) +
+                                    details.delta.dy / box.maxHeight)
+                                .clamp(0.0, limitY) -
+                            oldY,
+                      ),
+                    );
+                  }
+                : null,
+            child: Transform.rotate(
+              angle: sticker.number('angle'),
+              child: StoryStickerFace(
+                maxWidth: width,
+                onVote: onStickerVote,
+                sticker: sticker,
+                post: story,
+                editing: editing,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StickerPosition extends SingleChildLayoutDelegate {
+  const _StickerPosition(this.x, this.y, this.width);
+  final double x, y, width;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      BoxConstraints(maxWidth: width, maxHeight: constraints.maxHeight);
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) => Offset(
+    (size.width * x).clamp(
+      0.0,
+      (size.width - childSize.width).clamp(0.0, size.width),
+    ),
+    (size.height * y).clamp(
+      0.0,
+      (size.height - childSize.height).clamp(0.0, size.height),
+    ),
+  );
+
+  @override
+  bool shouldRelayout(_StickerPosition old) =>
+      old.x != x || old.y != y || old.width != width;
 }
 
 class StoryViewer extends StatefulWidget {
@@ -248,6 +309,9 @@ class _StoryViewerState extends State<StoryViewer>
   AudioPlayer get music => _music ??= AudioPlayer();
   List<String> ids = [];
   int index = 0;
+  double _verticalDrag = 0;
+  double _horizontalDrag = 0;
+  int _slideDirection = 0;
   bool initialized = false,
       paused = false,
       reactions = false,
@@ -306,6 +370,10 @@ class _StoryViewerState extends State<StoryViewer>
           s.url(audio).startsWith('https://')
               ? UrlSource(s.url(audio))
               : DeviceFileSource(audio),
+          position: Duration(
+            milliseconds: (p.obj('style').obj('music').number('start') * 1000)
+                .round(),
+          ),
         );
       } catch (_) {}
     }
@@ -313,7 +381,7 @@ class _StoryViewerState extends State<StoryViewer>
       perform(context, () => s.act('see', {'id': p['id']}));
   }
 
-  void next(int step) {
+  void next(int step, {bool slide = false}) {
     if (recording) return;
     if (index + step < 0) {
       progress.forward(from: 0);
@@ -325,7 +393,10 @@ class _StoryViewerState extends State<StoryViewer>
     }
     focus.unfocus();
     setState(() {
+      _horizontalDrag = 0;
+      _slideDirection = slide ? step : 0;
       index += step;
+      stickerBurst = '';
       reactions = false;
       paused = false;
     });
@@ -351,36 +422,134 @@ class _StoryViewerState extends State<StoryViewer>
     });
   }
 
+  bool votingSticker = false;
+
+  Future<void> voteOnSticker(J story, int choice) async {
+    if (votingSticker ||
+        story.obj('style').obj('poll').number('myVote', -1) >= 0)
+      return;
+    votingSticker = true;
+    progress.stop();
+    _music?.pause();
+    setState(() => paused = true);
+    try {
+      final store = GpixScope.of(context, listen: false);
+      await perform(
+        context,
+        () => store.act('pollVote', {'id': story.str('id'), 'choice': choice}),
+      );
+    } finally {
+      votingSticker = false;
+      if (mounted) {
+        setState(() => paused = false);
+        if (!focus.hasFocus && !reactions) {
+          progress.forward();
+          _music?.resume();
+        }
+      }
+    }
+  }
+
+  String stickerBurst = '';
+  int burstSequence = 0;
+
+  Future<void> showStoryActivity(J story) async {
+    if (paused || recording) return;
+    progress.stop();
+    _music?.pause();
+    setState(() => paused = true);
+    String? selected;
+    try {
+      selected = await Navigator.of(context).push(
+        PageRouteBuilder<String>(
+          opaque: false,
+          barrierColor: Colors.black,
+          pageBuilder: (_, _, _) =>
+              StoryActivityPanel(storyId: story.str('id')),
+          transitionDuration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 310),
+          reverseTransitionDuration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 240),
+          transitionsBuilder: (_, animation, _, child) => SlideTransition(
+            position: animation.drive(
+              Tween(
+                begin: const Offset(0, 1),
+                end: Offset.zero,
+              ).chain(CurveTween(curve: Curves.easeOutCubic)),
+            ),
+            child: child,
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        final store = GpixScope.of(context, listen: false);
+        final target = selected != null && store.post(selected).isNotEmpty
+            ? selected
+            : null;
+        final changed = target != null && target != ids[index];
+        setState(() {
+          paused = false;
+          if (changed) {
+            if (!ids.contains(target)) ids = [...ids, target];
+            index = ids.indexOf(target);
+            _slideDirection = 0;
+            stickerBurst = '';
+          }
+        });
+        if (changed) {
+          begin();
+        } else if (!focus.hasFocus && !reactions) {
+          progress.forward();
+          _music?.resume();
+        }
+      }
+    }
+  }
+
+  void _finishVerticalDrag(J story, bool own, [double velocity = 0]) {
+    if (paused || recording) return;
+    final movement = _verticalDrag;
+    setState(() => _verticalDrag = 0);
+    if (own && (movement < -55 || velocity < -480)) {
+      showStoryActivity(story);
+    } else if (movement > 80 || velocity > 620) {
+      Navigator.maybePop(context);
+    } else if (!focus.hasFocus && !reactions) {
+      progress.forward();
+      _music?.resume();
+    }
+  }
+
   Future<void> openSticker(J story, J sticker) async {
     final store = GpixScope.of(context, listen: false);
     final type = sticker.str('type');
     final label = sticker.str('label');
+    if (type == 'reaction') {
+      if (story.str('author') == store.myId) return;
+      setState(() {
+        stickerBurst = sticker.str('emoji');
+        burstSequence++;
+      });
+      final position = sticker.number('position').toInt();
+      if (!story.ids('myStickerReactions').contains('$position')) {
+        await perform(
+          context,
+          () => store.act('storyStickerResponse', {
+            'id': story.str('id'),
+            'position': position,
+          }),
+        );
+      }
+      return;
+    }
     progress.stop();
     _music?.pause();
     setState(() => paused = true);
     try {
       switch (type) {
-        case 'poll':
-        case 'slider':
-        case 'rating':
-          final poll = story.obj('style').obj('poll');
-          final choice = await sheet<int>(
-            context,
-            StoryVoteSheet(
-              poll: poll,
-              type: type,
-              own: story.str('author') == store.myId,
-            ),
-          );
-          if (choice != null && mounted) {
-            await perform(
-              context,
-              () => store.act('pollVote', {
-                'id': story.str('id'),
-                'choice': choice,
-              }),
-            );
-          }
         case 'question':
           if (!store.canReplyStory(story) || story.str('author') == store.myId)
             return;
@@ -388,26 +557,93 @@ class _StoryViewerState extends State<StoryViewer>
             context,
             label,
             'Risposta privata',
+            replying: true,
             limit: 500,
           );
           if (answer != null && mounted) {
             await perform(context, () async {
-              await store.storyReply(story, '$label\n$answer');
+              await store.act('storyStickerResponse', {
+                'id': story.str('id'),
+                'position': sticker.number('position').toInt(),
+                'text': answer,
+              });
               if (mounted) notice(context, 'Risposta inviata');
             });
           }
         case 'prompt':
-          await open(
+          final chain = sticker.str('chain', story.str('id'));
+          final related = store.allPosts
+              .where(
+                (post) =>
+                    post.str('kind') == 'story' &&
+                    post.str('id') != story.str('id') &&
+                    !post.flag('archived') &&
+                    post.number('expires') > now &&
+                    post
+                        .obj('style')
+                        .rows('stickers')
+                        .any(
+                          (item) =>
+                              item.str('type') == 'prompt' &&
+                              item.str('chain', post.str('id')) == chain,
+                        ),
+              )
+              .toList();
+          final selection = await sheet<String>(
             context,
-            Composer(
-              kind: 'story',
-              initialDraft: {
-                'style': {
-                  'stickers': [sticker],
-                },
-              },
+            Builder(
+              builder: (menu) => Padding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 18, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(menu).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(menu, ''),
+                      child: const Text('Tocca a te'),
+                    ),
+                    for (final post in related)
+                      ListTile(
+                        leading: Avatar(post.str('author')),
+                        title: Text(
+                          store.user(post.str('author')).str('username'),
+                        ),
+                        onTap: () => Navigator.pop(menu, post.str('id')),
+                      ),
+                  ],
+                ),
+              ),
             ),
           );
+          if (selection == null || !mounted) return;
+          if (selection.isNotEmpty) {
+            await open(
+              context,
+              StoryViewer(
+                user: store.post(selection).str('author'),
+                ids: [selection],
+              ),
+            );
+          } else {
+            await open(
+              context,
+              Composer(
+                kind: 'story',
+                initialDraft: {
+                  'style': {
+                    'stickers': [
+                      {...sticker, 'chain': chain},
+                    ],
+                  },
+                },
+              ),
+            );
+          }
         case 'mention':
           final username = label.replaceFirst('@', '').toLowerCase();
           final user = [store.me, ...store.users]
@@ -510,191 +746,163 @@ class _StoryViewerState extends State<StoryViewer>
         child: Column(
           children: [
             Expanded(
-              child: GestureDetector(
-                onLongPressStart: (_) {
-                  setState(() => paused = true);
-                  progress.stop();
-                  _music?.pause();
+              child: SectionSwipe(
+                onDrag: (distance) {
+                  if (paused || recording || MediaQuery.disableAnimationsOf(c))
+                    return;
+                  final limit = MediaQuery.sizeOf(c).width * .32;
+                  setState(
+                    () =>
+                        _horizontalDrag = (distance * .55).clamp(-limit, limit),
+                  );
                 },
-                onLongPressEnd: (_) {
-                  setState(() => paused = false);
-                  if (!focus.hasFocus) {
-                    progress.forward();
-                    _music?.resume();
-                  }
+                onStep: (step) {
+                  if (!paused) next(step, slide: true);
                 },
-                onTapUp: (d) => next(
-                  d.localPosition.dx < MediaQuery.sizeOf(c).width * .3 ? -1 : 1,
-                ),
-                onHorizontalDragEnd: (d) {
-                  if ((d.primaryVelocity ?? 0).abs() > 150)
-                    next((d.primaryVelocity ?? 0) < 0 ? 1 : -1);
-                },
-                onVerticalDragEnd: (d) {
-                  if ((d.primaryVelocity ?? 0) > 200) Navigator.pop(c);
-                },
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(13),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      StoryCanvas(
-                        key: ValueKey(p['id']),
-                        story: p,
-                        onStickerAction: (sticker) => openSticker(p, sticker),
-                        onVideoDuration: (duration) {
-                          if (!mounted || duration.inMilliseconds <= 0) return;
-                          progress.duration = duration;
-                          if (!paused && !focus.hasFocus && !reactions)
-                            progress.forward(from: 0);
-                        },
-                        playing:
-                            !paused &&
-                            !focus.hasFocus &&
-                            !reactions &&
-                            (ModalRoute.of(c)?.isCurrent ?? true),
+                child: GestureDetector(
+                  onLongPressStart: (_) {
+                    setState(() => paused = true);
+                    progress.stop();
+                    _music?.pause();
+                  },
+                  onLongPressEnd: (_) {
+                    setState(() => paused = false);
+                    if (!focus.hasFocus) {
+                      progress.forward();
+                      _music?.resume();
+                    }
+                  },
+                  onTapUp: (d) => next(
+                    d.localPosition.dx < MediaQuery.sizeOf(c).width * .3
+                        ? -1
+                        : 1,
+                  ),
+                  onVerticalDragStart: (_) {
+                    _verticalDrag = 0;
+                    if (!recording && !paused) {
+                      progress.stop();
+                      _music?.pause();
+                    }
+                  },
+                  onVerticalDragUpdate: (details) {
+                    if (recording || paused) return;
+                    setState(() => _verticalDrag += details.primaryDelta!);
+                  },
+                  onVerticalDragCancel: () => _finishVerticalDrag(p, own),
+                  onVerticalDragEnd: (details) =>
+                      _finishVerticalDrag(p, own, details.primaryVelocity ?? 0),
+                  child: AnimatedContainer(
+                    duration:
+                        _verticalDrag == 0 &&
+                            _horizontalDrag == 0 &&
+                            !MediaQuery.disableAnimationsOf(c)
+                        ? const Duration(milliseconds: 200)
+                        : Duration.zero,
+                    curve: Curves.easeOutCubic,
+                    transformAlignment: Alignment.topCenter,
+                    transform: Matrix4.identity()
+                      ..translateByDouble(
+                        _horizontalDrag,
+                        (_verticalDrag * .65).clamp(-130.0, 240.0),
+                        0,
+                        1,
+                      )
+                      ..scaleByDouble(
+                        1 - (_verticalDrag.abs() / 1600).clamp(0.0, .13),
+                        1 - (_verticalDrag.abs() / 1600).clamp(0.0, .13),
+                        1,
+                        1,
                       ),
-                      if (reactions) const ColoredBox(color: Colors.black45),
-                      Positioned(
-                        top: 9,
-                        left: 8,
-                        right: 8,
-                        child: AnimatedBuilder(
-                          animation: progress,
-                          builder: (c, _) => Row(
-                            children: [
-                              for (var i = 0; i < segments.length; i++)
-                                Expanded(
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 2,
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(2),
-                                      child: LinearProgressIndicator(
-                                        value: i < segment
-                                            ? 1
-                                            : i == segment
-                                            ? progress.value
-                                            : 0,
-                                        minHeight: 2.5,
-                                        backgroundColor: Colors.white30,
-                                        valueColor:
-                                            const AlwaysStoppedAnimation(
-                                              Colors.white,
-                                            ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(13),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          TweenAnimationBuilder<double>(
+                            key: ValueKey(p['id']),
+                            tween: Tween(
+                              begin: MediaQuery.disableAnimationsOf(c)
+                                  ? 0
+                                  : _slideDirection.toDouble(),
+                              end: 0,
+                            ),
+                            duration: const Duration(milliseconds: 230),
+                            curve: Curves.easeOutCubic,
+                            builder: (_, value, child) => Transform(
+                              alignment: value > 0
+                                  ? Alignment.centerLeft
+                                  : Alignment.centerRight,
+                              transform: Matrix4.identity()
+                                ..setEntry(3, 2, .001)
+                                ..translateByDouble(
+                                  value * MediaQuery.sizeOf(c).width * .72,
+                                  0,
+                                  0,
+                                  1,
+                                )
+                                ..rotateY(value * .32),
+                              child: child,
+                            ),
+                            child: StoryCanvas(
+                              key: ValueKey(p['id']),
+                              story: p,
+                              onStickerAction: (sticker) =>
+                                  openSticker(p, sticker),
+                              onStickerVote: (choice) =>
+                                  voteOnSticker(p, choice),
+                              onVideoDuration: (duration) {
+                                if (!mounted || duration.inMilliseconds <= 0)
+                                  return;
+                                progress.duration = duration;
+                                if (!paused && !focus.hasFocus && !reactions)
+                                  progress.forward(from: 0);
+                              },
+                              playing:
+                                  !paused &&
+                                  !focus.hasFocus &&
+                                  !reactions &&
+                                  (ModalRoute.of(c)?.isCurrent ?? true),
+                            ),
                           ),
-                        ),
-                      ),
-                      Positioned(
-                        top: 25,
-                        left: 13,
-                        right: 5,
-                        child: Row(
-                          children: [
-                            Avatar(uid, size: 33),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text.rich(
-                                TextSpan(
-                                  children: [
-                                    TextSpan(
-                                      text: own
-                                          ? 'La tua storia'
-                                          : u.str('username'),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    TextSpan(
-                                      text: '  ${relative(p['created'])}',
-                                      style: const TextStyle(
-                                        color: Colors.white60,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                ),
+                          if (stickerBurst.isNotEmpty)
+                            Positioned.fill(
+                              child: StoryEmojiBurst(
+                                key: ValueKey(burstSequence),
+                                emoji: stickerBurst,
                               ),
                             ),
-                            if (p.str('audience') == 'close')
-                              const GIcon(
-                                CupertinoIcons.star_fill,
-                                color: Colors.greenAccent,
-                                size: 18,
-                              ),
-                            if (!reactions && !own)
-                              IconButton(
-                                tooltip: 'Opzioni storia',
-                                onPressed: () async {
-                                  progress.stop();
-                                  _music?.pause();
-                                  await postMenu(c, p);
-                                  if (mounted) {
-                                    if (s.post(ids[index]).isEmpty) {
-                                      next(1);
-                                    } else {
-                                      progress.forward();
-                                      _music?.resume();
-                                    }
-                                  }
-                                },
-                                icon: const GIcon(
-                                  CupertinoIcons.line_horizontal_3_decrease,
-                                  color: Colors.white,
-                                  size: 25,
-                                ),
-                              ),
-                            IconButton(
-                              tooltip: 'Chiudi storia',
-                              onPressed: () => Navigator.pop(c),
-                              icon: const GIcon(
-                                CupertinoIcons.xmark,
-                                color: Colors.white,
-                                size: 27,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (reactions && !own)
-                        Center(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 37),
-                            child: LayoutBuilder(
-                              builder: (c, b) => GridView.count(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                crossAxisCount: 3,
-                                mainAxisSpacing: 18,
-                                crossAxisSpacing: 15,
+                          if (reactions)
+                            const ColoredBox(color: Colors.black45),
+                          Positioned(
+                            top: 9,
+                            left: 8,
+                            right: 8,
+                            child: AnimatedBuilder(
+                              animation: progress,
+                              builder: (c, _) => Row(
                                 children: [
-                                  for (final emoji in [
-                                    '😂',
-                                    '😮',
-                                    '😍',
-                                    '😢',
-                                    '👏',
-                                    '🔥',
-                                  ])
-                                    GestureDetector(
-                                      onTap: () => respond(emoji),
-                                      child: Center(
-                                        child: Text(
-                                          emoji,
-                                          style: TextStyle(
-                                            fontSize: (b.maxWidth / 3 * .61)
-                                                .clamp(36, 65),
+                                  for (var i = 0; i < segments.length; i++)
+                                    Expanded(
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 2,
+                                        ),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            2,
+                                          ),
+                                          child: LinearProgressIndicator(
+                                            value: i < segment
+                                                ? 1
+                                                : i == segment
+                                                ? progress.value
+                                                : 0,
+                                            minHeight: 2.5,
+                                            backgroundColor: Colors.white30,
+                                            valueColor:
+                                                const AlwaysStoppedAnimation(
+                                                  Colors.white,
+                                                ),
                                           ),
                                         ),
                                       ),
@@ -703,8 +911,125 @@ class _StoryViewerState extends State<StoryViewer>
                               ),
                             ),
                           ),
-                        ),
-                    ],
+                          Positioned(
+                            top: 25,
+                            left: 13,
+                            right: 5,
+                            child: Row(
+                              children: [
+                                Avatar(uid, size: 33),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text.rich(
+                                    TextSpan(
+                                      children: [
+                                        TextSpan(
+                                          text: own
+                                              ? 'La tua storia'
+                                              : u.str('username'),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        TextSpan(
+                                          text: '  ${relative(p['created'])}',
+                                          style: const TextStyle(
+                                            color: Colors.white60,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                                if (p.str('audience') == 'close')
+                                  const GIcon(
+                                    CupertinoIcons.star_fill,
+                                    color: Colors.greenAccent,
+                                    size: 18,
+                                  ),
+                                if (!reactions && !own)
+                                  IconButton(
+                                    tooltip: 'Opzioni storia',
+                                    onPressed: () async {
+                                      progress.stop();
+                                      _music?.pause();
+                                      await postMenu(c, p);
+                                      if (mounted) {
+                                        if (s.post(ids[index]).isEmpty) {
+                                          next(1);
+                                        } else {
+                                          progress.forward();
+                                          _music?.resume();
+                                        }
+                                      }
+                                    },
+                                    icon: const GIcon(
+                                      CupertinoIcons.line_horizontal_3_decrease,
+                                      color: Colors.white,
+                                      size: 25,
+                                    ),
+                                  ),
+                                IconButton(
+                                  tooltip: 'Chiudi storia',
+                                  onPressed: () => Navigator.pop(c),
+                                  icon: const GIcon(
+                                    CupertinoIcons.xmark,
+                                    color: Colors.white,
+                                    size: 27,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (reactions && !own)
+                            Center(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 37,
+                                ),
+                                child: LayoutBuilder(
+                                  builder: (c, b) => GridView.count(
+                                    shrinkWrap: true,
+                                    physics:
+                                        const NeverScrollableScrollPhysics(),
+                                    crossAxisCount: 3,
+                                    mainAxisSpacing: 18,
+                                    crossAxisSpacing: 15,
+                                    children: [
+                                      for (final emoji in [
+                                        '😂',
+                                        '😮',
+                                        '😍',
+                                        '😢',
+                                        '👏',
+                                        '🔥',
+                                      ])
+                                        GestureDetector(
+                                          onTap: () => respond(emoji),
+                                          child: Center(
+                                            child: Text(
+                                              emoji,
+                                              style: TextStyle(
+                                                fontSize: (b.maxWidth / 3 * .61)
+                                                    .clamp(36, 65),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -717,22 +1042,56 @@ class _StoryViewerState extends State<StoryViewer>
                 ),
                 child: Row(
                   children: [
-                    TextButton.icon(
-                      onPressed: () async {
-                        progress.stop();
-                        await people(c, s.viewers(p), 'Visualizzazioni');
-                        if (mounted) progress.forward();
-                      },
-                      icon: const GIcon(
-                        CupertinoIcons.eye,
-                        color: Colors.white,
-                      ),
-                      label: Text(
-                        '${s.viewers(p).length}',
-                        style: const TextStyle(color: Colors.white),
+                    TextButton(
+                      onPressed: () => showStoryActivity(p),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (s.viewers(p).isEmpty)
+                            const GIcon(
+                              CupertinoIcons.person_2,
+                              color: Colors.white,
+                            )
+                          else
+                            SizedBox(
+                              width: 52,
+                              height: 25,
+                              child: Stack(
+                                alignment: Alignment.centerLeft,
+                                children: [
+                                  for (final (i, id)
+                                      in s.viewers(p).take(3).indexed)
+                                    Positioned(
+                                      left: i * 13.0,
+                                      child: Avatar(id, size: 25),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          const Text(
+                            'Attività',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ],
                       ),
                     ),
                     const Spacer(),
+                    IconButton(
+                      tooltip: 'Metti in evidenza',
+                      onPressed: () async {
+                        progress.stop();
+                        _music?.pause();
+                        await addStoryHighlight(c, p);
+                        if (mounted) {
+                          progress.forward();
+                          _music?.resume();
+                        }
+                      },
+                      icon: const GIcon(
+                        CupertinoIcons.heart_circle,
+                        color: Colors.white,
+                      ),
+                    ),
                     IconButton(
                       tooltip: 'Invia storia',
                       onPressed: () async {
@@ -869,16 +1228,15 @@ class _StoryViewerState extends State<StoryViewer>
 
 class Composer extends StatefulWidget {
   final String kind;
-  final bool editStory, studio;
+  final bool editStory;
   final J? initialDraft;
-  final VoidCallback? onEditorOpened;
+  final Widget? modePicker;
   const Composer({
     super.key,
     required this.kind,
     this.editStory = false,
-    this.studio = false,
     this.initialDraft,
-    this.onEditorOpened,
+    this.modePicker,
   });
   @override
   State<Composer> createState() => _ComposerState();
@@ -938,13 +1296,14 @@ class _ComposerState extends State<Composer> {
   double x = .5, y = .65, size = 29, zoom = 1, aspect = 1;
   String sticker = '';
   String audio = '';
+  J? storyMusic;
   final caption = TextEditingController();
   final canvasKey = GlobalKey();
   final List<J> stickers = [];
   J? stickerPoll;
   bool highlightAfterPublish = false;
   int selectedSticker = -1;
-  bool busy = false, cameraStage = false;
+  bool busy = false, cameraStage = false, expandedTools = false;
   @override
   void initState() {
     super.initState();
@@ -960,6 +1319,7 @@ class _ComposerState extends State<Composer> {
       reelAudience = d.str('audience') == 'close' ? 'close' : 'followers';
       final st = d.obj('style');
       audio = st.str('audio');
+      if (st.obj('music').isNotEmpty) storyMusic = st.obj('music');
       aspect = st.number('aspect', 1).toDouble();
       x = st.number('x', .5).toDouble();
       y = st.number('y', .65).toDouble();
@@ -990,6 +1350,7 @@ class _ComposerState extends State<Composer> {
   J get style => {
     'caption': caption.text,
     'audio': audio,
+    if (storyMusic != null) 'music': storyMusic,
     'aspect': aspect,
     'x': x,
     'y': y,
@@ -1034,29 +1395,6 @@ class _ComposerState extends State<Composer> {
     });
   }
 
-  Future<void> chooseMedia({bool camera = false}) async {
-    if (kind != 'story') {
-      await pick(camera: camera, video: kind == 'reel');
-      return;
-    }
-    await sheet(
-      context,
-      Column(
-        children: [
-          ActionRow(CupertinoIcons.photo, 'Foto', () {
-            Navigator.pop(context);
-            pick(camera: camera);
-          }),
-          ActionRow(CupertinoIcons.videocam, 'Video', () {
-            Navigator.pop(context);
-            pick(camera: camera, video: true);
-          }),
-          const SizedBox(height: 20),
-        ],
-      ),
-    );
-  }
-
   Future<void> publish({String? audience}) async {
     final selectedAudience =
         audience ?? (kind == 'reel' ? reelAudience : 'all');
@@ -1096,7 +1434,9 @@ class _ComposerState extends State<Composer> {
           ),
         );
       }
-      final track = audio.isEmpty
+      final track = storyMusic != null
+          ? storyMusic!.str('audio')
+          : audio.isEmpty
           ? ''
           : await s.upload(
               audio,
@@ -1194,17 +1534,15 @@ class _ComposerState extends State<Composer> {
     final story = kind == 'story';
     if (story && cameraStage)
       return StoryCamera(
-        showModes: !widget.studio,
+        modePicker: widget.modePicker,
         onMedia: (path) {
           setState(() {
             files = [path];
             cameraStage = false;
           });
-          widget.onEditorOpened?.call();
         },
         onCreate: () {
           setState(() => cameraStage = false);
-          widget.onEditorOpened?.call();
         },
         onMode: (mode) => setState(() {
           kind = mode;
@@ -1281,7 +1619,9 @@ class _ComposerState extends State<Composer> {
                       child: ClipPlayer(
                         reference: files.first,
                         fit: BoxFit.contain,
-                        active: TickerMode.of(c),
+                        active:
+                            TickerMode.of(c) &&
+                            (ModalRoute.of(c)?.isCurrent ?? true),
                       ),
                     ),
                     Positioned(
@@ -1396,6 +1736,9 @@ class _ComposerState extends State<Composer> {
           (item) => ['poll', 'slider', 'rating'].contains(item.str('type')),
         );
       }
+      if (tool == StoryStickerTool.music) {
+        stickers.removeWhere((item) => item.str('type') == 'music');
+      }
       stickers.add({
         'type': tool.name,
         'x': .18 + (stickers.length % 2) * .13,
@@ -1409,8 +1752,8 @@ class _ComposerState extends State<Composer> {
   }
 
   Future<void> chooseSticker() async {
-    final tool = await sheet(context, const StoryStickerPicker());
-    if (tool is! StoryStickerTool || !mounted) return;
+    final tool = await pickStorySticker(context);
+    if (tool == null || !mounted) return;
     switch (tool) {
       case StoryStickerTool.highlight:
         setState(() => highlightAfterPublish = !highlightAfterPublish);
@@ -1421,8 +1764,16 @@ class _ComposerState extends State<Composer> {
               : 'Aggiunta alle raccolte annullata.',
         );
       case StoryStickerTool.music:
-        await chooseMusic();
+        final track = await open<J>(context, const MusicPicker());
+        if (track != null && mounted) {
+          storyMusic = track;
+          audio = '';
+          addStorySticker(tool, {
+            'label': "${track.str('title')} · ${track.str('artist')}",
+          });
+        }
       case StoryStickerTool.emoji:
+      case StoryStickerTool.reaction:
         final emoji = await sheet<String>(
           context,
           Builder(
@@ -1481,39 +1832,19 @@ class _ComposerState extends State<Composer> {
       case StoryStickerTool.time:
         addStorySticker(tool, {'label': TimeOfDay.now().format(context)});
       case StoryStickerTool.poll:
-        final result = await sheet<J>(
-          context,
-          PollEditor(initial: stickerPoll),
-        );
-        if (result == null || !mounted) return;
-        if (result.isEmpty) {
-          setState(() {
-            stickerPoll = null;
-            stickers.removeWhere(
-              (item) => ['poll', 'slider', 'rating'].contains(item.str('type')),
-            );
-            selectedSticker = -1;
-          });
-          return;
-        }
-        stickerPoll = result;
-        addStorySticker(tool, {'label': result.str('question')});
       case StoryStickerTool.slider:
       case StoryStickerTool.rating:
-        final prompt = await storyStickerInput(
-          context,
-          tool.label,
-          'Cosa vuoi chiedere?',
-          limit: 120,
-        );
-        if (prompt == null || !mounted) return;
+        final result = await editStoryVote(context, tool);
+        if (result == null || !mounted) return;
         stickerPoll = {
-          'question': prompt,
-          'options': tool == StoryStickerTool.rating
-              ? ['★', '★★', '★★★', '★★★★']
-              : ['🙂', '😊', '😍', '🤩'],
+          'question': result.str('question'),
+          'options': result.ids('options'),
         };
-        addStorySticker(tool, {'label': prompt});
+        addStorySticker(tool, {
+          'label': result.str('question'),
+          'palette': result.number('palette'),
+          'emoji': result.str('emoji'),
+        });
       case StoryStickerTool.countdown:
         final label = await storyStickerInput(
           context,
@@ -1602,6 +1933,7 @@ class _ComposerState extends State<Composer> {
             StoryStickerTool.hashtag => '#${value.replaceFirst('#', '')}',
             _ => value,
           },
+          if (tool == StoryStickerTool.prompt) 'chain': newId(),
           if (tool == StoryStickerTool.place)
             'url': Uri.https('www.google.com', '/maps/search/', {
               'api': '1',
@@ -1618,7 +1950,12 @@ class _ComposerState extends State<Composer> {
         allowedExtensions: ['m4a', 'mp3', 'wav'],
       );
       if (f?.files.single.path != null)
-        setState(() => audio = f!.files.single.path!);
+        setState(() {
+          audio = f!.files.single.path!;
+          storyMusic = null;
+          stickers.removeWhere((item) => item.str('type') == 'music');
+          selectedSticker = -1;
+        });
     });
   }
 
@@ -1708,8 +2045,8 @@ class _ComposerState extends State<Composer> {
           editing: true,
           onStickerTap: (i) => setState(() => selectedSticker = i),
           onStickerMove: (i, d) => setState(() {
-            stickers[i]['x'] = (stickers[i].number('x') + d.dx).clamp(0, .8);
-            stickers[i]['y'] = (stickers[i].number('y') + d.dy).clamp(.05, .85);
+            stickers[i]['x'] = (stickers[i].number('x') + d.dx).clamp(0, 1);
+            stickers[i]['y'] = (stickers[i].number('y') + d.dy).clamp(0, 1);
             selectedSticker = i;
           }),
           onMove: (p) => setState(() {
@@ -1746,7 +2083,7 @@ class _ComposerState extends State<Composer> {
                   child: const Text('Scrivi un pensiero'),
                 ),
                 TextButton(
-                  onPressed: chooseMedia,
+                  onPressed: () => pick(),
                   child: const Text(
                     'Scegli una foto',
                     style: TextStyle(color: Colors.white),
@@ -1838,7 +2175,32 @@ class _ComposerState extends State<Composer> {
               () => setState(() => background = (background + 1) % 4),
             ),
             const SizedBox(height: 10),
-            tool(CupertinoIcons.chevron_down, 'Galleria', chooseMedia),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 240),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: expandedTools
+                  ? Column(
+                      children: [
+                        tool(CupertinoIcons.photo, 'Foto', () => pick()),
+                        const SizedBox(height: 10),
+                        tool(
+                          CupertinoIcons.videocam,
+                          'Video',
+                          () => pick(video: true),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
+            ),
+            tool(
+              expandedTools
+                  ? CupertinoIcons.chevron_up
+                  : CupertinoIcons.chevron_down,
+              expandedTools ? 'Riduci strumenti' : 'Altri strumenti',
+              () => setState(() => expandedTools = !expandedTools),
+            ),
           ],
         ),
       ),
@@ -1900,6 +2262,7 @@ class _ComposerState extends State<Composer> {
                       tooltip: 'Elimina sticker',
                       onPressed: () => setState(() {
                         final removed = stickers.removeAt(selectedSticker);
+                        if (removed.str('type') == 'music') storyMusic = null;
                         if ([
                           'poll',
                           'slider',

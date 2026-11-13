@@ -260,7 +260,13 @@ class _ClipPlayerState extends State<ClipPlayer> with WidgetsBindingObserver {
 class Reels extends StatefulWidget {
   final bool active;
   final String? initial;
-  const Reels({super.key, this.active = true, this.initial});
+  final double bottomOverlay;
+  const Reels({
+    super.key,
+    this.active = true,
+    this.initial,
+    this.bottomOverlay = 0,
+  });
   @override
   State<Reels> createState() => _ReelsState();
 }
@@ -277,7 +283,7 @@ class _ReelsState extends State<Reels> {
           ? 0
           : reels
                 .indexWhere((r) => r.str('id') == widget.initial)
-                .clamp(0, reels.length);
+                .clamp(0, (reels.length - 1).clamp(0, reels.length));
       controller = PageController(initialPage: page);
     }
   }
@@ -291,10 +297,13 @@ class _ReelsState extends State<Reels> {
   @override
   Widget build(BuildContext c) {
     final s = GpixScope.of(c), reels = s.reels;
+    final topInset = MediaQuery.paddingOf(c).top;
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
+        top: false,
         child: Stack(
+          fit: StackFit.expand,
           children: [
             if (reels.isEmpty)
               const Center(
@@ -339,7 +348,7 @@ class _ReelsState extends State<Reels> {
                       Positioned(
                         left: 17,
                         right: 75,
-                        bottom: 20,
+                        bottom: 20 + widget.bottomOverlay,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -390,6 +399,8 @@ class _ReelsState extends State<Reels> {
                             const SizedBox(height: 8),
                             Text(
                               p.str('text'),
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 13,
@@ -419,7 +430,7 @@ class _ReelsState extends State<Reels> {
                       ),
                       Positioned(
                         right: 8,
-                        bottom: 60,
+                        bottom: 45 + widget.bottomOverlay,
                         child: Column(
                           children: [
                             action(
@@ -504,20 +515,22 @@ class _ReelsState extends State<Reels> {
                 },
               ),
             Positioned(
-              top: 8,
-              left: widget.initial == null ? 18 : 53,
+              top: topInset + 8,
+              left: 56,
+              right: 56,
               child: const Text(
                 'Reel',
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
-                  fontSize: 25,
+                  fontSize: 21,
                 ),
               ),
             ),
             if (widget.initial != null)
               Positioned(
-                top: 0,
+                top: topInset,
                 left: 0,
                 child: IconButton(
                   onPressed: () => Navigator.pop(c),
@@ -525,7 +538,7 @@ class _ReelsState extends State<Reels> {
                 ),
               ),
             Positioned(
-              top: 0,
+              top: topInset,
               right: 8,
               child: IconButton(
                 tooltip: 'Crea reel',
@@ -554,7 +567,14 @@ class _ReelsState extends State<Reels> {
       width: 46,
       child: Column(
         children: [
-          GIcon(icon, size: 29, color: color),
+          AnimatedSwitcher(
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 180),
+            transitionBuilder: (child, animation) =>
+                ScaleTransition(scale: animation, child: child),
+            child: GIcon(icon, key: ValueKey(icon), size: 29, color: color),
+          ),
           const SizedBox(height: 5),
           Text(
             count,

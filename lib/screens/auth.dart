@@ -344,29 +344,9 @@ class _WelcomeState extends State<Welcome> {
                           savedProfiles(c),
                           const SizedBox(height: 10),
                         ] else ...[
-                          const SizedBox(height: 25),
-                          const _AuthArtwork(),
-                          const SizedBox(height: 25),
-                          Text(
-                            'Le tue persone.\nI tuoi momenti.',
-                            style: TextStyle(
-                              fontSize: 39,
-                              height: 1.05,
-                              letterSpacing: -1.6,
-                              fontWeight: FontWeight.w800,
-                              color: foreground(c),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Quello che vivi, con chi vuoi.\nStorie, messaggi e piccoli istanti da condividere.',
-                            style: TextStyle(
-                              fontSize: 15,
-                              height: 1.5,
-                              color: secondaryText(c),
-                            ),
-                          ),
-                          const SizedBox(height: 30),
+                          const SizedBox(height: 32),
+                          const Center(child: _AuthArtwork()),
+                          const SizedBox(height: 32),
                         ],
                         PrimaryButton(
                           hasSavedAccounts
@@ -380,39 +360,12 @@ class _WelcomeState extends State<Welcome> {
                           secondary: true,
                           onTap: () => switchForm(true),
                         ),
-                        const SizedBox(height: 20),
-                        Text(
-                          'Un posto dove essere te stesso.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: secondaryText(c),
-                            fontSize: 12,
-                          ),
-                        ),
                       ] else ...[
                         const SizedBox(height: 30),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Container(
-                            padding: const EdgeInsets.all(13),
-                            decoration: BoxDecoration(
-                              color: auraBlue.withValues(alpha: .09),
-                              borderRadius: BorderRadius.circular(18),
-                            ),
-                            child: GIcon(
-                              register
-                                  ? CupertinoIcons.person_badge_plus
-                                  : CupertinoIcons.person_crop_circle,
-                              color: auraBlue,
-                              size: 26,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 18),
+                        const BrandLogo(width: 104),
+                        const SizedBox(height: 20),
                         Text(
-                          register
-                              ? 'Il primo passo,\nverso il tuo mondo.'
-                              : 'Bello ritrovarti.',
+                          register ? 'Crea un account' : 'Accedi a GPIX',
                           style: TextStyle(
                             color: foreground(c),
                             fontSize: 34,
@@ -422,17 +375,7 @@ class _WelcomeState extends State<Welcome> {
                           ),
                         ),
                         const SizedBox(height: 10),
-                        Text(
-                          register
-                              ? 'Crea il tuo account e fai spazio alle tue persone.'
-                              : 'Le tue conversazioni e i tuoi momenti ti aspettano.',
-                          style: TextStyle(
-                            color: secondaryText(c),
-                            height: 1.5,
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(height: 27),
+                        const SizedBox(height: 24),
                         AutofillGroup(
                           child: Form(
                             key: formKey,
@@ -637,111 +580,28 @@ class _WelcomeState extends State<Welcome> {
 /// Finite reveal respects Reduce Motion and never runs a background ticker.
 class _AuthArtwork extends StatelessWidget {
   const _AuthArtwork();
+
   @override
-  Widget build(BuildContext c) => TweenAnimationBuilder<double>(
-    tween: Tween(begin: 0, end: 1),
-    duration: MediaQuery.disableAnimationsOf(c)
+  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
+    tween: Tween(begin: .92, end: 1),
+    duration: MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
-        : const Duration(milliseconds: 1000),
+        : const Duration(milliseconds: 280),
     curve: Curves.easeOutCubic,
-    builder: (c, value, _) => SizedBox(
-      height: 245,
-      child: Stack(
-        alignment: Alignment.center,
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            width: 230,
-            height: 230,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [
-                  auraBlue.withValues(alpha: .18),
-                  auraBlue.withValues(alpha: 0),
-                ],
-              ),
-            ),
-          ),
-          Transform.translate(
-            offset: Offset(-64 * value, 12 + (1 - value) * 30),
-            child: Transform.rotate(
-              angle: -.14 * value,
-              child: _photo(c, 'assets/media/post3.jpg', 128, 175),
-            ),
-          ),
-          Transform.translate(
-            offset: Offset(40 * value, -(1 - value) * 30),
-            child: Transform.rotate(
-              angle: .1 * value,
-              child: _photo(c, 'assets/media/post0.jpg', 145, 204),
-            ),
-          ),
-          Positioned(
-            bottom: 4,
-            right: 6,
-            child: Opacity(
-              opacity: value,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: surface(c),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: Theme.of(c).dividerColor),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: .08),
-                      blurRadius: 20,
-                      offset: const Offset(0, 7),
-                    ),
-                  ],
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    GIcon(
-                      CupertinoIcons.heart_fill,
-                      size: 18,
-                      color: Color(0xFFFF5269),
-                    ),
-                    SizedBox(width: 8),
-                    Text(
-                      'I momenti che contano',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
+    builder: (_, scale, child) => Transform.scale(scale: scale, child: child),
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
-    ),
-  );
-  Widget _photo(BuildContext c, String path, double w, double h) => Container(
-    width: w,
-    height: h,
-    padding: const EdgeInsets.all(5),
-    decoration: BoxDecoration(
-      color: surface(c),
-      borderRadius: BorderRadius.circular(24),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: .15),
-          blurRadius: 24,
-          offset: const Offset(0, 10),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: GIcon(
+          CupertinoIcons.camera,
+          size: 44,
+          color: foreground(context),
         ),
-      ],
-    ),
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(19),
-      child: Image.asset(path, fit: BoxFit.cover),
+      ),
     ),
   );
 }
