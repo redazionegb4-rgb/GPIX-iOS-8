@@ -1,5 +1,6 @@
 import Flutter
 import UIKit
+import UserNotifications
 import Photos
 import Speech
 import FirebaseCore
@@ -29,6 +30,22 @@ import Translation
           self.pushRegistrationError = nil
           UIApplication.shared.registerForRemoteNotifications()
           result(nil)
+        case "badge":
+          let count = max(0, call.arguments as? Int ?? 0)
+          if #available(iOS 16.0, *) {
+            UNUserNotificationCenter.current().setBadgeCount(count) { error in
+              DispatchQueue.main.async {
+                if let error = error {
+                  result(FlutterError(code: "BADGE", message: error.localizedDescription, details: nil))
+                } else {
+                  result(nil)
+                }
+              }
+            }
+          } else {
+            UIApplication.shared.applicationIconBadgeNumber = count
+            result(nil)
+          }
         case "failure":
           if let error = self.pushRegistrationError {
             result(FlutterError(code: "APNS_\(error.code)",

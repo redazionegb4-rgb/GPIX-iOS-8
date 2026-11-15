@@ -1,3 +1,4 @@
+import 'social.dart' show TagPrivacyPage;
 export 'profile_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
@@ -308,7 +309,10 @@ class PrivacyTools extends StatelessWidget {
       body: ListView(
         children: [
           permission('allowMessages', 'Chi può inviarti messaggi e chiamarti'),
-          permission('allowMentions', 'Chi può taggarti e menzionarti'),
+          ListTile(
+            title: const Text('Tag e menzioni'),
+            onTap: () => open(c, const TagPrivacyPage()),
+          ),
           for (final e in {
             'hiddenStories': 'Nascondi le storie a',
             'muted': 'Account silenziati',

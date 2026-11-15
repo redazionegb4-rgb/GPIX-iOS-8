@@ -1897,6 +1897,12 @@ class _PostComposerState extends State<PostComposer> {
 
   Future<void> choosePlace(BuildContext c) async {
     var query = location.text.trim();
+    Timer? debounce;
+    final store = GpixScope.of(c, listen: false);
+    var remote = <J>[];
+    var loading = false;
+    var unavailable = false;
+    var generation = 0;
     final result = await sheet<String>(
       c,
       StatefulBuilder(
@@ -1924,7 +1930,41 @@ class _PostComposerState extends State<PostComposer> {
                 child: TextFormField(
                   initialValue: query,
                   textInputAction: TextInputAction.done,
-                  onChanged: (value) => update(() => query = value.trim()),
+                  onChanged: (value) {
+                    final request = ++generation;
+                    debounce?.cancel();
+                    update(() {
+                      query = value.trim();
+                      remote = [];
+                      unavailable = false;
+                      loading =
+                          store.state.flag('placesEnabled') &&
+                          query.length >= 2;
+                    });
+                    if (!loading) return;
+                    final term = query;
+                    debounce = Timer(
+                      const Duration(milliseconds: 450),
+                      () async {
+                        try {
+                          final result = await store.api(
+                            '/places?q=${Uri.encodeQueryComponent(term)}',
+                          );
+                          if (!page.mounted || request != generation) return;
+                          update(() {
+                            remote = result.rows('places');
+                            loading = false;
+                          });
+                        } catch (_) {
+                          if (!page.mounted || request != generation) return;
+                          update(() {
+                            loading = false;
+                            unavailable = true;
+                          });
+                        }
+                      },
+                    );
+                  },
                   onFieldSubmitted: (value) {
                     if (value.trim().isNotEmpty)
                       Navigator.pop(page, value.trim());
@@ -1935,6 +1975,26 @@ class _PostComposerState extends State<PostComposer> {
                   ),
                 ),
               ),
+              if (loading) const LinearProgressIndicator(),
+              if (unavailable)
+                const ListTile(
+                  title: Text('Ricerca Google Maps non disponibile'),
+                ),
+              for (final place in remote)
+                ListTile(
+                  leading: const GIcon(CupertinoIcons.placemark),
+                  title: Text(place.str('name')),
+                  subtitle: Text(place.str('address')),
+                  onTap: () => Navigator.pop(page, place.str('name')),
+                ),
+              if (remote.isNotEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(8),
+                  child: Text(
+                    'Google Maps',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
               for (final place in matches)
                 ListTile(
                   leading: const GIcon(CupertinoIcons.placemark),
@@ -1960,6 +2020,8 @@ class _PostComposerState extends State<PostComposer> {
         },
       ),
     );
+    debounce?.cancel();
+    generation++;
     if (result != null && mounted) setState(() => location.text = result);
   }
 

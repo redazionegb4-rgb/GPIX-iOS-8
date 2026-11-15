@@ -383,6 +383,7 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
       .where(
         (post) =>
             taggedInPost(post, user) &&
+            !post.ids('pendingTagUsers').contains(user) &&
             post.ids('hiddenTagUsers').contains(user) == hidden,
       )
       .toList();
@@ -1810,6 +1811,9 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
         final decision = p.str('decision');
         if (decision == 'hide') hidden.add(myId);
         item['hiddenTagUsers'] = hidden;
+        if (decision == 'show' || decision == 'remove') {
+          item['pendingTagUsers'] = item.ids('pendingTagUsers')..remove(myId);
+        }
         if (decision == 'remove') {
           final style = item.obj('style');
           style['taggedUsers'] = style.ids('taggedUsers')

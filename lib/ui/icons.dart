@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 class GIcon extends StatelessWidget {
   final IconData? icon;
+  final bool postAction;
   final double? size;
   final Color? color;
   final String? semanticLabel;
@@ -14,10 +15,13 @@ class GIcon extends StatelessWidget {
     this.color,
     this.semanticLabel,
     this.shadows,
+    this.postAction = false,
   });
   @override
   Widget build(BuildContext c) {
-    final name = names[icon];
+    final name = postAction && icon == CupertinoIcons.paperplane
+        ? 'postSend'
+        : names[icon];
     final resolvedColor = color == const Color(0xff15151b)
         ? Theme.of(c).colorScheme.onSurface
         : color;
@@ -114,6 +118,19 @@ class _LineIcon extends CustomPainter {
         path.cubicTo(15, 1.8, 21.7, 2.5, 21.7, 8);
         path.cubicTo(21.7, 13.5, 16, 18, 12, 21);
         path.close();
+        break;
+      case 'postSend':
+        path.moveTo(4, 4);
+        path.lineTo(20, 4);
+        path.quadraticBezierTo(23, 4, 21.5, 7);
+        path.lineTo(13.5, 20);
+        path.quadraticBezierTo(11.9, 22, 10.7, 19.4);
+        path.lineTo(8.4, 12);
+        path.lineTo(2.8, 7);
+        path.quadraticBezierTo(.6, 4, 4, 4);
+        path.close();
+        path.moveTo(8.4, 12);
+        path.lineTo(15.4, 7.9);
         break;
       case 'send':
         paint.style = kind.endsWith('Fill')

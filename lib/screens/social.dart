@@ -214,6 +214,7 @@ class PostAction extends StatelessWidget {
     required this.onTap,
     this.count,
     this.color,
+    this.feed = false,
   });
 
   final String label;
@@ -221,6 +222,7 @@ class PostAction extends StatelessWidget {
   final VoidCallback onTap;
   final int? count;
   final Color? color;
+  final bool feed;
 
   @override
   Widget build(BuildContext context) {
@@ -242,7 +244,7 @@ class PostAction extends StatelessWidget {
           child: Container(
             alignment: Alignment.centerLeft,
             constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-            padding: const EdgeInsets.symmetric(horizontal: 4),
+            padding: EdgeInsets.symmetric(horizontal: feed ? 3 : 4),
             child: FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
@@ -261,7 +263,8 @@ class PostAction extends StatelessWidget {
                       icon,
                       key: ValueKey(icon),
                       color: color ?? foreground(context),
-                      size: 23,
+                      size: feed ? 26 : 23,
+                      postAction: feed,
                     ),
                   ),
                   if (display != null) ...[
@@ -270,7 +273,7 @@ class PostAction extends StatelessWidget {
                       display,
                       style: const TextStyle(
                         fontSize: 13,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
@@ -2103,9 +2106,125 @@ class Explore extends StatelessWidget {
       DiscoverHome(initialQuery: initialQuery, detail: true);
 }
 
+class TagPrivacyPage extends StatelessWidget {
+  const TagPrivacyPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final store = GpixScope.of(context);
+    final pending = store.posts
+        .where((post) => post.ids('pendingTagUsers').contains(store.myId))
+        .toList();
+    return Scaffold(
+      appBar: AppBar(centerTitle: true, title: pageTitle('Tag e menzioni')),
+      body: ListView(
+        children: [
+          for (final (key, heading, labels) in [
+            (
+              'allowTags',
+              'Chi può taggarti?',
+              [
+                'Consenti i tag di chiunque',
+                'Consenti i tag delle persone che segui',
+                'Non consentire i tag',
+              ],
+            ),
+            (
+              'allowMentions',
+              'Chi può menzionarti?',
+              [
+                'Consenti a tutti di menzionarti',
+                'Consenti alle persone che segui di menzionarti',
+                'Non consentire le menzioni',
+              ],
+            ),
+          ]) ...[
+            ListTile(title: Text(heading)),
+            RadioGroup<String>(
+              groupValue: store.preferences.str(
+                key,
+                key == 'allowTags'
+                    ? store.preferences.str('allowMentions', 'all')
+                    : 'all',
+              ),
+              onChanged: (value) {
+                if (value != null)
+                  perform(context, () => store.setPreference(key, value));
+              },
+              child: Column(
+                children: [
+                  for (final (index, value) in [
+                    'all',
+                    'following',
+                    'none',
+                  ].indexed)
+                    RadioListTile<String>(
+                      value: value,
+                      title: Text(labels[index]),
+                      controlAffinity: ListTileControlAffinity.trailing,
+                    ),
+                ],
+              ),
+            ),
+            if (key == 'allowTags') ...[
+              const Divider(),
+              SwitchListTile(
+                title: const Text('Approva manualmente i tag'),
+                value: store.preferences.flag('approveTags'),
+                onChanged: (value) => perform(
+                  context,
+                  () => store.setPreference('approveTags', value),
+                ),
+              ),
+              ListTile(
+                title: const Text('Controlla i tag'),
+                trailing: const GIcon(CupertinoIcons.chevron_forward, size: 16),
+                subtitle: Text('${pending.length} in attesa'),
+                onTap: () => open(context, const PendingPostTagsPage()),
+              ),
+            ],
+            const Divider(),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class PendingPostTagsPage extends StatelessWidget {
+  const PendingPostTagsPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final store = GpixScope.of(context);
+    final pending = store.posts
+        .where((post) => post.ids('pendingTagUsers').contains(store.myId))
+        .toList();
+    return Scaffold(
+      appBar: AppBar(centerTitle: true, title: pageTitle('Tag in attesa')),
+      body: pending.isEmpty
+          ? const EmptyState(CupertinoIcons.tag, 'Nessun tag in attesa', '')
+          : ListView(
+              children: [
+                for (final post in pending)
+                  PersonTile(
+                    post.str('author'),
+                    subtitle: 'Tocca per controllare il tag',
+                    onTap: () => open(
+                      context,
+                      PostPage(id: post.str('id'), taggedUser: store.myId),
+                    ),
+                  ),
+              ],
+            ),
+    );
+  }
+}
+
 Future<void> managePostTag(BuildContext context, J post) async {
   final store = GpixScope.of(context, listen: false);
   final hidden = post.ids('hiddenTagUsers').contains(store.myId);
+  final pending = post.ids('pendingTagUsers').contains(store.myId);
   final decision = await sheet<String>(
     context,
     Builder(
@@ -2113,8 +2232,12 @@ Future<void> managePostTag(BuildContext context, J post) async {
         children: [
           ActionRow(
             hidden ? CupertinoIcons.eye : CupertinoIcons.eye_slash,
-            hidden ? 'Mostra sul mio profilo' : 'Nascondi dal mio profilo',
-            () => Navigator.pop(menu, hidden ? 'show' : 'hide'),
+            pending
+                ? 'Approva sul mio profilo'
+                : hidden
+                ? 'Mostra sul mio profilo'
+                : 'Nascondi dal mio profilo',
+            () => Navigator.pop(menu, hidden || pending ? 'show' : 'hide'),
           ),
           ActionRow(
             CupertinoIcons.tag,
@@ -4545,6 +4668,14 @@ class _SettingsState extends State<Settings> {
               value: s.preferences.flag('hideNotificationPreviews')
                   ? 'Sì'
                   : 'No',
+            ),
+          ),
+          (
+            'Tag e menzioni',
+            row(
+              CupertinoIcons.at,
+              'Tag e menzioni',
+              () => open(c, const TagPrivacyPage()),
             ),
           ),
           (

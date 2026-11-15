@@ -860,7 +860,7 @@ class _TimelinePostState extends State<TimelinePost> {
             current: slide.clamp(0, media.length - 1),
           ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(8, 2, 4, 0),
+          padding: const EdgeInsets.fromLTRB(8, 3, 4, 0),
           child: Row(
             children: [
               Expanded(
@@ -868,6 +868,7 @@ class _TimelinePostState extends State<TimelinePost> {
                   children: [
                     Flexible(
                       child: PostAction(
+                        feed: true,
                         label: liked ? 'Rimuovi Mi piace' : 'Mi piace',
                         icon: liked
                             ? CupertinoIcons.heart_fill
@@ -879,6 +880,7 @@ class _TimelinePostState extends State<TimelinePost> {
                     ),
                     Flexible(
                       child: PostAction(
+                        feed: true,
                         label: 'Commenti',
                         icon: CupertinoIcons.chat_bubble,
                         count: replies.length,
@@ -888,6 +890,7 @@ class _TimelinePostState extends State<TimelinePost> {
                     if (canRepost)
                       Flexible(
                         child: PostAction(
+                          feed: true,
                           label: reposted
                               ? 'Annulla ripubblicazione'
                               : 'Ripubblica',
@@ -905,6 +908,7 @@ class _TimelinePostState extends State<TimelinePost> {
                       ),
                     Flexible(
                       child: PostAction(
+                        feed: true,
                         label: 'Condividi',
                         icon: CupertinoIcons.paperplane,
                         count: post.number('shareCount').toInt(),
@@ -921,7 +925,7 @@ class _TimelinePostState extends State<TimelinePost> {
                   saved
                       ? CupertinoIcons.bookmark_fill
                       : CupertinoIcons.bookmark,
-                  size: 23,
+                  size: 25,
                 ),
               ),
             ],
@@ -938,12 +942,21 @@ class _TimelinePostState extends State<TimelinePost> {
                   onTap: () => people(context, likes, 'Mi piace'),
                   child: Row(
                     children: [
-                      for (final liker in likes.take(3))
-                        Padding(
-                          padding: const EdgeInsets.only(right: 2),
-                          child: Avatar(liker, size: 17),
+                      SizedBox(
+                        width: likes.length > 1 ? 36 : 22,
+                        height: 22,
+                        child: Stack(
+                          children: [
+                            for (final (index, liker)
+                                in likes.take(2).indexed.toList().reversed)
+                              Positioned(
+                                left: index * 14,
+                                child: Avatar(liker, size: 21),
+                              ),
+                          ],
                         ),
-                      const SizedBox(width: 5),
+                      ),
+                      const SizedBox(width: 4),
                       Expanded(
                         child: Text.rich(
                           TextSpan(
@@ -958,7 +971,10 @@ class _TimelinePostState extends State<TimelinePost> {
                                 ),
                               ),
                               if (likes.length > 1)
-                                const TextSpan(text: ' e altri'),
+                                const TextSpan(
+                                  text: ' e altri',
+                                  style: TextStyle(fontWeight: FontWeight.w700),
+                                ),
                             ],
                           ),
                           maxLines: 1,
@@ -982,18 +998,27 @@ class _TimelinePostState extends State<TimelinePost> {
                             text: '$username ',
                             style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
-                          TextSpan(text: caption),
+                          TextSpan(
+                            text:
+                                !widget.detail &&
+                                    !expanded &&
+                                    caption.characters.length > 65
+                                ? '${caption.characters.take(65)}… '
+                                : caption,
+                          ),
+                          if (!widget.detail &&
+                              !expanded &&
+                              caption.characters.length > 65)
+                            TextSpan(
+                              text: 'altro',
+                              style: TextStyle(color: secondaryText(context)),
+                            ),
                         ],
                       ),
-                      maxLines: expanded || widget.detail ? null : 3,
-                      overflow: expanded || widget.detail
-                          ? null
-                          : TextOverflow.ellipsis,
                     ),
                   ),
                 ),
-              if (replies.isNotEmpty ||
-                  (widget.detail && !post.flag('commentsOff')))
+              if (widget.detail && !post.flag('commentsOff'))
                 TextButton(
                   style: TextButton.styleFrom(
                     foregroundColor: secondaryText(context),
