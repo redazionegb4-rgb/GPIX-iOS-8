@@ -39,6 +39,38 @@ Future<void> mount(
 
 void main() {
   testWidgets(
+    'Home activity counts comments and likes, then expires and clears on open',
+    (tester) async {
+      final store = GpixStore()..startTestDemo();
+      final actor = store.users.first.str('id');
+      store.state['notifications'] = [
+        for (final kind in ['like', 'comment'])
+          {
+            'id': kind,
+            'actor': actor,
+            'type': kind,
+            'created': now,
+            'seen': false,
+          },
+      ];
+      await mount(tester, store, const SocialShell());
+      final bubble = find.byKey(const ValueKey('activity-bubble'));
+      expect(bubble, findsOneWidget);
+      expect(
+        find.descendant(of: bubble, matching: find.text('2')),
+        findsOneWidget,
+      );
+      await tester.pump(const Duration(seconds: 6));
+      expect(bubble, findsNothing);
+      expect(store.hasActivity, isTrue);
+      await tester.tap(find.byTooltip('Attività').first);
+      await tester.pumpAndSettle();
+      expect(store.hasActivity, isFalse);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
     'A tag notification opens its photo and supports hiding and removal',
     (tester) async {
       final store = GpixStore()..startTestDemo();

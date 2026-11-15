@@ -15,7 +15,8 @@ class MainActivity : FlutterActivity() {
     private var transcription: VoiceTranscription? = null
     private var reelEditing: ReelEditingBridge? = null
     private var gallery: GalleryBridge? = null
-    private val directMessageChannel = "gpix_direct_messages_v1"
+    private val directMessageChannel = "gpix_direct_messages_v2"
+    private val activityChannel = "gpix_activity_badge_v1"
     private fun directMessageSound(): Uri {
         val soundName = resources.getResourceEntryName(R.raw.gpix_dm)
         return Uri.parse("android.resource://$packageName/raw/$soundName")
@@ -33,10 +34,33 @@ class MainActivity : FlutterActivity() {
             )
             channel.description = "Notifiche delle conversazioni uno a uno su GPIX"
             channel.setSound(directMessageSound(), notificationAudio)
+            channel.setShowBadge(true)
             manager.createNotificationChannel(channel)
+            val activity = NotificationChannel(
+                activityChannel, "Attività GPIX", NotificationManager.IMPORTANCE_DEFAULT
+            )
+            activity.setShowBadge(true)
+            manager.createNotificationChannel(activity)
         }
         MethodChannel(engine.dartExecutor.binaryMessenger, "GPIX/notificationAudio")
             .setMethodCallHandler { call, result ->
+                if (call.method == "badgeChannels") {
+                    result.success(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                    return@setMethodCallHandler
+                }
+                if (call.method == "syncBadge") {
+                    val count = (call.arguments as? Int ?: 0).coerceAtLeast(0)
+                    if (count == 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        for (active in manager.activeNotifications) {
+                            val channel = active.notification.channelId
+                            if (channel == directMessageChannel || channel == activityChannel) {
+                                manager.cancel(active.tag, active.id)
+                            }
+                        }
+                    }
+                    result.success(null)
+                    return@setMethodCallHandler
+                }
                 if (call.method != "playDirectMessage") {
                     result.notImplemented()
                     return@setMethodCallHandler

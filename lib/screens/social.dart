@@ -243,8 +243,8 @@ class PostAction extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           child: Container(
             alignment: Alignment.centerLeft,
-            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-            padding: EdgeInsets.symmetric(horizontal: feed ? 3 : 4),
+            constraints: const BoxConstraints(minWidth: 0, minHeight: 44),
+            padding: EdgeInsets.symmetric(horizontal: feed ? 0 : 4),
             child: FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
@@ -263,7 +263,7 @@ class PostAction extends StatelessWidget {
                       icon,
                       key: ValueKey(icon),
                       color: color ?? foreground(context),
-                      size: feed ? 26 : 23,
+                      size: feed ? 25 : 23,
                       postAction: feed,
                     ),
                   ),
@@ -585,6 +585,27 @@ Future<void> postMenu(BuildContext c, J p, {bool detail = false}) async {
                         }),
                       );
                   }),
+                  ActionRow(
+                    CupertinoIcons.placemark,
+                    'Modifica luogo',
+                    () async {
+                      Navigator.pop(menu);
+                      final value = await chooseGpixPlace(
+                        c,
+                        initial: p.str('location'),
+                      );
+                      if (value != null && c.mounted) {
+                        await perform(
+                          c,
+                          () => s.act('editPost', {
+                            'id': p['id'],
+                            'text': p.str('text'),
+                            'location': value,
+                          }),
+                        );
+                      }
+                    },
+                  ),
                   if (p.str('kind') != 'story')
                     ActionRow(
                       CupertinoIcons.pin,
@@ -3381,6 +3402,24 @@ class _ActivityState extends State<Activity> {
     'Precedenti',
   ];
 
+  final initiallyUnread = <String>{};
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final store = GpixScope.of(context, listen: false);
+      initiallyUnread.addAll(
+        store.socialNotifications
+            .where((item) => !item.flag('seen'))
+            .map((item) => item.str('id')),
+      );
+      if (store.hasActivity)
+        perform(context, () => store.act('notificationsRead'));
+    });
+  }
+
   int selected = 0;
   bool unreadOnly = false;
   bool menuOpen = false;
@@ -3556,7 +3595,10 @@ class _ActivityState extends State<Activity> {
       final index =
           item.flag('highlighted') ||
               type == 'system' ||
-              (type == 'storyLike' && !item.flag('seen') && time >= today)
+              (type == 'storyLike' &&
+                  (!item.flag('seen') ||
+                      initiallyUnread.contains(item.str('id'))) &&
+                  time >= today)
           ? 0
           : time >= today
           ? 1

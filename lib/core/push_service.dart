@@ -74,7 +74,10 @@ class PushService {
   void _changed() {
     if (!nativePushAvailable) return;
     final s = _store;
-    if (Platform.isIOS && s != null && !s.demo && s.foreground) {
+    if ((Platform.isIOS || Platform.isAndroid) &&
+        s != null &&
+        !s.demo &&
+        s.foreground) {
       final enabled = s.signedIn && s.preferences['pushEnabled'] != false;
       final badge = enabled
           ? s.socialNotifications.where((row) => !row.flag('seen')).length +
@@ -86,9 +89,12 @@ class PushService {
       if (_lastBadge != badge) {
         _lastBadge = badge;
         unawaited(
-          _appleRegistration.invokeMethod<void>('badge', badge).catchError((_) {
-            if (_lastBadge == badge) _lastBadge = null;
-          }),
+          (Platform.isIOS
+                  ? _appleRegistration.invokeMethod<void>('badge', badge)
+                  : _notificationAudio.invokeMethod<void>('syncBadge', badge))
+              .catchError((_) {
+                if (_lastBadge == badge) _lastBadge = null;
+              }),
         );
       }
     }
@@ -203,9 +209,19 @@ class PushService {
     if (token == null)
       throw Exception('Registrazione notifiche non riuscita. Riprova.');
     if (!currentSession()) return 'La sessione è cambiata. Riprova.';
+    final badgeChannels =
+        Platform.isAndroid &&
+        (await _notificationAudio
+                .invokeMethod<bool>('badgeChannels')
+                .catchError((_) => false) ??
+            false);
     await s.api(
       '/push/device',
-      payload: {'token': token, 'platform': Platform.isIOS ? 'ios' : 'android'},
+      payload: {
+        'token': token,
+        'platform': Platform.isIOS ? 'ios' : 'android',
+        'badgeChannels': badgeChannels,
+      },
     );
     if (!currentSession()) return 'La sessione è cambiata. Riprova.';
     _session = session;
@@ -218,6 +234,7 @@ class PushService {
               payload: {
                 'token': token,
                 'platform': Platform.isIOS ? 'ios' : 'android',
+                'badgeChannels': badgeChannels,
               },
             )
             .catchError((_) => <String, dynamic>{});

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -43,6 +44,37 @@ class HomeTimeline extends StatefulWidget {
 }
 
 class _HomeTimelineState extends State<HomeTimeline> {
+  Timer? activityTimer;
+  Set<String> unreadIds = {};
+  bool showActivityBubble = false;
+
+  @override
+  void dispose() {
+    activityTimer?.cancel();
+    super.dispose();
+  }
+
+  void updateActivityBubble(GpixStore store) {
+    final ids = store.socialNotifications
+        .where((item) => !item.flag('seen'))
+        .map((item) => item.str('id'))
+        .toSet();
+    if (ids.difference(unreadIds).isNotEmpty) {
+      showActivityBubble = true;
+      activityTimer?.cancel();
+      activityTimer = Timer(const Duration(seconds: 5), () {
+        if (mounted) setState(() => showActivityBubble = false);
+      });
+    }
+    unreadIds = ids;
+    if (ids.isEmpty) showActivityBubble = false;
+  }
+
+  void openActivity() {
+    setState(() => showActivityBubble = false);
+    widget.onActivity();
+  }
+
   static const feeds = {
     'all': 'Per te',
     'following': 'Seguiti',
@@ -109,13 +141,7 @@ class _HomeTimelineState extends State<HomeTimeline> {
         for (final moment in moments) ('moment', moment),
       ],
     ]..sort((a, b) => b.$2.number('created').compareTo(a.$2.number('created')));
-    final newLikes = store.socialNotifications
-        .where(
-          (notification) =>
-              !notification.flag('seen') &&
-              const ['like', 'storyLike'].contains(notification.str('type')),
-        )
-        .length;
+    updateActivityBubble(store);
     return SectionSwipe(
       section: feeds.keys.toList().indexOf(feed),
       onStep: swipeFeed,
@@ -147,7 +173,7 @@ class _HomeTimelineState extends State<HomeTimeline> {
                 IconButton(
                   padding: const EdgeInsets.symmetric(horizontal: 23),
                   tooltip: 'Attività',
-                  onPressed: widget.onActivity,
+                  onPressed: openActivity,
                   icon: Badge(
                     isLabelVisible: store.hasActivity,
                     backgroundColor: danger,
@@ -167,13 +193,14 @@ class _HomeTimelineState extends State<HomeTimeline> {
                     clipBehavior: Clip.none,
                     children: [
                       const StoryTray(),
-                      if (newLikes > 0)
+                      if (showActivityBubble && unreadIds.isNotEmpty)
                         Positioned(
                           right: 10,
                           top: 0,
-                          child: _HomeLikesBadge(
-                            count: newLikes,
-                            onTap: widget.onActivity,
+                          child: _HomeActivityBadge(
+                            key: const ValueKey('activity-bubble'),
+                            count: unreadIds.length,
+                            onTap: openActivity,
                           ),
                         ),
                     ],
@@ -228,15 +255,19 @@ class _HomeTimelineState extends State<HomeTimeline> {
   }
 }
 
-class _HomeLikesBadge extends StatelessWidget {
-  const _HomeLikesBadge({required this.count, required this.onTap});
+class _HomeActivityBadge extends StatelessWidget {
+  const _HomeActivityBadge({
+    super.key,
+    required this.count,
+    required this.onTap,
+  });
 
   final int count;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) => Semantics(
-    label: '$count nuovi Mi piace',
+    label: '$count attività non lette',
     button: true,
     child: Material(
       color: const Color(0xffff0035),
@@ -257,7 +288,7 @@ class _HomeLikesBadge extends StatelessWidget {
               ),
               const SizedBox(width: 4),
               Text(
-                count > 99 ? '99+' : '$count',
+                '$count',
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w700,
@@ -860,11 +891,12 @@ class _TimelinePostState extends State<TimelinePost> {
             current: slide.clamp(0, media.length - 1),
           ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(8, 3, 4, 0),
+          padding: const EdgeInsets.fromLTRB(10, 4, 3, 3),
           child: Row(
             children: [
               Expanded(
                 child: Row(
+                  spacing: 11,
                   children: [
                     Flexible(
                       child: PostAction(
@@ -926,6 +958,7 @@ class _TimelinePostState extends State<TimelinePost> {
                       ? CupertinoIcons.bookmark_fill
                       : CupertinoIcons.bookmark,
                   size: 25,
+                  postAction: true,
                 ),
               ),
             ],
@@ -1766,22 +1799,28 @@ class _DiscoverHomeState extends State<DiscoverHome> {
                   tooltip: 'Opzioni di Esplora',
                   icon: const GIcon(CupertinoIcons.ellipsis, size: 23),
                   onPressed: () async {
-                    final choice = await anchoredMenu<bool>(
+                    final choice = await anchoredMenu<String>(
                       anchor,
                       [
                         dropdownRow(
                           anchor,
-                          true,
+                          'personalized',
                           'Per te',
                           CupertinoIcons.person_crop_circle,
                           selected: personalized,
                         ),
                         dropdownRow(
                           anchor,
-                          false,
+                          'standard',
                           'Non personalizzati',
                           CupertinoIcons.globe,
                           selected: !personalized,
+                        ),
+                        dropdownRow(
+                          anchor,
+                          'places',
+                          'Cerca un luogo',
+                          CupertinoIcons.placemark,
                         ),
                       ],
                       width: 210,
@@ -1789,8 +1828,17 @@ class _DiscoverHomeState extends State<DiscoverHome> {
                       label: 'Opzioni di Esplora',
                       translucent: true,
                     );
-                    if (choice != null && mounted)
-                      setState(() => personalized = choice);
+                    if (!mounted || choice == null) return;
+                    if (choice == 'places') {
+                      final place = await chooseGpixPlace(
+                        context,
+                        allowRemove: false,
+                      );
+                      if (mounted && place != null && place.isNotEmpty)
+                        submit(place);
+                    } else {
+                      setState(() => personalized = choice == 'personalized');
+                    }
                   },
                 ),
               ),

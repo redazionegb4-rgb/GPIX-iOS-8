@@ -653,11 +653,20 @@ class _ReelEditorState extends State<ReelEditor> {
         maxLength: 2200,
         decoration: const InputDecoration(hintText: 'Scrivi una didascalia…'),
       ),
-      TextField(
-        controller: location,
-        enabled: !busy,
-        maxLength: 100,
-        decoration: const InputDecoration(hintText: 'Aggiungi luogo'),
+      ListTile(
+        leading: const GIcon(CupertinoIcons.placemark),
+        title: Text(location.text.isEmpty ? 'Aggiungi luogo' : location.text),
+        trailing: const GIcon(CupertinoIcons.chevron_forward, size: 16),
+        onTap: busy
+            ? null
+            : () async {
+                final value = await chooseGpixPlace(
+                  context,
+                  initial: location.text,
+                );
+                if (value != null && mounted)
+                  setState(() => location.text = value);
+              },
       ),
       ListTile(
         title: const Text('Pubblico'),

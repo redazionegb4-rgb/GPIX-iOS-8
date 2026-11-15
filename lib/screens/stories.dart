@@ -1848,22 +1848,14 @@ class _ComposerState extends State<Composer> {
           ),
         ),
         const Divider(height: 1, indent: 16, endIndent: 16),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: TextField(
-            controller: location,
-            style: TextStyle(color: foreground(c)),
-            decoration: InputDecoration(
-              hintText: 'Aggiungi luogo',
-              prefixIcon: GIcon(
-                CupertinoIcons.placemark,
-                color: foreground(c),
-                size: 20,
-              ),
-              filled: false,
-              isDense: true,
-            ),
-          ),
+        ListTile(
+          leading: const GIcon(CupertinoIcons.placemark),
+          title: Text(location.text.isEmpty ? 'Aggiungi luogo' : location.text),
+          trailing: const GIcon(CupertinoIcons.chevron_forward, size: 16),
+          onTap: () async {
+            final value = await chooseGpixPlace(c, initial: location.text);
+            if (value != null && mounted) setState(() => location.text = value);
+          },
         ),
       ],
     ),
@@ -2043,6 +2035,15 @@ class _ComposerState extends State<Composer> {
           });
         }
       case StoryStickerTool.place:
+        final value = await chooseGpixPlace(context, allowRemove: false);
+        if (value == null || value.isEmpty || !mounted) return;
+        addStorySticker(tool, {
+          'label': value,
+          'url': Uri.https('www.google.com', '/maps/search/', {
+            'api': '1',
+            'query': value,
+          }).toString(),
+        });
       case StoryStickerTool.mention:
       case StoryStickerTool.hashtag:
       case StoryStickerTool.question:
@@ -2052,7 +2053,6 @@ class _ComposerState extends State<Composer> {
           context,
           tool.label,
           switch (tool) {
-            StoryStickerTool.place => 'Nome del luogo',
             StoryStickerTool.mention => 'Nome utente',
             StoryStickerTool.hashtag => 'Parola chiave',
             _ => 'Scrivi qui',
@@ -2079,11 +2079,6 @@ class _ComposerState extends State<Composer> {
             _ => value,
           },
           if (tool == StoryStickerTool.prompt) 'chain': newId(),
-          if (tool == StoryStickerTool.place)
-            'url': Uri.https('www.google.com', '/maps/search/', {
-              'api': '1',
-              'query': value,
-            }).toString(),
         });
     }
   }

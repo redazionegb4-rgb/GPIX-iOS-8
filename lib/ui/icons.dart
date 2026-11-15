@@ -19,8 +19,15 @@ class GIcon extends StatelessWidget {
   });
   @override
   Widget build(BuildContext c) {
-    final name = postAction && icon == CupertinoIcons.paperplane
-        ? 'postSend'
+    final name = postAction
+        ? switch (names[icon]) {
+            'send' => 'postSend',
+            'chat' => 'postChat',
+            'repeat' => 'postRepeat',
+            'heart' => 'postHeart',
+            'save' => 'postSave',
+            final value => value,
+          }
         : names[icon];
     final resolvedColor = color == const Color(0xff15151b)
         ? Theme.of(c).colorScheme.onSurface
@@ -117,6 +124,46 @@ class _LineIcon extends CustomPainter {
         path.cubicTo(2.3, 2.5, 9, 1.8, 12, 6);
         path.cubicTo(15, 1.8, 21.7, 2.5, 21.7, 8);
         path.cubicTo(21.7, 13.5, 16, 18, 12, 21);
+        path.close();
+        break;
+      case 'postHeart':
+        path.moveTo(12, 21.2);
+        path.cubicTo(9.2, 18.7, 2, 13.2, 2, 7.9);
+        path.cubicTo(2, 2.7, 8.2, 1.7, 12, 5.7);
+        path.cubicTo(15.8, 1.7, 22, 2.7, 22, 7.9);
+        path.cubicTo(22, 13.2, 14.8, 18.7, 12, 21.2);
+        path.close();
+        break;
+      case 'postChat':
+        path.moveTo(21, 21);
+        path.lineTo(16.6, 19.5);
+        path.cubicTo(10, 23.2, 2.5, 18.5, 2.5, 11.8);
+        path.cubicTo(2.5, 5.8, 6.6, 2.2, 12, 2.2);
+        path.cubicTo(19.8, 2.2, 23.3, 10.2, 19.8, 16.7);
+        path.close();
+        break;
+      case 'postRepeat':
+        path.moveTo(4, 14);
+        path.lineTo(4, 10);
+        path.quadraticBezierTo(4, 6, 8, 6);
+        path.lineTo(16, 6);
+        path.moveTo(13, 2.7);
+        path.lineTo(16.5, 6);
+        path.lineTo(13, 9.3);
+        path.moveTo(20, 10);
+        path.lineTo(20, 14);
+        path.quadraticBezierTo(20, 18, 16, 18);
+        path.lineTo(8, 18);
+        path.moveTo(11, 14.7);
+        path.lineTo(7.5, 18);
+        path.lineTo(11, 21.3);
+        break;
+      case 'postSave':
+        path.moveTo(4, 3);
+        path.lineTo(20, 3);
+        path.lineTo(20, 21);
+        path.lineTo(12, 14);
+        path.lineTo(4, 21);
         path.close();
         break;
       case 'postSend':

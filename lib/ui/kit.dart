@@ -1,3 +1,4 @@
+import 'dart:async';
 export 'icons.dart';
 import 'icons.dart';
 import 'dart:io';
@@ -1392,4 +1393,131 @@ class PostTagLabel extends StatelessWidget {
       ),
     ),
   );
+}
+
+const suggestedPlaces = ['Reggio di Calabria', 'Roma', 'Messina', 'Milano'];
+
+Future<String?> chooseGpixPlace(
+  BuildContext c, {
+  String initial = '',
+  bool allowRemove = true,
+}) async {
+  var query = initial.trim();
+  Timer? debounce;
+  final store = GpixScope.of(c, listen: false);
+  var remote = <J>[];
+  var loading = false;
+  var unavailable = false;
+  var generation = 0;
+  final result = await sheet<String>(
+    c,
+    StatefulBuilder(
+      builder: (page, update) {
+        final matches = suggestedPlaces
+            .where((place) => place.toLowerCase().contains(query.toLowerCase()))
+            .toList();
+        return Column(
+          children: [
+            ListTile(
+              title: pageTitle('Luoghi'),
+              trailing: IconButton(
+                tooltip: 'Chiudi',
+                icon: const GIcon(CupertinoIcons.xmark),
+                onPressed: () => Navigator.pop(page),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: TextFormField(
+                initialValue: query,
+                textInputAction: TextInputAction.done,
+                onChanged: (value) {
+                  final request = ++generation;
+                  debounce?.cancel();
+                  update(() {
+                    query = value.trim();
+                    remote = [];
+                    unavailable = false;
+                    loading =
+                        store.state.flag('placesEnabled') && query.length >= 2;
+                  });
+                  if (!loading) return;
+                  final term = query;
+                  debounce = Timer(const Duration(milliseconds: 450), () async {
+                    try {
+                      final result = await store.api(
+                        '/places?q=${Uri.encodeQueryComponent(term)}',
+                      );
+                      if (!page.mounted || request != generation) return;
+                      update(() {
+                        remote = result.rows('places');
+                        loading = false;
+                      });
+                    } catch (_) {
+                      if (!page.mounted || request != generation) return;
+                      update(() {
+                        loading = false;
+                        unavailable = true;
+                      });
+                    }
+                  });
+                },
+                onFieldSubmitted: (value) {
+                  if (value.trim().isNotEmpty)
+                    Navigator.pop(page, value.trim());
+                },
+                decoration: const InputDecoration(
+                  hintText: 'Cerca un luogo',
+                  prefixIcon: GIcon(CupertinoIcons.search),
+                ),
+              ),
+            ),
+            if (loading) const LinearProgressIndicator(),
+            if (unavailable)
+              const ListTile(
+                title: Text('Ricerca Google Maps non disponibile'),
+              ),
+            for (final place in remote)
+              ListTile(
+                leading: const GIcon(CupertinoIcons.placemark),
+                title: Text(place.str('name')),
+                subtitle: Text(place.str('address')),
+                onTap: () => Navigator.pop(page, place.str('name')),
+              ),
+            if (remote.isNotEmpty)
+              const Padding(
+                padding: EdgeInsets.all(8),
+                child: Text(
+                  'Google Maps',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            for (final place in matches)
+              ListTile(
+                leading: const GIcon(CupertinoIcons.placemark),
+                title: Text(place),
+                onTap: () => Navigator.pop(page, place),
+              ),
+            if (query.isNotEmpty &&
+                !matches.any(
+                  (place) => place.toLowerCase() == query.toLowerCase(),
+                ))
+              ListTile(
+                leading: const GIcon(CupertinoIcons.plus),
+                title: Text('Usa «$query»'),
+                onTap: () => Navigator.pop(page, query),
+              ),
+            if (allowRemove && initial.isNotEmpty)
+              ListTile(
+                title: const Text('Rimuovi luogo'),
+                onTap: () => Navigator.pop(page, ''),
+              ),
+          ],
+        );
+      },
+    ),
+  );
+  debounce?.cancel();
+  generation++;
+  return result;
 }
