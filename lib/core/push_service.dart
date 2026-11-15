@@ -282,7 +282,7 @@ class PushService {
     } else if (kind == 'message' || kind == 'call') {
       if (s.thread(ref).isNotEmpty) open(c, Chat(id: ref));
     } else if (s.post(ref).isNotEmpty) {
-      open(c, PostPage(id: ref));
+      open(c, PostPage(id: ref, taggedUser: kind == 'postTag' ? s.myId : null));
     } else if (s.user(ref).isNotEmpty) {
       open(c, Profile(user: ref));
     }

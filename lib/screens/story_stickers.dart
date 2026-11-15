@@ -481,6 +481,7 @@ class _StoryCountdownState extends State<_StoryCountdown> {
 }
 
 const interactiveStoryStickers = {
+  'sharedPost',
   'place',
   'mention',
   'prompt',

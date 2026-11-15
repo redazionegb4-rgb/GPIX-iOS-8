@@ -5,7 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/store.dart';
-import '../screens/social.dart' show Activity, createMenu;
+import '../screens/creation_studio.dart';
+import '../screens/social.dart' show Activity;
 import '../screens/video.dart';
 import '../ui/kit.dart';
 import 'surfaces.dart';
@@ -20,8 +21,10 @@ class SocialShell extends StatefulWidget {
 class _SocialShellState extends State<SocialShell> {
   final _controller = PageController();
   final _feed = ScrollController();
+  final _homeRefresh = GlobalKey<RefreshIndicatorState>();
   int _selected = 0;
   bool _compact = false;
+  String? _reelCoverAccount;
 
   static const _labels = ['Home', 'Reel', 'Messaggi', 'Cerca', 'Profilo'];
   static const _icons = [
@@ -50,7 +53,9 @@ class _SocialShellState extends State<SocialShell> {
     if (!_controller.hasClients || index < 0 || index >= _labels.length) return;
     final reduced = MediaQuery.disableAnimationsOf(context);
     if (index == _selected && index == 0 && _feed.hasClients) {
-      if (reduced) {
+      if (_feed.offset <= _feed.position.minScrollExtent + 1) {
+        _homeRefresh.currentState?.show();
+      } else if (reduced) {
         _feed.jumpTo(0);
       } else {
         _feed.animateTo(
@@ -98,6 +103,10 @@ class _SocialShellState extends State<SocialShell> {
         ? Duration.zero
         : const Duration(milliseconds: 210);
     final inset = MediaQuery.viewPaddingOf(context).bottom;
+    final reel = _selected == 1;
+    final compactDock = _compact;
+    final covered = reel && _reelCoverAccount == store.myId;
+    final dockBottom = reel ? reelDockBottom(inset) : inset + 8;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
       child: AccountSheetBackdrop(
@@ -107,6 +116,7 @@ class _SocialShellState extends State<SocialShell> {
               PageView(
                 key: const ValueKey('gpix-destinations'),
                 controller: _controller,
+                physics: covered ? const NeverScrollableScrollPhysics() : null,
                 onPageChanged: (index) => setState(() {
                   _selected = index;
                   _compact = false;
@@ -118,7 +128,12 @@ class _SocialShellState extends State<SocialShell> {
                       0,
                       HomeTimeline(
                         controller: _feed,
-                        onCreate: () => createMenu(context),
+                        refreshKey: _homeRefresh,
+                        active: _selected == 0,
+                        onCreate: () => open(
+                          context,
+                          const CreationStudio(initial: CreationMode.story),
+                        ),
                         onActivity: () => open(context, const Activity()),
                         onBoundarySwipe: _swipeTab,
                       ),
@@ -126,7 +141,16 @@ class _SocialShellState extends State<SocialShell> {
                   ),
                   _KeepPage(
                     key: ValueKey(('reel', store.myId)),
-                    child: Reels(active: _selected == 1, bottomOverlay: 69),
+                    child: Reels(
+                      active: reel,
+                      bottomOverlay: reelDockBottom(inset) + reelDockHeight,
+                      onCoverDock: (cover) {
+                        final account = cover ? store.myId : null;
+                        if (_reelCoverAccount != account) {
+                          setState(() => _reelCoverAccount = account);
+                        }
+                      },
+                    ),
                   ),
                   _KeepPage(
                     key: ValueKey(('inbox', store.myId)),
@@ -148,11 +172,11 @@ class _SocialShellState extends State<SocialShell> {
                   ),
                 ],
               ),
-              if (MediaQuery.viewInsetsOf(context).bottom == 0)
+              if (!covered && MediaQuery.viewInsetsOf(context).bottom == 0)
                 Positioned(
                   left: 0,
                   right: 0,
-                  bottom: inset + 8,
+                  bottom: dockBottom,
                   child: Center(
                     child: SectionSwipe(
                       animateDrag: true,
@@ -161,11 +185,15 @@ class _SocialShellState extends State<SocialShell> {
                         key: const ValueKey('floating-dock'),
                         duration: duration,
                         curve: Curves.easeOutCubic,
-                        width:
-                            (MediaQuery.sizeOf(context).width -
-                                    (_compact ? 100 : 38))
-                                .clamp(224.0, 430.0),
-                        height: _compact ? 45 : 57,
+                        width: reel
+                            ? (MediaQuery.sizeOf(context).width * .755).clamp(
+                                224.0,
+                                355.0,
+                              )
+                            : (MediaQuery.sizeOf(context).width -
+                                      (compactDock ? 100 : 38))
+                                  .clamp(224.0, 430.0),
+                        height: reel ? reelDockHeight : (compactDock ? 45 : 57),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(40),
                           child: BackdropFilter(
@@ -173,11 +201,15 @@ class _SocialShellState extends State<SocialShell> {
                             child: DecoratedBox(
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(40),
-                                color: dark
+                                color: reel
+                                    ? const Color(0xad202024)
+                                    : dark
                                     ? const Color(0xc9232327)
                                     : const Color(0xe6ffffff),
                                 border: Border.all(
-                                  color: ink.withValues(alpha: .12),
+                                  color: ink.withValues(
+                                    alpha: reel ? .25 : .12,
+                                  ),
                                 ),
                               ),
                               child: Material(
@@ -207,7 +239,7 @@ class _SocialShellState extends State<SocialShell> {
                                                 decoration: BoxDecoration(
                                                   color: ink.withValues(
                                                     alpha: _selected == index
-                                                        ? .09
+                                                        ? (reel ? .16 : .09)
                                                         : 0,
                                                   ),
                                                   borderRadius:

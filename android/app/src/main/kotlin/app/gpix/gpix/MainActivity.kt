@@ -13,6 +13,7 @@ import android.os.Build
 
 class MainActivity : FlutterActivity() {
     private var transcription: VoiceTranscription? = null
+    private var reelEditing: ReelEditingBridge? = null
     private var gallery: GalleryBridge? = null
     private val directMessageChannel = "gpix_direct_messages_v1"
     private fun directMessageSound(): Uri {
@@ -62,6 +63,7 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         configureDirectMessages(flutterEngine)
         gallery = GalleryBridge(this)
+        reelEditing = ReelEditingBridge(this, flutterEngine.dartExecutor.binaryMessenger)
         transcription = VoiceTranscription(this, flutterEngine.dartExecutor.binaryMessenger)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "GPIX/gallery").setMethodCallHandler(gallery)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "GPIX/privacy").setMethodCallHandler { call, result ->
@@ -76,6 +78,6 @@ class MainActivity : FlutterActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         gallery?.permissionResult(requestCode)
     }
-    override fun onDestroy() { gallery?.close(); transcription?.close(); super.onDestroy() }
+    override fun onDestroy() { gallery?.close(); reelEditing?.close(); transcription?.close(); super.onDestroy() }
 }
 

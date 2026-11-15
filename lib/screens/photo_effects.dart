@@ -71,19 +71,18 @@ Future<Uint8List> processPhoto(J args) async {
       height: h,
     );
   }
-  final ratio = args.number('aspect', 1);
-  final w = image.width / image.height > ratio
-      ? (image.height * ratio).round()
-      : image.width;
-  final h = image.width / image.height > ratio
-      ? image.height
-      : (image.width / ratio).round();
+  final ratio = args.number('aspect', 1).clamp(.1, 10);
+  final crop = args.obj('crop');
+  final zoom = crop.number('zoom', 1).clamp(1, 3);
+  final width = math.min(image.width.toDouble(), image.height * ratio);
+  final w = (width / zoom).round().clamp(1, image.width);
+  final h = (width / ratio / zoom).round().clamp(1, image.height);
   image = im.copyCrop(
     image,
-    x: (image.width - w) ~/ 2,
-    y: (image.height - h) ~/ 2,
-    width: math.max(1, w),
-    height: math.max(1, h),
+    x: ((image.width - w) * crop.number('x', .5).clamp(0, 1)).round(),
+    y: ((image.height - h) * crop.number('y', .5).clamp(0, 1)).round(),
+    width: w,
+    height: h,
   );
   final preset = photoFilters[args.str('filter')] ?? photoFilters['Originale']!;
   final strength = args.number('intensity', 1);

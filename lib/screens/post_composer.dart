@@ -137,12 +137,12 @@ List<double> postMatrix(String filter, double brightness) {
 class PostComposer extends StatefulWidget {
   final List<String> initialFiles;
   final J? initialDraft;
-  final ValueChanged<bool>? onPublishStepChanged;
+  final ValueChanged<bool>? onEditingChanged;
   const PostComposer({
     super.key,
     this.initialFiles = const [],
     this.initialDraft,
-    this.onPublishStepChanged,
+    this.onEditingChanged,
   });
   @override
   State<PostComposer> createState() => _PostComposerState();
@@ -158,7 +158,11 @@ class _PostComposerState extends State<PostComposer> {
   J draftData() => {
     'id': draftId,
     'kind': 'post',
-    'files': files,
+    'files': List.of(files),
+    'photoCrops': {
+      for (final path in files)
+        if (photoCrops.containsKey(path)) path: photoCrops[path],
+    },
     'text': caption.text,
     'location': location.text,
     'aspect': aspect,
@@ -178,6 +182,14 @@ class _PostComposerState extends State<PostComposer> {
     'textAlign': textAlign.index,
     'audience': audience,
     'tagged': tagged.toList(),
+    'collaboratorInvites': collaboratorInvites.toList(),
+    'photoTags': {
+      for (final path in files)
+        if (photoTags.containsKey(path))
+          path: [
+            for (final tag in photoTags[path]!) Map<String, dynamic>.of(tag),
+          ],
+    },
     'music': music,
     'audioName': audioName,
     'commentsOff': commentsOff,
@@ -223,6 +235,8 @@ class _PostComposerState extends State<PostComposer> {
       audience = 'followers';
   J? poll, music;
   final J adjustments = {};
+  final photoCrops = <String, J>{};
+  bool formatChosen = false;
   double intensity = 1, textX = .5, textY = .7, textSize = 24;
   Color textColor = Colors.white;
   TextAlign textAlign = TextAlign.center;
@@ -231,6 +245,7 @@ class _PostComposerState extends State<PostComposer> {
     final args = <String, dynamic>{
       'path': path,
       'aspect': aspect,
+      'crop': photoCrops[path],
       'filter': preset ?? filter,
       'brightness': brightness,
       'intensity': intensity,
@@ -299,12 +314,19 @@ class _PostComposerState extends State<PostComposer> {
   List<GalleryPhoto> recent = [];
   final copied = <String, String>{};
   final tagged = <String>{};
+  final collaboratorInvites = <String>{};
+  final photoTags = <String, List<J>>{};
+  Set<String> get taggedUsers => {
+    ...tagged,
+    for (final path in files)
+      for (final tag in photoTags[path] ?? const <J>[]) tag.str('user'),
+  };
   final photos = PageController(keepPage: false);
   final publishPhotos = PageController(viewportFraction: .93, keepPage: false);
 
   void goToStep(int value) {
     setState(() => step = value);
-    widget.onPublishStepChanged?.call(value == 2);
+    widget.onEditingChanged?.call(value != 0);
     positionPreview();
   }
 
@@ -329,6 +351,11 @@ class _PostComposerState extends State<PostComposer> {
       caption.text = d.str('text');
       location.text = d.str('location');
       aspect = d.number('aspect', 1).toDouble();
+      formatChosen = true;
+      multiple = files.length > 1;
+      photoCrops.addAll(
+        d.obj('photoCrops').map((path, crop) => MapEntry(path, object(crop))),
+      );
       filter = d.str('filter', 'Originale');
       brightness = d.number('brightness', 1).toDouble();
       intensity = d.number('intensity', 1).toDouble();
@@ -350,6 +377,10 @@ class _PostComposerState extends State<PostComposer> {
               .clamp(0, TextAlign.values.length - 1)];
       audience = d.str('audience') == 'close' ? 'close' : 'followers';
       tagged.addAll(d.ids('tagged'));
+      collaboratorInvites.addAll(d.ids('collaboratorInvites'));
+      photoTags.addAll(
+        d.obj('photoTags').map((path, tags) => MapEntry(path, objects(tags))),
+      );
       music = d['music'] == null ? null : d.obj('music');
       audioName = d.str('audioName');
       commentsOff = d.flag('commentsOff');
@@ -382,21 +413,20 @@ class _PostComposerState extends State<PostComposer> {
       final ratio = descriptor.width / descriptor.height;
       descriptor.dispose();
       buffer.dispose();
-      if (mounted && files.firstOrNull == path) setState(() => aspect = ratio);
+      if (mounted && !formatChosen && files.firstOrNull == path) {
+        setState(() => aspect = ratio.clamp(.5, 2));
+      }
     } catch (_) {}
   }
 
-  Future<void> selectPhoto(GalleryPhoto photo, {bool toggle = false}) async {
+  Future<void> selectPhoto(GalleryPhoto photo) async {
     final selected = copied[photo.id];
-    if (!toggle && selected != null && files.contains(selected)) {
-      openPhotoGallery(
-        context,
-        List.of(files),
-        initial: files.indexOf(selected),
-      );
+    if (!multiple && selected != null && files.contains(selected)) return;
+    if (copying) return;
+    if (multiple && files.length >= 10 && !files.contains(selected)) {
+      notice(context, 'Puoi selezionare fino a 10 foto.');
       return;
     }
-    if (copying) return;
     setState(() => copying = true);
     await perform(context, () async {
       final path = copied[photo.id] ?? await DeviceGallery.copy(photo.id);
@@ -408,8 +438,12 @@ class _PostComposerState extends State<PostComposer> {
           files = [path];
           index = 0;
         } else if (files.contains(path)) {
+          final current = files[index.clamp(0, files.length - 1)];
           files.remove(path);
-          index = index.clamp(0, math.max(0, files.length - 1));
+          final next = files.indexOf(current);
+          index = next >= 0
+              ? next
+              : index.clamp(0, math.max(0, files.length - 1));
         } else if (files.length < 10) {
           files.add(path);
           index = files.length - 1;
@@ -435,7 +469,9 @@ class _PostComposerState extends State<PostComposer> {
     super.dispose();
   }
 
-  Future<void> pick({bool camera = false}) async {
+  Future<void> pick({bool camera = false, bool append = false}) async {
+    final limit = append ? 10 - files.length : 10;
+    if (limit == 0) return;
     await perform(context, () async {
       final picker = ImagePicker();
       final chosen = camera
@@ -445,14 +481,23 @@ class _PostComposerState extends State<PostComposer> {
                 imageQuality: 94,
               ),
             ]
-          : await picker.pickMultiImage(limit: 10, imageQuality: 94);
+          : limit == 1
+          ? [
+              await picker.pickImage(
+                source: ImageSource.gallery,
+                imageQuality: 94,
+              ),
+            ]
+          : await picker.pickMultiImage(limit: limit, imageQuality: 94);
       final list = chosen.whereType<XFile>().map((f) => f.path).toList();
       if (mounted && list.isNotEmpty) {
         setState(() {
-          files = list;
-          index = 0;
+          index = append ? files.length : 0;
+          files = [if (append) ...files, ...list.take(limit)];
+          multiple = files.length > 1 || multiple;
         });
-        await originalRatio(list.first);
+        if (!append) await originalRatio(list.first);
+        if (!mounted) return;
         positionPreview();
       }
     });
@@ -473,6 +518,11 @@ class _PostComposerState extends State<PostComposer> {
     await perform(context, () async {
       final s = GpixScope.of(context, listen: false),
           root = await getTemporaryDirectory();
+      if (collaboratorInvites.isNotEmpty && !s.supportsPostCollaborations) {
+        throw Exception(
+          'Aggiorna il server GPIX per inviare gli inviti di collaborazione.',
+        );
+      }
       final media = <String>[];
       final label = await captionImage();
       for (final f in files) {
@@ -480,6 +530,7 @@ class _PostComposerState extends State<PostComposer> {
           'path': f,
           'output': '${root.path}/gpix-post-${newId()}.jpg',
           'aspect': aspect,
+          'crop': photoCrops[f],
           'filter': filter,
           'brightness': brightness,
           'captionPng': label,
@@ -506,6 +557,8 @@ class _PostComposerState extends State<PostComposer> {
           'location': location.text.trim(),
           'media': media.first,
           'mediaItems': media,
+          if (collaboratorInvites.isNotEmpty)
+            'collaboratorInvites': collaboratorInvites.toList(),
           'audience': audience,
           'style': {
             'aspect': aspect,
@@ -513,7 +566,13 @@ class _PostComposerState extends State<PostComposer> {
             'audio': track,
             'audioName': audioName,
             if (music != null) 'music': music,
-            'taggedUsers': tagged.toList(),
+            'taggedUsers': taggedUsers.toList(),
+            if (photoTags.isNotEmpty)
+              'photoTags': [
+                for (final (position, path) in files.indexed)
+                  for (final tag in photoTags[path] ?? const <J>[])
+                    {...tag, 'slide': position},
+              ],
             'aiLabel': aiLabel,
             'topic': topic,
             if (poll != null) 'poll': poll,
@@ -542,7 +601,7 @@ class _PostComposerState extends State<PostComposer> {
 
   List<double> get matrix => postMatrix(filter, brightness);
 
-  static const blue = auraBlue;
+  static const blue = Color(0xff4656f6);
   Widget preview({bool finalStep = false}) {
     if (files.isEmpty) {
       return CreationEmpty(
@@ -564,7 +623,15 @@ class _PostComposerState extends State<PostComposer> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  MediaView(files[i], fit: BoxFit.contain),
+                  if (formatChosen)
+                    Center(
+                      child: AspectRatio(
+                        aspectRatio: aspect,
+                        child: processed(files[i]),
+                      ),
+                    )
+                  else
+                    MediaView(files[i], fit: BoxFit.contain),
                   if (files.length > 1)
                     Positioned(
                       top: 10,
@@ -702,6 +769,13 @@ class _PostComposerState extends State<PostComposer> {
       );
   @override
   Widget build(BuildContext c) {
+    return Theme(
+      data: step == 2 ? Theme.of(c) : gpixTheme(Brightness.dark),
+      child: Builder(builder: buildStage),
+    );
+  }
+
+  Widget buildStage(BuildContext c) {
     return Scaffold(
       backgroundColor: Theme.of(c).canvasColor,
       appBar: AppBar(
@@ -726,11 +800,10 @@ class _PostComposerState extends State<PostComposer> {
         ),
         title: Text(switch (step) {
           1 => 'Modifica post',
-          2 => 'Condividi post',
           _ => 'Nuovo post',
         }, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
         actions: [
-          if (step != 2)
+          if (step == 1)
             TextButton.icon(
               key: const ValueKey('save-post-draft'),
               onPressed: busy ? null : () => saveDraft(feedback: true),
@@ -744,13 +817,13 @@ class _PostComposerState extends State<PostComposer> {
           if (step == 0)
             Padding(
               padding: const EdgeInsets.only(right: 12),
-              child: TextButton(
-                onPressed: files.isEmpty
+              child: FilledButton(
+                onPressed: files.isEmpty || copying
                     ? null
                     : () {
                         goToStep(1);
                       },
-                style: TextButton.styleFrom(foregroundColor: accent(c)),
+                style: FilledButton.styleFrom(backgroundColor: blue),
                 child: const Text(
                   'Avanti',
                   style: TextStyle(fontWeight: FontWeight.w700),
@@ -766,7 +839,7 @@ class _PostComposerState extends State<PostComposer> {
                 child: FilledButton(
                   onPressed: busy ? null : publish,
                   style: FilledButton.styleFrom(
-                    backgroundColor: auraBlue,
+                    backgroundColor: blue,
                     foregroundColor: Colors.white,
                     minimumSize: const Size.fromHeight(48),
                     shape: RoundedRectangleBorder(
@@ -840,7 +913,7 @@ class _PostComposerState extends State<PostComposer> {
                   bottom: 12,
                   child: circle(
                     CupertinoIcons.arrow_up_left_arrow_down_right,
-                    () => setState(() => aspect = aspect == 1 ? .8 : 1),
+                    () => ratios(c),
                     label: 'Proporzioni',
                   ),
                 ),
@@ -856,7 +929,7 @@ class _PostComposerState extends State<PostComposer> {
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton(
-                    onPressed: () => pick(),
+                    onPressed: copying ? null : () => gallerySources(c),
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                     ),
@@ -886,14 +959,25 @@ class _PostComposerState extends State<PostComposer> {
                   ),
                 ),
               ),
+              if (multiple && files.length > 1)
+                IconButton(
+                  tooltip: 'Riordina foto',
+                  onPressed: () => reorderPhotos(c),
+                  icon: const GIcon(CupertinoIcons.line_horizontal_3),
+                ),
               TextButton.icon(
-                onPressed: () => setState(() {
-                  multiple = !multiple;
-                  if (!multiple && files.length > 1) {
-                    files = [files[index.clamp(0, files.length - 1)]];
-                    index = 0;
-                  }
-                }),
+                onPressed: copying
+                    ? null
+                    : () {
+                        setState(() {
+                          multiple = !multiple;
+                          if (!multiple && files.length > 1) {
+                            files = [files[index.clamp(0, files.length - 1)]];
+                            index = 0;
+                          }
+                        });
+                        positionPreview();
+                      },
                 style: TextButton.styleFrom(
                   backgroundColor: multiple ? blue : subdued(c),
                   foregroundColor: multiple ? Colors.white : foreground(c),
@@ -930,7 +1014,10 @@ class _PostComposerState extends State<PostComposer> {
                   itemBuilder: (c, i) {
                     if (i == 0)
                       return InkWell(
-                        onTap: () => pick(camera: true),
+                        onTap: () => pick(
+                          camera: true,
+                          append: multiple && files.isNotEmpty,
+                        ),
                         child: ColoredBox(
                           color: subdued(c),
                           child: Center(
@@ -953,45 +1040,38 @@ class _PostComposerState extends State<PostComposer> {
                         children: [
                           ColoredBox(
                             color: subdued(c),
-                            child: number > 0 && path != null
-                                ? MediaView(path, fit: BoxFit.contain)
-                                : Image.memory(
-                                    photo.thumbnail,
-                                    fit: BoxFit.contain,
-                                  ),
+                            child: Image.memory(
+                              photo.thumbnail,
+                              fit: BoxFit.cover,
+                            ),
                           ),
-                          if (multiple || number > 0)
+                          if (multiple)
                             Positioned(
                               top: 7,
                               right: 7,
-                              child: GestureDetector(
-                                onTap: multiple
-                                    ? () => selectPhoto(photo, toggle: true)
-                                    : null,
-                                child: Container(
-                                  width: 24,
-                                  height: 24,
-                                  decoration: BoxDecoration(
-                                    color: number > 0 ? blue : Colors.black26,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: Colors.white,
-                                      width: 1.5,
-                                    ),
+                              child: Container(
+                                width: 24,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  color: number > 0 ? blue : Colors.black26,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 1.5,
                                   ),
-                                  child: number > 0
-                                      ? Center(
-                                          child: Text(
-                                            '$number',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                        )
-                                      : null,
                                 ),
+                                child: number > 0
+                                    ? Center(
+                                        child: Text(
+                                          '$number',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      )
+                                    : null,
                               ),
                             ),
                         ],
@@ -1247,7 +1327,8 @@ class _PostComposerState extends State<PostComposer> {
               'Modifica',
               () => adjust(c, filters: false),
             ),
-            tool(CupertinoIcons.crop, 'Proporzioni', () => ratios(c)),
+            tool(CupertinoIcons.crop, 'Ritaglia', () => cropPhoto(c)),
+            tool(Icons.aspect_ratio, 'Proporzioni', () => ratios(c)),
             tool(
               CupertinoIcons.arrow_counterclockwise,
               'Ripristina',
@@ -1261,7 +1342,7 @@ class _PostComposerState extends State<PostComposer> {
                 textSize = 24;
                 overlay = '';
                 overlayText = '';
-                aspect = 1;
+                photoCrops.remove(files[index]);
               }),
             ),
           ],
@@ -1307,15 +1388,25 @@ class _PostComposerState extends State<PostComposer> {
                             ),
                           ),
                         ),
+                      if (files.length < 10)
+                        IconButton(
+                          tooltip: 'Aggiungi foto',
+                          onPressed: () => pick(append: true),
+                          icon: const GIcon(CupertinoIcons.plus),
+                        ),
+                      if (files.length > 1)
+                        IconButton(
+                          tooltip: 'Riordina foto',
+                          onPressed: () => reorderPhotos(c),
+                          icon: const GIcon(CupertinoIcons.line_horizontal_3),
+                        ),
                     ],
                   ),
                 ),
               ),
               const SizedBox(width: 12),
               FilledButton(
-                onPressed: () {
-                  goToStep(2);
-                },
+                onPressed: files.isEmpty ? null : () => goToStep(2),
                 style: FilledButton.styleFrom(backgroundColor: blue),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1337,29 +1428,31 @@ class _PostComposerState extends State<PostComposer> {
     ],
   );
 
-  Widget tool(IconData icon, String title, VoidCallback action) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 4),
-    child: InkWell(
-      onTap: action,
-      borderRadius: BorderRadius.circular(15),
-      child: Container(
-        width: 82,
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: subdued(context),
-          borderRadius: BorderRadius.circular(15),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            GIcon(icon, color: foreground(context), size: 25),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11, color: foreground(context)),
-            ),
-          ],
+  Widget tool(IconData icon, String title, VoidCallback action) => Builder(
+    builder: (context) => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: InkWell(
+        onTap: action,
+        borderRadius: BorderRadius.circular(15),
+        child: Container(
+          width: 82,
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: subdued(context),
+            borderRadius: BorderRadius.circular(15),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              GIcon(icon, color: foreground(context), size: 25),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11, color: foreground(context)),
+              ),
+            ],
+          ),
         ),
       ),
     ),
@@ -1579,73 +1672,321 @@ class _PostComposerState extends State<PostComposer> {
       });
   }
 
-  Future<void> ratios(BuildContext c) => sheet(
+  Future<void> gallerySources(BuildContext c) => sheet<void>(
     c,
-    Column(
-      children: [
-        for (final entry in {
-          1.0: 'Quadrato · 1:1',
-          .8: 'Verticale · 4:5',
-          .75: 'Ritratto · 3:4',
-          1.91: 'Orizzontale',
-        }.entries)
-          ActionRow(CupertinoIcons.crop, entry.value, () {
-            setState(() => aspect = entry.key);
-            Navigator.pop(c);
+    Builder(
+      builder: (menu) => Column(
+        children: [
+          ActionRow(
+            CupertinoIcons.photo_on_rectangle,
+            'Recenti',
+            () => Navigator.pop(menu),
+          ),
+          ActionRow(CupertinoIcons.folder, 'Galleria di sistema', () {
+            Navigator.pop(menu);
+            pick();
           }),
-      ],
+          ActionRow(CupertinoIcons.camera, 'Fotocamera', () {
+            Navigator.pop(menu);
+            pick(camera: true);
+          }),
+        ],
+      ),
     ),
   );
-  Future<void> tagPeople(BuildContext c) => sheet(
-    c,
-    StatefulBuilder(
-      builder: (c, update) {
-        final store = GpixScope.of(c);
-        return Column(
-          children: [
-            const Text(
-              'Tagga persone',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-            ),
-            for (final u in store.users.where(
-              (u) => u.str('id') != store.myId && !store.blocked(u.str('id')),
-            ))
-              CheckboxListTile(
-                value: tagged.contains(u.str('id')),
-                title: Text(u.str('username')),
-                secondary: Avatar(u.str('id'), size: 34),
-                onChanged: (value) {
-                  setState(
-                    () => value == true
-                        ? tagged.add(u.str('id'))
-                        : tagged.remove(u.str('id')),
-                  );
-                  update(() {});
-                },
+
+  Future<void> reorderPhotos(BuildContext c) async {
+    final pending = files.indexed.toList();
+    final selected = files[index];
+    final result = await sheet<bool>(
+      c,
+      SizedBox(
+        height: MediaQuery.sizeOf(c).height * .55,
+        child: StatefulBuilder(
+          builder: (menu, update) => Column(
+            children: [
+              ListTile(
+                title: const Text('Riordina foto'),
+                trailing: TextButton(
+                  onPressed: () => Navigator.pop(menu, true),
+                  child: const Text('Fine'),
+                ),
               ),
-            Padding(
-              padding: const EdgeInsets.all(18),
-              child: PrimaryButton('Fine', onTap: () => Navigator.pop(c)),
+              Expanded(
+                child: ReorderableListView.builder(
+                  buildDefaultDragHandles: false,
+                  itemCount: pending.length,
+                  onReorder: (from, to) => update(() {
+                    pending.insert(
+                      to > from ? to - 1 : to,
+                      pending.removeAt(from),
+                    );
+                  }),
+                  itemBuilder: (context, i) => ListTile(
+                    key: ValueKey(pending[i].$1),
+                    leading: SizedBox.square(
+                      dimension: 42,
+                      child: MediaView(pending[i].$2, fit: BoxFit.cover),
+                    ),
+                    title: Text('Foto ${i + 1}'),
+                    trailing: ReorderableDragStartListener(
+                      index: i,
+                      child: const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: GIcon(CupertinoIcons.line_horizontal_3),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      scroll: false,
+    );
+    if (result != true || !mounted) return;
+    setState(() {
+      files = pending.map((entry) => entry.$2).toList();
+      index = files.indexOf(selected).clamp(0, files.length - 1);
+      formatChosen = true;
+    });
+    positionPreview();
+  }
+
+  Future<void> cropPhoto(BuildContext c) async {
+    if (files.isEmpty) return;
+    final path = files[index];
+    final crop = <String, dynamic>{
+      'zoom': 1.0,
+      'x': .5,
+      'y': .5,
+      ...?photoCrops[path],
+    };
+    Future<Uint8List> render() => compute(processPhoto, {
+      'path': path,
+      'aspect': aspect,
+      'crop': Map.of(crop),
+      'limit': 420,
+      'preview': true,
+    });
+    var image = render();
+    final result = await sheet<bool>(
+      c,
+      StatefulBuilder(
+        builder: (menu, update) => Column(
+          children: [
+            ListTile(
+              title: const Text('Ritaglia foto'),
+              trailing: TextButton(
+                onPressed: () => Navigator.pop(menu, true),
+                child: const Text('Fine'),
+              ),
+            ),
+            SizedBox(
+              height: MediaQuery.sizeOf(menu).height * .32,
+              child: Center(
+                child: AspectRatio(
+                  aspectRatio: aspect,
+                  child: FutureBuilder<Uint8List>(
+                    future: image,
+                    builder: (context, snapshot) => snapshot.hasData
+                        ? Image.memory(
+                            snapshot.data!,
+                            gaplessPlayback: true,
+                            fit: BoxFit.cover,
+                          )
+                        : MediaView(path, fit: BoxFit.cover),
+                  ),
+                ),
+              ),
+            ),
+            for (final (key, label, min, max) in [
+              ('zoom', 'Zoom', 1.0, 3.0),
+              ('x', 'Posizione orizzontale', 0.0, 1.0),
+              ('y', 'Posizione verticale', 0.0, 1.0),
+            ])
+              ListTile(
+                dense: true,
+                title: Text(label),
+                subtitle: Slider(
+                  min: min,
+                  max: max,
+                  value: crop.number(key, min).clamp(min, max),
+                  onChanged: (value) => update(() => crop[key] = value),
+                  onChangeEnd: (_) => update(() => image = render()),
+                ),
+              ),
+            TextButton(
+              onPressed: () => update(() {
+                crop.addAll({'zoom': 1.0, 'x': .5, 'y': .5});
+                image = render();
+              }),
+              child: const Text('Ripristina ritaglio'),
             ),
           ],
-        );
-      },
+        ),
+      ),
+    );
+    if (result == true && mounted) setState(() => photoCrops[path] = crop);
+  }
+
+  Future<void> ratios(BuildContext c) => sheet(
+    c,
+    Builder(
+      builder: (menu) => Column(
+        children: [
+          for (final entry in {
+            .75: 'Verticale · 3:4',
+            .8: 'Verticale · 4:5',
+            1.91: 'Orizzontale',
+            1.0: 'Quadrato · 1:1',
+          }.entries)
+            ListTile(
+              leading: const GIcon(CupertinoIcons.crop),
+              title: Text(entry.value),
+              trailing: aspect == entry.key
+                  ? const GIcon(CupertinoIcons.check_mark)
+                  : null,
+              onTap: () {
+                setState(() {
+                  aspect = entry.key;
+                  formatChosen = true;
+                });
+                Navigator.pop(menu);
+              },
+            ),
+        ],
+      ),
     ),
   );
+  Future<void> tagPeople(BuildContext c) async {
+    final result = await open<(Map<String, List<J>>, Set<String>, Set<String>)>(
+      c,
+      _PhotoTagEditor(
+        files: List.of(files),
+        initial: index,
+        aspect: aspect,
+        preview: (path) => processed(path),
+        tags: photoTags,
+        legacy: tagged,
+        collaborators: collaboratorInvites,
+        audience: audience,
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      photoTags
+        ..clear()
+        ..addAll(result.$1);
+      tagged
+        ..clear()
+        ..addAll(result.$2);
+      collaboratorInvites
+        ..clear()
+        ..addAll(result.$3);
+    });
+  }
+
+  static const suggestedPlaces = [
+    'Reggio di Calabria',
+    'Roma',
+    'Messina',
+    'Milano',
+  ];
+
+  Future<void> choosePlace(BuildContext c) async {
+    var query = location.text.trim();
+    final result = await sheet<String>(
+      c,
+      StatefulBuilder(
+        builder: (page, update) {
+          final matches = suggestedPlaces
+              .where(
+                (place) => place.toLowerCase().contains(query.toLowerCase()),
+              )
+              .toList();
+          return Column(
+            children: [
+              ListTile(
+                title: pageTitle('Luoghi'),
+                trailing: IconButton(
+                  tooltip: 'Chiudi',
+                  icon: const GIcon(CupertinoIcons.xmark),
+                  onPressed: () => Navigator.pop(page),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                child: TextFormField(
+                  initialValue: query,
+                  textInputAction: TextInputAction.done,
+                  onChanged: (value) => update(() => query = value.trim()),
+                  onFieldSubmitted: (value) {
+                    if (value.trim().isNotEmpty)
+                      Navigator.pop(page, value.trim());
+                  },
+                  decoration: const InputDecoration(
+                    hintText: 'Cerca un luogo',
+                    prefixIcon: GIcon(CupertinoIcons.search),
+                  ),
+                ),
+              ),
+              for (final place in matches)
+                ListTile(
+                  leading: const GIcon(CupertinoIcons.placemark),
+                  title: Text(place),
+                  onTap: () => Navigator.pop(page, place),
+                ),
+              if (query.isNotEmpty &&
+                  !matches.any(
+                    (place) => place.toLowerCase() == query.toLowerCase(),
+                  ))
+                ListTile(
+                  leading: const GIcon(CupertinoIcons.plus),
+                  title: Text('Usa «$query»'),
+                  onTap: () => Navigator.pop(page, query),
+                ),
+              if (location.text.isNotEmpty)
+                ListTile(
+                  title: const Text('Rimuovi luogo'),
+                  onTap: () => Navigator.pop(page, ''),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+    if (result != null && mounted) setState(() => location.text = result);
+  }
+
+  Future<void> editCaption(BuildContext context) async {
+    final value = await open<String>(
+      context,
+      _PostCaption(initial: caption.text),
+    );
+    if (value != null && mounted) caption.text = value;
+  }
+
   Widget share(BuildContext c) {
     return ListView(
       padding: const EdgeInsets.only(bottom: 16),
       children: [
         const SizedBox(height: 12),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: EdgeInsets.symmetric(
+            horizontal: files.length == 1 ? 72 : 24,
+          ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(16),
             child: LayoutBuilder(
               builder: (c, box) => SizedBox(
                 height: (box.maxWidth / aspect).clamp(
-                  180.0,
-                  MediaQuery.sizeOf(c).height * .36,
+                  72.0,
+                  math.max(72, MediaQuery.sizeOf(c).height * .26),
                 ),
                 child: Stack(
                   fit: StackFit.expand,
@@ -1688,143 +2029,142 @@ class _PostComposerState extends State<PostComposer> {
               ],
             ),
           ),
-        Container(
-          margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: subdued(c),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: TextField(
-            controller: caption,
-            maxLength: 2200,
-            minLines: 2,
-            maxLines: 5,
-            decoration: const InputDecoration(
-              hintText: 'Scrivi una didascalia…',
-              filled: false,
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(vertical: 8),
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: caption,
+          builder: (_, value, _) => ListTile(
+            minTileHeight: 63,
+            title: Text(
+              value.text.isEmpty ? 'Aggiungi una didascalia…' : value.text,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 14,
+                color: value.text.isEmpty ? secondaryText(c) : foreground(c),
+              ),
             ),
+            onTap: () => editCaption(c),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Wrap(
+            spacing: 10,
+            children: [
+              ActionChip(
+                avatar: const GIcon(CupertinoIcons.list_bullet, size: 18),
+                label: Text(poll == null ? 'Sondaggio' : 'Sondaggio aggiunto'),
+                onPressed: () async {
+                  final value = await sheet<J>(c, PollEditor(initial: poll));
+                  if (value != null && mounted)
+                    setState(() => poll = value.isEmpty ? null : value);
+                },
+              ),
+              ActionChip(
+                avatar: const GIcon(CupertinoIcons.chat_bubble, size: 18),
+                label: Text(topic.isEmpty ? 'Tema' : topic),
+                onPressed: () async {
+                  final value = await textDialog(c, 'Tema del post', topic);
+                  if (value != null && mounted)
+                    setState(() => topic = value.trim());
+                },
+              ),
+            ],
           ),
         ),
         row(
           c,
-          CupertinoIcons.person_2,
-          'Pubblico',
-          audience == 'close' ? 'Amici più stretti' : 'Follower',
-          () => sheet(
-            c,
-            Column(
-              children: [
-                ActionRow(CupertinoIcons.person_2, 'Follower', () {
-                  setState(() => audience = 'followers');
-                  Navigator.pop(c);
-                }),
-                ActionRow(CupertinoIcons.star_circle, 'Amici più stretti', () {
-                  setState(() => audience = 'close');
-                  Navigator.pop(c);
-                }),
-              ],
-            ),
-          ),
+          CupertinoIcons.music_note_2,
+          'Aggiungi audio',
+          audioName.isEmpty ? null : audioName,
+          chooseAudio,
+        ),
+        row(
+          c,
+          CupertinoIcons.person_crop_rectangle,
+          'Tagga persone',
+          collaboratorInvites.isNotEmpty
+              ? (collaboratorInvites.length == 1
+                    ? '1 collaboratore'
+                    : '${collaboratorInvites.length} collaboratori')
+              : switch (taggedUsers.length) {
+                  0 => null,
+                  1 => '1 persona',
+                  _ => '${taggedUsers.length} persone',
+                },
+          () => tagPeople(c),
         ),
         row(
           c,
           CupertinoIcons.placemark,
           'Aggiungi luogo',
           location.text.isEmpty ? null : location.text,
-          () async {
-            final value = await textDialog(c, 'Aggiungi luogo', location.text);
-            if (value != null && mounted) setState(() => location.text = value);
-          },
+          () => choosePlace(c),
         ),
-        ExpansionTile(
-          title: const Text(
-            'Personalizza post',
-            style: TextStyle(fontSize: 14),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          child: Wrap(
+            spacing: 7,
+            children: [
+              for (final place in suggestedPlaces)
+                ActionChip(
+                  label: Text(place),
+                  onPressed: () => setState(() => location.text = place),
+                ),
+            ],
           ),
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-          shape: const Border(),
-          collapsedShape: const Border(),
-          children: [
-            row(
+        ),
+        SwitchListTile.adaptive(
+          secondary: const GIcon(CupertinoIcons.sparkles),
+          title: const Text(
+            'Aggiungi etichetta IA',
+            style: TextStyle(fontSize: 15),
+          ),
+          subtitle: const Text(
+            'Segnala contenuti realistici creati o modificati con l’IA.',
+            style: TextStyle(fontSize: 12),
+          ),
+          value: aiLabel,
+          onChanged: (value) => setState(() => aiLabel = value),
+        ),
+        row(
+          c,
+          CupertinoIcons.person_2,
+          'Pubblico',
+          audience == 'close' ? 'Amici più stretti' : 'Follower',
+          () async {
+            final value = await open<String>(
               c,
-              CupertinoIcons.person_crop_rectangle,
-              'Tagga persone',
-              tagged.isEmpty ? null : '${tagged.length} persone',
-              () => tagPeople(c),
-            ),
-            row(
-              c,
-              CupertinoIcons.music_note_2,
-              'Aggiungi musica',
-              audioName.isEmpty ? null : audioName,
-              chooseAudio,
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Wrap(
-                spacing: 10,
-                children: [
-                  ActionChip(
-                    avatar: const GIcon(CupertinoIcons.list_bullet, size: 18),
-                    label: Text(
-                      poll == null ? 'Sondaggio' : 'Sondaggio aggiunto',
-                    ),
-                    onPressed: () async {
-                      final value = await sheet<J>(
-                        c,
-                        PollEditor(initial: poll),
-                      );
-                      if (value != null && mounted)
-                        setState(() => poll = value.isEmpty ? null : value);
-                    },
-                  ),
-                  ActionChip(
-                    avatar: const GIcon(CupertinoIcons.chat_bubble, size: 18),
-                    label: Text(topic.isEmpty ? 'Tema' : topic),
-                    onPressed: () async {
-                      final value = await textDialog(c, 'Tema del post', topic);
-                      if (value != null && mounted)
-                        setState(() => topic = value.trim());
-                    },
-                  ),
-                ],
+              Scaffold(
+                appBar: AppBar(centerTitle: true, title: pageTitle('Pubblico')),
+                body: ListView(
+                  children: [
+                    const ListTile(title: Text('Chi può vedere il tuo post')),
+                    for (final (key, title, icon) in [
+                      ('followers', 'Follower', CupertinoIcons.person_2),
+                      (
+                        'close',
+                        'Amici più stretti',
+                        CupertinoIcons.star_circle,
+                      ),
+                    ])
+                      Builder(
+                        builder: (page) => ListTile(
+                          leading: GIcon(icon),
+                          title: Text(title),
+                          trailing: GIcon(
+                            audience == key
+                                ? CupertinoIcons.largecircle_fill_circle
+                                : CupertinoIcons.circle,
+                          ),
+                          onTap: () => Navigator.pop(page, key),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              child: Wrap(
-                spacing: 7,
-                children: [
-                  for (final place in ['Roma', 'Milano', 'Reggio di Calabria'])
-                    ActionChip(
-                      label: Text(place),
-                      onPressed: () => setState(() => location.text = place),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            const Divider(height: 18),
-            SwitchListTile.adaptive(
-              secondary: const GIcon(CupertinoIcons.sparkles),
-              title: const Text(
-                'Aggiungi etichetta IA',
-                style: TextStyle(fontSize: 15),
-              ),
-              subtitle: const Text(
-                'Segnala contenuti realistici creati o modificati con l’IA.',
-                style: TextStyle(fontSize: 12, color: muted),
-              ),
-              value: aiLabel,
-              onChanged: (value) => setState(() => aiLabel = value),
-            ),
-            const Divider(height: 18),
-          ],
+            );
+            if (value != null && mounted) setState(() => audience = value);
+          },
         ),
         row(
           c,
@@ -1913,6 +2253,387 @@ class _PostComposerState extends State<PostComposer> {
       ),
       const Divider(height: 1, indent: 14, endIndent: 14),
     ],
+  );
+}
+
+class _PhotoTagEditor extends StatefulWidget {
+  const _PhotoTagEditor({
+    required this.files,
+    required this.initial,
+    required this.aspect,
+    required this.preview,
+    required this.tags,
+    required this.legacy,
+    required this.collaborators,
+    required this.audience,
+  });
+
+  final List<String> files;
+  final int initial;
+  final double aspect;
+  final Widget Function(String) preview;
+  final Map<String, List<J>> tags;
+  final Set<String> legacy, collaborators;
+  final String audience;
+
+  @override
+  State<_PhotoTagEditor> createState() => _PhotoTagEditorState();
+}
+
+class _PhotoTagEditorState extends State<_PhotoTagEditor> {
+  late int index = widget.initial.clamp(0, widget.files.length - 1);
+  late final pages = PageController(initialPage: index);
+  late final tags = {
+    for (final path in widget.files)
+      path: [
+        for (final tag in widget.tags[path] ?? const <J>[])
+          Map<String, dynamic>.of(tag),
+      ],
+  };
+  late final legacy = {...widget.legacy};
+  late final collaborators = {...widget.collaborators};
+  bool explained = false;
+
+  Future<void> invite(GpixStore store) async {
+    if (!explained) {
+      final proceed = await sheet<bool>(
+        context,
+        Builder(
+          builder: (menu) => Padding(
+            padding: const EdgeInsets.fromLTRB(20, 6, 20, 16),
+            child: Column(
+              children: [
+                const GIcon(CupertinoIcons.person_2, size: 34),
+                const SizedBox(height: 12),
+                pageTitle('Invitare i collaboratori'),
+                const SizedBox(height: 10),
+                const Text(
+                  'Se accettano, il post comparirà anche sui loro profili per chi può già vederlo. Mi piace e commenti saranno condivisi.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 18),
+                PrimaryButton(
+                  'Continua',
+                  onTap: () => Navigator.pop(menu, true),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(menu, false),
+                  child: const Text('Annulla'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      if (proceed != true || !mounted) return;
+      explained = true;
+    }
+    final excluded = {
+      ...collaborators,
+      for (final user in store.users)
+        if ((store.me.flag('private') &&
+                !store.me.ids('followersList').contains(user.str('id'))) ||
+            (widget.audience == 'close' &&
+                !store.state.ids('closeFriends').contains(user.str('id'))))
+          user.str('id'),
+    };
+    final selected = await open<String>(
+      context,
+      _PostTagSearch(excluded: excluded),
+    );
+    if (mounted && selected != null && collaborators.length < 3) {
+      setState(() => collaborators.add(selected));
+    }
+  }
+
+  @override
+  void dispose() {
+    pages.dispose();
+    super.dispose();
+  }
+
+  Future<void> addTag(String path, Offset point) async {
+    final selected = await open<String>(context, const _PostTagSearch());
+    if (!mounted || selected == null) return;
+    setState(() {
+      tags[path]!
+        ..removeWhere((tag) => tag.str('user') == selected)
+        ..add({'user': selected, 'x': point.dx, 'y': point.dy});
+      legacy.remove(selected);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final store = GpixScope.of(context);
+    final current = tags[widget.files[index]]!;
+    return Scaffold(
+      appBar: AppBar(
+        centerTitle: true,
+        title: pageTitle('Tagga persone'),
+        actions: [
+          _PostDone(
+            onPressed: () =>
+                Navigator.pop(context, (tags, legacy, collaborators)),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          SizedBox(
+            height: MediaQuery.sizeOf(context).height * .43,
+            child: PageView.builder(
+              controller: pages,
+              itemCount: widget.files.length,
+              onPageChanged: (page) => setState(() => index = page),
+              itemBuilder: (context, page) {
+                final path = widget.files[page];
+                return Center(
+                  child: AspectRatio(
+                    aspectRatio: widget.aspect,
+                    child: LayoutBuilder(
+                      builder: (context, box) => Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          GestureDetector(
+                            key: ValueKey('tag-photo-$page'),
+                            behavior: HitTestBehavior.opaque,
+                            onTapUp: (tap) => addTag(
+                              path,
+                              Offset(
+                                (tap.localPosition.dx / box.maxWidth).clamp(
+                                  0,
+                                  1,
+                                ),
+                                (tap.localPosition.dy / box.maxHeight).clamp(
+                                  0,
+                                  1,
+                                ),
+                              ),
+                            ),
+                            child: widget.preview(path),
+                          ),
+                          for (final tag in tags[path]!)
+                            Align(
+                              alignment: postTagAlignment(tag),
+                              child: GestureDetector(
+                                key: ValueKey((
+                                  'photo-tag',
+                                  page,
+                                  tag.str('user'),
+                                )),
+                                onPanUpdate: (event) => setState(() {
+                                  tag['x'] =
+                                      (tag.number('x', .5) +
+                                              event.delta.dx / box.maxWidth)
+                                          .clamp(0, 1);
+                                  tag['y'] =
+                                      (tag.number('y', .5) +
+                                              event.delta.dy / box.maxHeight)
+                                          .clamp(0, 1);
+                                }),
+                                child: PostTagLabel(
+                                  store.user(tag.str('user')).str('username'),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          if (widget.files.length > 1)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 9),
+              child: Text('${index + 1}/${widget.files.length}'),
+            ),
+          Expanded(
+            child: ListView(
+              children: [
+                if (store.supportsPostCollaborations)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 6,
+                    ),
+                    child: FilledButton.tonal(
+                      onPressed: collaborators.length >= 3
+                          ? null
+                          : () => invite(store),
+                      child: const Text('Invita collaboratori'),
+                    ),
+                  ),
+                if (collaborators.isNotEmpty) ...[
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: Text(
+                      'Collaboratori',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  for (final user in collaborators)
+                    ListTile(
+                      leading: Avatar(user, size: 36),
+                      title: Text(store.user(user).str('username')),
+                      subtitle: const Text(
+                        'Invito da inviare alla pubblicazione',
+                      ),
+                      trailing: IconButton(
+                        tooltip: 'Rimuovi collaboratore',
+                        onPressed: () =>
+                            setState(() => collaborators.remove(user)),
+                        icon: const GIcon(CupertinoIcons.xmark),
+                      ),
+                    ),
+                ],
+                if (current.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(18),
+                    child: Text(
+                      'Tocca la foto per taggare una persona.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                for (final tag in current)
+                  ListTile(
+                    leading: Avatar(tag.str('user'), size: 36),
+                    title: Text(store.user(tag.str('user')).str('username')),
+                    trailing: IconButton(
+                      tooltip: 'Rimuovi tag',
+                      onPressed: () => setState(() => current.remove(tag)),
+                      icon: const GIcon(CupertinoIcons.xmark),
+                    ),
+                  ),
+                for (final id in legacy)
+                  ListTile(
+                    leading: Avatar(id, size: 36),
+                    title: Text(store.user(id).str('username')),
+                    subtitle: const Text('Tag del post'),
+                    trailing: IconButton(
+                      tooltip: 'Rimuovi tag del post',
+                      onPressed: () => setState(() => legacy.remove(id)),
+                      icon: const GIcon(CupertinoIcons.xmark),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PostTagSearch extends StatefulWidget {
+  const _PostTagSearch({this.excluded = const {}});
+  final Set<String> excluded;
+
+  @override
+  State<_PostTagSearch> createState() => _PostTagSearchState();
+}
+
+class _PostTagSearchState extends State<_PostTagSearch> {
+  String query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final store = GpixScope.of(context);
+    final results = store.users.where((user) {
+      final id = user.str('id');
+      return id != store.myId &&
+          !widget.excluded.contains(id) &&
+          !store.blocked(id) &&
+          '${user.str('username')} ${user.str('name')}'.toLowerCase().contains(
+            query,
+          );
+    }).toList();
+    return Scaffold(
+      appBar: AppBar(
+        title: TextField(
+          autofocus: true,
+          textInputAction: TextInputAction.search,
+          onChanged: (value) =>
+              setState(() => query = value.trim().toLowerCase()),
+          decoration: const InputDecoration(
+            hintText: 'Cerca persone',
+            prefixIcon: GIcon(CupertinoIcons.search),
+            isDense: true,
+          ),
+        ),
+      ),
+      body: results.isEmpty
+          ? const Center(child: Text('Nessuna persona trovata'))
+          : ListView.builder(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              itemCount: results.length,
+              itemBuilder: (context, i) {
+                final id = results[i].str('id');
+                return PersonTile(id, onTap: () => Navigator.pop(context, id));
+              },
+            ),
+    );
+  }
+}
+
+class _PostCaption extends StatefulWidget {
+  const _PostCaption({required this.initial});
+  final String initial;
+  @override
+  State<_PostCaption> createState() => _PostCaptionState();
+}
+
+class _PostCaptionState extends State<_PostCaption> {
+  late final input = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    input.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      centerTitle: true,
+      title: pageTitle('Didascalia'),
+      actions: [_PostDone(onPressed: () => Navigator.pop(context, input.text))],
+    ),
+    body: Padding(
+      padding: const EdgeInsets.all(16),
+      child: TextField(
+        controller: input,
+        autofocus: true,
+        maxLength: 2200,
+        maxLines: null,
+        keyboardType: TextInputType.multiline,
+        decoration: const InputDecoration(
+          hintText: 'Aggiungi una didascalia…',
+          filled: false,
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+        ),
+      ),
+    ),
+  );
+}
+
+class _PostDone extends StatelessWidget {
+  const _PostDone({required this.onPressed});
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(right: 10),
+    child: IconButton.filled(
+      tooltip: 'Fine',
+      onPressed: onPressed,
+      style: IconButton.styleFrom(backgroundColor: const Color(0xff4656f6)),
+      icon: const GIcon(CupertinoIcons.check_mark, color: Colors.white),
+    ),
   );
 }
 

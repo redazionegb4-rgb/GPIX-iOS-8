@@ -527,6 +527,7 @@ Future<T?> anchoredMenu<T>(
   required double width,
   required String label,
   bool alignRight = false,
+  bool translucent = false,
 }) async {
   final anchor = context.findRenderObject();
   final overlay = Navigator.of(context).overlay?.context.findRenderObject();
@@ -555,7 +556,9 @@ Future<T?> anchoredMenu<T>(
     items: items,
     semanticLabel: label,
     constraints: BoxConstraints.tightFor(width: menuWidth),
-    color: dark ? const Color(0xff191a1c) : Colors.white,
+    color: translucent
+        ? (dark ? const Color(0xf0242528) : const Color(0xf2ffffff))
+        : (dark ? const Color(0xff191a1c) : Colors.white),
     surfaceTintColor: Colors.transparent,
     elevation: 10,
     shadowColor: Colors.black.withValues(alpha: dark ? .48 : .22),
@@ -583,6 +586,7 @@ PopupMenuItem<T> dropdownRow<T>(
   IconData icon, {
   bool selected = false,
   bool enabled = true,
+  bool roomy = false,
 }) {
   final color = !enabled
       ? secondaryText(context)
@@ -593,9 +597,9 @@ PopupMenuItem<T> dropdownRow<T>(
     value: value,
     enabled: enabled,
     padding: EdgeInsets.zero,
-    height: 45,
+    height: roomy ? 53 : 45,
     child: Container(
-      constraints: const BoxConstraints(minHeight: 45),
+      constraints: BoxConstraints(minHeight: roomy ? 53 : 45),
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
       decoration: BoxDecoration(
         color: selected ? accent(context).withValues(alpha: .10) : null,
@@ -610,7 +614,7 @@ PopupMenuItem<T> dropdownRow<T>(
               label,
               style: TextStyle(
                 color: color,
-                fontSize: 14,
+                fontSize: roomy ? 16 : 14,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
               ),
             ),
@@ -947,7 +951,7 @@ class Avatar extends StatelessWidget {
         : ClipOval(child: imageView);
     const ringWidth = 2.3, ringGap = 2.8;
     final diameter = size + (ring ? 2 * (ringWidth + ringGap) : 0);
-    final closeStory = ring && s.closeStory(user);
+    final closeStory = ring && !viewed && s.closeStory(user);
     final shape = roundedSquare ? BoxShape.rectangle : BoxShape.circle;
     final framed = ring
         ? Container(
@@ -1363,4 +1367,29 @@ class _SectionSwipeState extends State<SectionSwipe>
           : widget.child,
     );
   }
+}
+
+Alignment postTagAlignment(J tag) => Alignment(
+  tag.number('x', .5).clamp(0, 1) * 2 - 1,
+  tag.number('y', .5).clamp(0, 1) * 2 - 1,
+);
+
+class PostTagLabel extends StatelessWidget {
+  const PostTagLabel(this.name, {super.key});
+  final String name;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Colors.black.withValues(alpha: .85),
+    borderRadius: BorderRadius.circular(6),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      child: Text(
+        name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 12, color: Colors.white),
+      ),
+    ),
+  );
 }

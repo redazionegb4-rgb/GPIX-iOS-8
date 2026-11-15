@@ -4,6 +4,10 @@ import Photos
 import Speech
 import FirebaseCore
 import FirebaseMessaging
+#if canImport(Translation)
+import SwiftUI
+import Translation
+#endif
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -37,6 +41,22 @@ import FirebaseMessaging
         }
       }
 
+    FlutterMethodChannel(name: "GPIX/translation", binaryMessenger: messenger)
+      .setMethodCallHandler { call, result in
+        guard call.method == "present" else { result(FlutterMethodNotImplemented); return }
+        guard let args = call.arguments as? [String: String],
+              let text = args["text"], !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+          result(false); return
+        }
+        #if canImport(Translation)
+        if #available(iOS 17.4, *) {
+          result(Self.presentTranslation(text))
+          return
+        }
+        #endif
+        result(false)
+      }
+
     gallery = PhotoGalleryBridge(messenger: messenger)
     transcription = VoiceTranscription(messenger: messenger)
     instantPrivacy = InstantPrivacyBridge(messenger: messenger)
@@ -44,6 +64,23 @@ import FirebaseMessaging
       registrar.register(SecurePhotoFactory(), withId: "GPIX/secure-photo")
     }
   }
+
+  #if canImport(Translation)
+  @available(iOS 17.4, *)
+  private static func presentTranslation(_ text: String) -> Bool {
+    let window = UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .filter { $0.activationState == .foregroundActive }
+      .flatMap { $0.windows }
+      .first { $0.isKeyWindow }
+    guard var presenter = window?.rootViewController else { return false }
+    while let current = presenter.presentedViewController { presenter = current }
+    let sheet = UIHostingController(rootView: GpixTranslationSheet(text: text))
+    sheet.modalPresentationStyle = .pageSheet
+    presenter.present(sheet, animated: true)
+    return true
+  }
+  #endif
 
   override func application(
     _ application: UIApplication,
@@ -63,6 +100,40 @@ import FirebaseMessaging
   }
 
 }
+
+#if canImport(Translation)
+@available(iOS 17.4, *)
+private struct GpixTranslationSheet: View {
+  let text: String
+  @State private var presented = false
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    NavigationStack {
+      ScrollView {
+        Text(text)
+          .textSelection(.enabled)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding()
+          .translationPresentation(isPresented: $presented, text: text)
+      }
+      .navigationTitle("Traduci")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .topBarLeading) {
+          Button("Traduci") { presented = true }
+        }
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Fine") { dismiss() }
+        }
+      }
+      .task {
+        if !Task.isCancelled { presented = true }
+      }
+    }
+  }
+}
+#endif
 
 private final class VoiceTranscription {
   private let channel: FlutterMethodChannel

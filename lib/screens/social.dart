@@ -1,18 +1,25 @@
+import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'
+    show Clipboard, ClipboardData, rootBundle;
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import '../core/data.dart';
 import '../core/store.dart';
 import '../ui/kit.dart';
 import 'stories.dart';
+import 'reel_editor.dart';
 import 'features13.dart';
 import 'sessions_instants.dart';
 import 'messages.dart';
+import 'inbox_widgets.dart' show DirectSearchField, directSearchTerm;
 import 'video.dart';
 import 'live.dart';
 import 'community.dart';
+import 'notes.dart';
 import 'creation_studio.dart';
 import 'giphy.dart';
 import '../rebuild/surfaces.dart' show DiscoverHome, ProfileHome, TimelinePost;
@@ -26,6 +33,25 @@ class StoryTray extends StatefulWidget {
 
 class _StoryTrayState extends State<StoryTray> {
   final scroll = ScrollController();
+  bool pickingStoryMedia = false;
+
+  Future<void> addStory() async {
+    if (pickingStoryMedia) return;
+    pickingStoryMedia = true;
+    try {
+      await perform(context, () async {
+        final selected = await ImagePicker().pickMedia();
+        if (selected == null || !mounted) return;
+        await open(
+          context,
+          Composer(kind: 'story', initialMedia: selected.path),
+        );
+      });
+    } finally {
+      pickingStoryMedia = false;
+    }
+  }
+
   void reset() {
     if (scroll.hasClients)
       scroll.animateTo(
@@ -46,6 +72,10 @@ class _StoryTrayState extends State<StoryTray> {
   Widget build(BuildContext c) {
     final s = GpixScope.of(c);
     final users = s.storyUsers;
+    final width = MediaQuery.sizeOf(c).width;
+    final slot = (width * .247).clamp(74.0, 105.0);
+    final avatar = slot - 16;
+    final ringDiameter = avatar + 10.2;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -87,35 +117,28 @@ class _StoryTrayState extends State<StoryTray> {
               ],
             ),
           ),
-        Container(
+        SizedBox(
           height:
-              121 +
-              (MediaQuery.textScalerOf(c).scale(12) - 12).clamp(0.0, 32.0),
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: Theme.of(c).dividerColor)),
-          ),
+              ringDiameter +
+              30 +
+              (MediaQuery.textScalerOf(c).scale(10) - 10).clamp(0.0, 32.0),
           child: ListView.separated(
             key: const ValueKey('stories-strip'),
             controller: scroll,
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 5),
+            padding: const EdgeInsets.fromLTRB(5, 2, 5, 7),
             scrollDirection: Axis.horizontal,
             itemCount: users.length + 1,
-            separatorBuilder: (_, i) => const SizedBox(width: 6),
+            separatorBuilder: (_, i) => const SizedBox(width: 5),
             itemBuilder: (c, i) {
               final uid = i == 0 ? s.myId : users[i - 1].str('id');
               final stories = s.stories(uid);
               return InkWell(
-                onTap: () => i == 0 && stories.isEmpty
-                    ? open(c, const Composer(kind: 'story'))
-                    : open(c, StoryViewer(user: uid)),
-                onLongPress: i == 0
-                    ? () => open(c, const Composer(kind: 'story'))
-                    : null,
+                onTap: i == 0 && stories.isEmpty
+                    ? addStory
+                    : () => open(c, StoryViewer(user: uid)),
+                onLongPress: i == 0 ? addStory : null,
                 child: SizedBox(
-                  width: ((MediaQuery.sizeOf(c).width - 36) / 3.65).clamp(
-                    69.0,
-                    102.0,
-                  ),
+                  width: slot,
                   child: Column(
                     children: [
                       Stack(
@@ -123,31 +146,29 @@ class _StoryTrayState extends State<StoryTray> {
                         children: [
                           Avatar(
                             uid,
-                            size:
-                                ((MediaQuery.sizeOf(c).width - 36) / 3.65 - 15)
-                                    .clamp(54.0, 68.0),
-                            ring: stories.isNotEmpty,
+                            size: avatar,
+                            ring: i == 0 || stories.isNotEmpty,
                             viewed:
-                                i != 0 &&
-                                stories.every(
-                                  (p) =>
-                                      (p.flag('seenByMe') ||
-                                      p.ids('viewers').contains(s.myId)),
-                                ),
+                                (i == 0 && stories.isEmpty) ||
+                                (i != 0 &&
+                                    stories.every(
+                                      (p) =>
+                                          (p.flag('seenByMe') ||
+                                          p.ids('viewers').contains(s.myId)),
+                                    )),
                           ),
                           if (i == 0)
                             Positioned(
-                              right: -1,
+                              right: 3,
                               bottom: 0,
                               child: GestureDetector(
                                 key: const ValueKey('create-own-story'),
-                                onTap: () =>
-                                    open(c, const Composer(kind: 'story')),
+                                onTap: addStory,
                                 child: Container(
-                                  width: 30,
-                                  height: 30,
+                                  width: 29,
+                                  height: 29,
                                   decoration: BoxDecoration(
-                                    color: auraBlue,
+                                    color: const Color(0xff15171b),
                                     shape: BoxShape.circle,
                                     border: Border.all(
                                       color: surface(c),
@@ -170,8 +191,8 @@ class _StoryTrayState extends State<StoryTray> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 11.5,
-                          color: secondaryText(c),
+                          fontSize: 10.5,
+                          color: i == 0 ? secondaryText(c) : foreground(c),
                         ),
                       ),
                     ],
@@ -308,7 +329,7 @@ Future<void> people(BuildContext c, List<String> ids, String title) => sheet(
     ],
   ),
 );
-Future<void> postMenu(BuildContext c, J p) async {
+Future<void> postMenu(BuildContext c, J p, {bool detail = false}) async {
   final s = GpixScope.of(c, listen: false), own = p.str('author') == s.myId;
   if (own && p.str('kind') == 'story') {
     final action = await sheet<String>(
@@ -322,6 +343,12 @@ Future<void> postMenu(BuildContext c, J p) async {
               () => Navigator.pop(menu, 'delete'),
               destructive: true,
             ),
+            if (Platform.isAndroid && p.obj('style').flag('video'))
+              ActionRow(
+                CupertinoIcons.play_rectangle,
+                'Condividi come reel',
+                () => Navigator.pop(menu, 'reel'),
+              ),
             ActionRow(
               CupertinoIcons.star_circle,
               'Metti in evidenza',
@@ -348,7 +375,9 @@ Future<void> postMenu(BuildContext c, J p) async {
       ),
     );
     if (!c.mounted) return;
-    if (action == 'highlight') {
+    if (action == 'reel') {
+      await open(c, ReelEditor(story: p));
+    } else if (action == 'highlight') {
       await addStoryHighlight(c, p);
     } else if (action == 'friends') {
       await open(c, const CloseFriends());
@@ -386,161 +415,313 @@ Future<void> postMenu(BuildContext c, J p) async {
     }
     return;
   }
+  if (detail && !own) {
+    final selected = await sheet<String>(
+      c,
+      Builder(
+        builder: (menu) => _PostMenuGroup(
+          children: [
+            if (p.ids('collaborators').contains(s.myId))
+              ActionRow(
+                CupertinoIcons.person_badge_minus,
+                'Abbandona collaborazione',
+                () => Navigator.pop(menu, 'leave'),
+                destructive: true,
+              ),
+            ActionRow(
+              CupertinoIcons.flag,
+              'Segnala',
+              () => Navigator.pop(menu, 'report'),
+              destructive: true,
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!c.mounted) return;
+    if (selected == 'report') await report(c, p.str('id'));
+    if (selected == 'leave' &&
+        await gpixAlert(
+          c,
+          'Abbandonare la collaborazione?',
+          'Il post verrà rimosso dal tuo profilo.',
+          confirm: 'Abbandona',
+          cancel: true,
+          destructive: true,
+        ) &&
+        c.mounted) {
+      await perform(
+        c,
+        () => s.act('postCollaboration', {
+          'id': p.str('id'),
+          'decision': 'leave',
+        }),
+      );
+    }
+    return;
+  }
+
   await sheet(
     c,
-    Column(
-      children: [
-        ActionRow(
+    Builder(
+      builder: (menu) {
+        final save = ActionRow(
           p.flag('saved')
               ? CupertinoIcons.bookmark_fill
               : CupertinoIcons.bookmark,
           p.flag('saved') ? 'Rimuovi dai salvati' : 'Salva',
           () {
-            Navigator.pop(c);
-            perform(
-              c,
-              () => s.act('save', {'id': p['id'], 'enabled': !p.flag('saved')}),
-            );
+            Navigator.pop(menu);
+            toggleSavedPost(c, p.str('id'));
           },
-        ),
-        ActionRow(CupertinoIcons.paperplane, 'Invia a…', () {
-          Navigator.pop(c);
-          sharePost(c, p);
-        }),
-        if (own) ...[
-          if (p.str('kind') == 'post' &&
-              s.state.number('communityVersion') > 0 &&
-              !s.state
-                  .rows('socialItems')
-                  .any((item) => item.str('post') == p.str('id')))
-            ActionRow(
-              CupertinoIcons.person_2,
-              'Crea un Momento da questo post',
-              () {
-                Navigator.pop(c);
-                composeCommunity(c, 'communityMoment', post: p.str('id'));
-              },
-            ),
-          if (p.str('kind') != 'story')
-            ActionRow(
-              CupertinoIcons.pin,
-              s.me.ids('pinnedPosts').contains(p.str('id'))
-                  ? 'Rimuovi dal profilo fissato'
-                  : 'Fissa nel profilo',
-              () {
-                Navigator.pop(c);
-                perform(
-                  c,
-                  () => s.act('pinPost', {
-                    'id': p['id'],
-                    'enabled': !s.me.ids('pinnedPosts').contains(p.str('id')),
+        );
+        return Column(
+          children: [
+            if (detail)
+              ListTile(
+                title: const Text(
+                  'Informazioni su questo post',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                trailing: const GIcon(CupertinoIcons.chevron_forward, size: 16),
+                onTap: () {
+                  Navigator.pop(menu);
+                  _showPostInfo(c, p);
+                },
+              ),
+            _PostMenuGroup(grouped: detail, children: [save]),
+            if (!detail)
+              ActionRow(CupertinoIcons.paperplane, 'Invia a…', () {
+                Navigator.pop(menu);
+                sharePost(c, p);
+              }),
+            if (!own && p.str('kind') != 'story')
+              ActionRow(
+                s.feedFavorites.contains(p.str('author'))
+                    ? CupertinoIcons.star_fill
+                    : CupertinoIcons.star,
+                s.feedFavorites.contains(p.str('author'))
+                    ? 'Rimuovi dai preferiti'
+                    : 'Aggiungi ai preferiti',
+                () {
+                  Navigator.pop(menu);
+                  perform(
+                    c,
+                    () => s.setFeedFavorite(
+                      p.str('author'),
+                      !s.feedFavorites.contains(p.str('author')),
+                    ),
+                  );
+                },
+              ),
+            if (own) ...[
+              _PostMenuGroup(
+                children: [
+                  ActionRow(
+                    CupertinoIcons.archivebox,
+                    p.flag('archived') ? 'Mostra nel profilo' : 'Archivia',
+                    () {
+                      Navigator.pop(menu);
+                      perform(
+                        c,
+                        () => s.act('archivePost', {
+                          'id': p['id'],
+                          'enabled': !p.flag('archived'),
+                        }),
+                      );
+                    },
+                  ),
+                  ActionRow(
+                    CupertinoIcons.eye_slash,
+                    p.flag('hideLikes')
+                        ? 'Mostra numero di Mi piace'
+                        : 'Nascondi numero di Mi piace',
+                    () {
+                      Navigator.pop(menu);
+                      perform(
+                        c,
+                        () => s.act('postOptions', {
+                          'id': p['id'],
+                          'commentsOff': p.flag('commentsOff'),
+                          'hideLikes': !p.flag('hideLikes'),
+                        }),
+                      );
+                    },
+                  ),
+                  ActionRow(
+                    CupertinoIcons.chat_bubble,
+                    p.flag('commentsOff')
+                        ? 'Attiva commenti'
+                        : 'Disattiva commenti',
+                    () {
+                      Navigator.pop(menu);
+                      perform(
+                        c,
+                        () => s.act('postOptions', {
+                          'id': p['id'],
+                          'commentsOff': !p.flag('commentsOff'),
+                          'hideLikes': p.flag('hideLikes'),
+                        }),
+                      );
+                    },
+                  ),
+                  ActionRow(CupertinoIcons.pencil, 'Modifica', () async {
+                    Navigator.pop(menu);
+                    final text = await textDialog(
+                      c,
+                      'Modifica didascalia',
+                      p.str('text'),
+                    );
+                    if (text != null && c.mounted)
+                      perform(
+                        c,
+                        () => s.act('editPost', {
+                          'id': p['id'],
+                          'text': text,
+                          'location': p['location'],
+                        }),
+                      );
                   }),
-                );
-              },
+                  if (p.str('kind') != 'story')
+                    ActionRow(
+                      CupertinoIcons.pin,
+                      s.me.ids('pinnedPosts').contains(p.str('id'))
+                          ? 'Rimuovi dal profilo fissato'
+                          : detail
+                          ? 'Fissa nella griglia principale'
+                          : 'Fissa nel profilo',
+                      () {
+                        Navigator.pop(menu);
+                        perform(
+                          c,
+                          () => s.act('pinPost', {
+                            'id': p['id'],
+                            'enabled': !s.me
+                                .ids('pinnedPosts')
+                                .contains(p.str('id')),
+                          }),
+                        );
+                      },
+                    ),
+                  if (p.str('kind') == 'story')
+                    ActionRow(
+                      CupertinoIcons.star_circle,
+                      'Metti in evidenza',
+                      () {
+                        Navigator.pop(menu);
+                        addStoryHighlight(c, p);
+                      },
+                    ),
+                  if (p.str('kind') == 'post' &&
+                      s.state.number('communityVersion') > 0 &&
+                      !s.state
+                          .rows('socialItems')
+                          .any((item) => item.str('post') == p.str('id')))
+                    ActionRow(
+                      CupertinoIcons.person_2,
+                      'Crea un Momento da questo post',
+                      () {
+                        Navigator.pop(menu);
+                        composeCommunity(
+                          c,
+                          'communityMoment',
+                          post: p.str('id'),
+                        );
+                      },
+                    ),
+                  ActionRow(CupertinoIcons.trash, 'Elimina', () async {
+                    Navigator.pop(menu);
+                    if (await gpixAlert(
+                          c,
+                          'Eliminare il contenuto?',
+                          'Questa azione non può essere annullata.',
+                          confirm: 'Elimina',
+                          destructive: true,
+                          cancel: true,
+                        ) &&
+                        c.mounted)
+                      perform(c, () => s.act('deletePost', {'id': p['id']}));
+                  }, destructive: true),
+                ],
+                grouped: detail,
+              ),
+            ] else ...[
+              ActionRow(
+                CupertinoIcons.person,
+                s.follows(p.str('author')) ? 'Non seguire più' : 'Segui',
+                () {
+                  Navigator.pop(menu);
+                  perform(
+                    c,
+                    () => s.act('follow', {
+                      'user': p['author'],
+                      'enabled': !s.follows(p.str('author')),
+                    }),
+                  );
+                },
+              ),
+              ActionRow(CupertinoIcons.flag, 'Segnala', () {
+                Navigator.pop(menu);
+                report(c, p.str('id'));
+              }, destructive: true),
+            ],
+            const SizedBox(height: 16),
+          ],
+        );
+      },
+    ),
+  );
+}
+
+class _PostMenuGroup extends StatelessWidget {
+  const _PostMenuGroup({required this.children, this.grouped = true});
+  final List<Widget> children;
+  final bool grouped;
+
+  @override
+  Widget build(BuildContext context) {
+    final list = Column(children: children);
+    if (!grouped) return list;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 6),
+      child: Material(
+        color: subdued(context),
+        borderRadius: BorderRadius.circular(13),
+        clipBehavior: Clip.antiAlias,
+        child: list,
+      ),
+    );
+  }
+}
+
+Future<void> _showPostInfo(BuildContext context, J post) {
+  final created = post.number('created');
+  return sheet<void>(
+    context,
+    Column(
+      children: [
+        const Text(
+          'Informazioni su questo post',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 12),
+        PersonTile(post.str('author')),
+        if (created > 0)
+          ListTile(
+            leading: const GIcon(CupertinoIcons.calendar),
+            title: const Text('Data di pubblicazione'),
+            subtitle: Text(
+              MaterialLocalizations.of(context).formatFullDate(
+                DateTime.fromMillisecondsSinceEpoch((created * 1000).round()),
+              ),
             ),
-          if (p.str('kind') == 'story')
-            ActionRow(CupertinoIcons.star_circle, 'Metti in evidenza', () {
-              Navigator.pop(c);
-              addStoryHighlight(c, p);
-            }),
-          const Divider(),
-          ActionRow(CupertinoIcons.pencil, 'Modifica', () async {
-            Navigator.pop(c);
-            final text = await textDialog(
-              c,
-              'Modifica didascalia',
-              p.str('text'),
-            );
-            if (text != null && c.mounted)
-              perform(
-                c,
-                () => s.act('editPost', {
-                  'id': p['id'],
-                  'text': text,
-                  'location': p['location'],
-                }),
-              );
-          }),
-          ActionRow(
-            CupertinoIcons.archivebox,
-            p.flag('archived') ? 'Mostra nel profilo' : 'Archivia',
-            () {
-              Navigator.pop(c);
-              perform(
-                c,
-                () => s.act('archivePost', {
-                  'id': p['id'],
-                  'enabled': !p.flag('archived'),
-                }),
-              );
-            },
           ),
-          ActionRow(
-            CupertinoIcons.chat_bubble,
-            p.flag('commentsOff') ? 'Attiva commenti' : 'Disattiva commenti',
-            () {
-              Navigator.pop(c);
-              perform(
-                c,
-                () => s.act('postOptions', {
-                  'id': p['id'],
-                  'commentsOff': !p.flag('commentsOff'),
-                  'hideLikes': p.flag('hideLikes'),
-                }),
-              );
-            },
+        if (post.str('location').isNotEmpty)
+          ListTile(
+            leading: const GIcon(CupertinoIcons.location),
+            title: Text(post.str('location')),
           ),
-          ActionRow(
-            CupertinoIcons.eye_slash,
-            p.flag('hideLikes')
-                ? 'Mostra numero di Mi piace'
-                : 'Nascondi numero di Mi piace',
-            () {
-              Navigator.pop(c);
-              perform(
-                c,
-                () => s.act('postOptions', {
-                  'id': p['id'],
-                  'commentsOff': p.flag('commentsOff'),
-                  'hideLikes': !p.flag('hideLikes'),
-                }),
-              );
-            },
-          ),
-          ActionRow(CupertinoIcons.trash, 'Elimina', () async {
-            Navigator.pop(c);
-            if (await gpixAlert(
-                  c,
-                  'Eliminare il contenuto?',
-                  'Questa azione non può essere annullata.',
-                  confirm: 'Elimina',
-                  destructive: true,
-                  cancel: true,
-                ) &&
-                c.mounted)
-              perform(c, () => s.act('deletePost', {'id': p['id']}));
-          }, destructive: true),
-        ] else ...[
-          ActionRow(
-            CupertinoIcons.person,
-            s.follows(p.str('author')) ? 'Non seguire più' : 'Segui',
-            () {
-              Navigator.pop(c);
-              perform(
-                c,
-                () => s.act('follow', {
-                  'user': p['author'],
-                  'enabled': !s.follows(p.str('author')),
-                }),
-              );
-            },
-          ),
-          ActionRow(CupertinoIcons.flag, 'Segnala', () {
-            Navigator.pop(c);
-            report(c, p.str('id'));
-          }, destructive: true),
-        ],
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
       ],
     ),
   );
@@ -682,178 +863,526 @@ Future<void> report(BuildContext c, String id) => sheet(
     ],
   ),
 );
-Future<void> sharePost(BuildContext c, J p) => sheet(c, SharePanel(post: p));
+Future<void> sharePost(BuildContext c, J p) => showModalBottomSheet<void>(
+  context: c,
+  useSafeArea: true,
+  isScrollControlled: true,
+  backgroundColor: surface(c),
+  shape: const RoundedRectangleBorder(
+    borderRadius: BorderRadius.vertical(top: Radius.circular(23)),
+  ),
+  clipBehavior: Clip.antiAlias,
+  builder: (menu) {
+    final keyboard = MediaQuery.viewInsetsOf(menu).bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: keyboard),
+      child: LayoutBuilder(
+        builder: (menu, bounds) => SizedBox(
+          height: keyboard > 0
+              ? bounds.maxHeight
+              : MediaQuery.sizeOf(menu).height * .57,
+          child: SafeArea(
+            top: false,
+            child: Column(
+              children: [
+                const SizedBox(height: 8),
+                Container(
+                  width: 32,
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: foreground(menu).withValues(alpha: .28),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 7),
+                Expanded(
+                  child: SharePanel(
+                    post: p,
+                    onDone: () => Navigator.pop(menu),
+                    onStory: () {
+                      Navigator.pop(menu);
+                      if (c.mounted) openSharedStory(c, p.str('id'));
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  },
+);
+
+void openSharedStory(BuildContext context, String id) {
+  final store = GpixScope.of(context, listen: false);
+  if (!store.canSharePostOutsideChat(store.post(id))) {
+    notice(context, 'Contenuto non disponibile');
+    return;
+  }
+  open(
+    context,
+    Composer(
+      kind: 'story',
+      initialDraft: {
+        'style': {
+          'stickers': [
+            {'type': 'sharedPost', 'postId': id, 'x': .17, 'y': .22},
+          ],
+        },
+      },
+    ),
+  );
+}
 
 class SharePanel extends StatefulWidget {
+  const SharePanel({
+    super.key,
+    required this.post,
+    required this.onDone,
+    this.onStory,
+  });
+
   final J post;
-  const SharePanel({super.key, required this.post});
+  final VoidCallback onDone;
+  final VoidCallback? onStory;
+
   @override
   State<SharePanel> createState() => _SharePanelState();
 }
 
 class _SharePanelState extends State<SharePanel> {
   final selected = <String>{};
+  final sentShares = <String>{};
   final search = TextEditingController();
+  final message = TextEditingController();
   bool busy = false;
+
   @override
   void dispose() {
     search.dispose();
+    message.dispose();
     super.dispose();
+  }
+
+  Future<void> send(GpixStore store) async {
+    if (busy || selected.isEmpty) return;
+    FocusScope.of(context).unfocus();
+    final identity = (store.server, store.myId, store.token);
+    bool active() =>
+        mounted && identity == (store.server, store.myId, store.token);
+    final note = message.text.trim();
+    final source = widget.post.str('id');
+    setState(() => busy = true);
+    await perform(context, () async {
+      for (final user in selected.toList()) {
+        if (!active()) return;
+        final thread = await store.openThread(user);
+        if (!active()) return;
+        if (!sentShares.contains(user)) {
+          await store.act('sharePost', {'id': thread, 'post': source});
+          sentShares.add(user);
+        }
+        if (!active()) return;
+        if (note.isNotEmpty) await store.send(thread, note);
+        if (!active()) return;
+        setState(() => selected.remove(user));
+      }
+      if (!active()) return;
+      notice(context, switch (widget.post.str('kind')) {
+        'reel' => 'Reel inviato',
+        'story' => 'Storia inviata',
+        _ => 'Post inviato',
+      });
+      widget.onDone();
+    });
+    if (mounted) setState(() => busy = false);
+  }
+
+  Future<void> shareExternally(String caption, String id) async {
+    if (busy) return;
+    final store = GpixScope.of(context, listen: false);
+    final identity = (store.server, store.myId, store.token);
+    final box = context.findRenderObject();
+    final origin = box is RenderBox
+        ? box.localToGlobal(Offset.zero) & box.size
+        : null;
+    bool active() =>
+        mounted &&
+        identity == (store.server, store.myId, store.token) &&
+        store.canSharePostOutsideChat(store.post(id));
+
+    FocusScope.of(context).unfocus();
+    setState(() => busy = true);
+    try {
+      await perform(context, () async {
+        if (!active()) return;
+        final post = store.post(id);
+        final media = store.media(post);
+        final primary = post.str('media');
+        final references = store.isVideoPost(post) && primary.isNotEmpty
+            ? [primary]
+            : media;
+        if (references.isEmpty) {
+          await SharePlus.instance.share(
+            ShareParams(text: caption, sharePositionOrigin: origin),
+          );
+          return;
+        }
+        final folder = await (await getTemporaryDirectory()).createTemp(
+          'gpix-share-',
+        );
+        try {
+          final files = <XFile>[];
+          for (final (index, reference) in references.indexed) {
+            if (!active()) return;
+            files.add(await _sharedMedia(store, folder, reference, index + 1));
+          }
+          if (active())
+            await SharePlus.instance.share(
+              ShareParams(
+                files: files,
+                text: caption,
+                sharePositionOrigin: origin,
+              ),
+            );
+        } finally {
+          await folder.delete(recursive: true).catchError((Object _) => folder);
+        }
+      });
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
   }
 
   @override
   Widget build(BuildContext c) {
-    final s = GpixScope.of(c);
-    final users = s.users
-        .where(
-          (u) =>
-              u.str('id') != s.myId &&
-              !s.blocked(u.str('id')) &&
-              ('${u.str('name')} ${u.str('username')}').toLowerCase().contains(
-                search.text.toLowerCase(),
-              ),
-        )
-        .toList();
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
-      child: Column(
-        children: [
-          const Text(
-            'Condividi',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 16),
-          TextField(
+    final store = GpixScope.of(c);
+    final id = widget.post.str('id');
+    final post = store.post(id);
+    final canShareOutside = store.canSharePostOutsideChat(post);
+    final caption = [
+      store.user(post.str('author')).str('username'),
+      post.str('text').trim(),
+    ].where((part) => part.isNotEmpty).join(' su GPIX\n');
+    final query = directSearchTerm(
+      search.text.trim().replaceFirst(RegExp(r'^@'), ''),
+    );
+    final recent = store.inboxThreads.map(store.other).toSet();
+    final users =
+        store.users
+            .where(
+              (user) =>
+                  user.str('id') != store.myId &&
+                  !store.blocked(user.str('id')) &&
+                  directSearchTerm(
+                    '${user.str('name')} ${user.str('username')}',
+                  ).contains(query),
+            )
+            .toList()
+          ..sort((a, b) {
+            final rank =
+                (recent.contains(b.str('id')) ? 1 : 0) -
+                (recent.contains(a.str('id')) ? 1 : 0);
+            return rank != 0
+                ? rank
+                : a.str('username').compareTo(b.str('username'));
+          });
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
+          child: DirectSearchField(
             controller: search,
+            hint: 'Cerca',
             onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              hintText: 'Cerca persone',
-              prefixIcon: const GIcon(CupertinoIcons.search),
-              filled: true,
-              fillColor: subdued(c),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide.none,
-              ),
-            ),
           ),
-          const SizedBox(height: 18),
-          if (users.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Text('Nessuna persona trovata'),
-            ),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: users.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 8,
-              mainAxisExtent: 105,
-            ),
-            itemBuilder: (c, i) {
-              final u = users[i],
-                  id = u.str('id'),
-                  active = selected.contains(id);
-              return InkWell(
-                onTap: busy
-                    ? null
-                    : () => setState(() {
-                        active ? selected.remove(id) : selected.add(id);
-                      }),
-                borderRadius: BorderRadius.circular(14),
-                child: Column(
-                  children: [
-                    Stack(
-                      children: [
-                        Avatar(id, size: 58),
-                        if (active)
-                          Positioned(
-                            right: 0,
-                            bottom: 0,
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: const BoxDecoration(
-                                color: auraBlue,
-                                shape: BoxShape.circle,
+        ),
+        Expanded(
+          child: users.isEmpty
+              ? const Center(child: Text('Nessuna persona trovata'))
+              : GridView.builder(
+                  key: ValueKey(query),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  physics: const ClampingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
+                  ),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: MediaQuery.sizeOf(c).width < 580 ? 3 : 5,
+                    mainAxisExtent: 103,
+                  ),
+                  itemCount: users.length,
+                  itemBuilder: (c, index) {
+                    final user = users[index];
+                    final recipient = user.str('id');
+                    final checked = selected.contains(recipient);
+                    return Semantics(
+                      selected: checked,
+                      button: true,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: busy || sentShares.contains(recipient)
+                            ? null
+                            : () => setState(() {
+                                if (!selected.add(recipient))
+                                  selected.remove(recipient);
+                              }),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                Avatar(recipient, size: 64),
+                                if (checked)
+                                  Positioned(
+                                    right: -1,
+                                    bottom: -1,
+                                    child: Container(
+                                      width: 21,
+                                      height: 21,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: auraBlue,
+                                        border: Border.all(
+                                          color: surface(c),
+                                          width: 2,
+                                        ),
+                                      ),
+                                      child: const Icon(
+                                        CupertinoIcons.check_mark,
+                                        size: 11,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 7),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
                               ),
-                              child: const Icon(
-                                CupertinoIcons.check_mark,
-                                color: Colors.white,
-                                size: 13,
+                              child: Text(
+                                user.str('name', user.str('username')),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 11),
                               ),
                             ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 9),
-                    Text(
-                      u.str('username'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ],
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
-              );
-            },
+        ),
+        if (selected.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: message,
+                  enabled: !busy,
+                  maxLength: 4000,
+                  maxLines: 1,
+                  decoration: const InputDecoration(
+                    hintText: 'Scrivi un messaggio…',
+                    counterText: '',
+                    isDense: true,
+                    filled: false,
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(
+                      vertical: 8,
+                      horizontal: 4,
+                    ),
+                  ),
+                ),
+                FilledButton(
+                  onPressed: busy ? null : () => send(store),
+                  child: Text(
+                    busy
+                        ? 'Invio…'
+                        : selected.length == 1
+                        ? 'Invia'
+                        : 'Invia a ${selected.length} persone',
+                  ),
+                ),
+              ],
+            ),
+          )
+        else if (canShareOutside)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(6, 6, 6, 9),
+            child: Row(
+              children: [
+                if (widget.onStory != null)
+                  action(
+                    c,
+                    CupertinoIcons.plus_circle,
+                    'Aggiungi alla storia',
+                    widget.onStory!,
+                  ),
+                action(
+                  c,
+                  CupertinoIcons.share,
+                  'Condividi in un’altra app',
+                  () => shareExternally(caption, id),
+                ),
+                if (post.str('text').trim().isNotEmpty)
+                  action(c, CupertinoIcons.doc_on_doc, 'Copia testo', () async {
+                    await Clipboard.setData(
+                      ClipboardData(text: post.str('text')),
+                    );
+                    if (c.mounted) notice(c, 'Testo copiato');
+                  }),
+              ],
+            ),
           ),
-          if (selected.isNotEmpty)
-            PrimaryButton(
-              'Invia${selected.length > 1 ? ' a ${selected.length} persone' : ''}',
-              busy: busy,
-              onTap: () async {
-                setState(() => busy = true);
-                await perform(c, () async {
-                  for (final id in selected.toList()) {
-                    final tid = await s.openThread(id);
-                    await s.act('sharePost', {
-                      'id': tid,
-                      'post': widget.post.str('id'),
-                    });
-                    selected.remove(id);
-                  }
-                  if (c.mounted) {
-                    Navigator.pop(c);
-                    notice(c, 'Post inviato');
-                  }
-                });
-                if (mounted) setState(() => busy = false);
-              },
-            ),
-          const SizedBox(height: 12),
-          const Divider(),
-          ActionRow(
-            CupertinoIcons.share,
-            'Condividi in un’altra app',
-            () => SharePlus.instance.share(
-              ShareParams(
-                text:
-                    '${s.user(widget.post.str('author')).str('username')} su GPIX\n${widget.post.str('text')}',
-              ),
-            ),
+      ],
+    );
+  }
+
+  Widget action(
+    BuildContext c,
+    IconData icon,
+    String label,
+    VoidCallback tap,
+  ) => SizedBox(
+    width: 88,
+    child: InkWell(
+      onTap: busy ? null : tap,
+      borderRadius: BorderRadius.circular(13),
+      child: Column(
+        children: [
+          CircleAvatar(
+            radius: 23,
+            backgroundColor: subdued(c),
+            child: GIcon(icon, color: foreground(c), size: 22),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            style: const TextStyle(fontSize: 10),
           ),
         ],
       ),
-    );
+    ),
+  );
+}
+
+const _sharedMediaExtensions = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'video/mp4': 'mp4',
+  'video/quicktime': 'mov',
+  'video/webm': 'webm',
+};
+
+Future<XFile> _sharedMedia(
+  GpixStore store,
+  Directory folder,
+  String reference,
+  int index,
+) async {
+  final source = store.url(reference);
+  final uri = Uri.parse(source);
+  if (store.demo && !uri.hasScheme) {
+    final extension = (uri.pathSegments.lastOrNull ?? '')
+        .split('.')
+        .last
+        .toLowerCase();
+    final suffix = extension == 'jpeg' ? 'jpg' : extension;
+    final mime = _sharedMediaExtensions.entries
+        .where((entry) => entry.value == suffix)
+        .firstOrNull
+        ?.key;
+    if (mime == null) throw Exception('Formato del contenuto non supportato.');
+    final output = File('${folder.path}/GPIX-$index.$suffix');
+    if (source.startsWith('/')) {
+      await File(source).copy(output.path);
+    } else {
+      final bytes = await rootBundle.load('assets/media/$source');
+      await output.writeAsBytes(
+        bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes),
+      );
+    }
+    return XFile(output.path, mimeType: mime);
+  }
+  final server = Uri.parse(store.server);
+  if (uri.scheme != 'https' ||
+      uri.host != server.host ||
+      uri.port != server.port ||
+      !uri.path.startsWith('/media/')) {
+    throw Exception('Contenuto non disponibile per la condivisione.');
+  }
+  final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
+  try {
+    final request = await client.getUrl(uri);
+    request.followRedirects = false;
+    final response = await request.close().timeout(const Duration(seconds: 20));
+    final mime = response.headers.contentType?.mimeType;
+    final suffix = _sharedMediaExtensions[mime];
+    if (response.statusCode != HttpStatus.ok || suffix == null) {
+      throw Exception('Impossibile scaricare il contenuto.');
+    }
+    final output = File('${folder.path}/GPIX-$index.$suffix');
+    await response
+        .timeout(const Duration(seconds: 30))
+        .pipe(output.openWrite());
+    if (await output.length() == 0) throw Exception('Il contenuto è vuoto.');
+    return XFile(output.path, mimeType: mime);
+  } finally {
+    client.close(force: true);
   }
 }
 
-Future<void> comments(BuildContext c, String id) =>
-    sheet(c, Comments(id: id), scroll: false);
+Future<void> comments(BuildContext c, String id) => showModalBottomSheet<void>(
+  context: c,
+  isScrollControlled: true,
+  useSafeArea: true,
+  backgroundColor: surface(c),
+  barrierColor: Colors.black54,
+  shape: const RoundedRectangleBorder(
+    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+  ),
+  clipBehavior: Clip.antiAlias,
+  builder: (context) {
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: keyboard),
+      child: LayoutBuilder(
+        builder: (context, bounds) => SizedBox(
+          key: const ValueKey('post-comment-sheet'),
+          height: keyboard > 0
+              ? bounds.maxHeight
+              : MediaQuery.sizeOf(context).height * .70,
+          child: SafeArea(top: false, child: Comments(id: id)),
+        ),
+      ),
+    );
+  },
+);
 
 class Comments extends StatefulWidget {
   final String id;
-  const Comments({super.key, required this.id});
+  final bool reel;
+  const Comments({super.key, required this.id, this.reel = false});
   @override
   State<Comments> createState() => _CommentsState();
 }
 
 class _CommentsState extends State<Comments> {
   final input = TextEditingController();
-  String parent = '', replyName = '', media = '';
+  String parent = '', replyName = '', media = '', replyTarget = '';
+  String replyPrefix = '';
   Future<void> pickComment(bool gif) async {
     final s = GpixScope.of(context, listen: false);
     if (gif) {
@@ -920,46 +1449,278 @@ class _CommentsState extends State<Comments> {
               owner ||
               root.str('author') == s.myId;
         }).toList();
-    return SizedBox(
-      height: MediaQuery.sizeOf(c).height * .78,
-      child: Column(
-        children: [
-          const Text(
-            'Commenti',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+    if (widget.reel) return _commentPanel(c, s, p, comments);
+    return Column(
+      children: [
+        const SizedBox(height: 7),
+        Container(
+          width: 35,
+          height: 3,
+          decoration: BoxDecoration(
+            color: foreground(c).withValues(alpha: .25),
+            borderRadius: BorderRadius.circular(4),
           ),
-          const SizedBox(height: 14),
-          const Divider(height: 1),
-          Expanded(
-            child: comments.isEmpty
-                ? const Center(
-                    child: EmptyState(
-                      CupertinoIcons.chat_bubble,
-                      'Ancora nessun commento',
-                      'Avvia la conversazione.',
-                    ),
-                  )
-                : ListView(
-                    children: [
-                      for (final comment in comments.where(
-                        (e) => e.str('parent').isEmpty,
-                      )) ...[
-                        _comment(c, comment, false),
-                        for (final child in comments.where(
-                          (e) => e.str('parent') == comment.str('id'),
-                        ))
-                          _comment(c, child, true),
-                      ],
-                    ],
+        ),
+        SizedBox(
+          height: 43,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              const Center(
+                child: Text(
+                  'Commenti',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                ),
+              ),
+              if (p.isNotEmpty)
+                Positioned(
+                  right: 10,
+                  child: IconButton(
+                    tooltip: 'Condividi post',
+                    icon: const GIcon(CupertinoIcons.paperplane, size: 22),
+                    onPressed: () {
+                      focus.unfocus();
+                      sharePost(c, p);
+                    },
                   ),
+                ),
+            ],
           ),
-          const Divider(height: 1),
+        ),
+        Expanded(child: _commentPanel(c, s, p, comments)),
+      ],
+    );
+  }
+
+  final _expandedReplies = <String>{};
+  bool _recent = false, _submitting = false;
+
+  bool get _hasText {
+    final text = input.text.trim();
+    return text.isNotEmpty && text != replyPrefix.trim();
+  }
+
+  void _cancelReply() {
+    if (replyPrefix.isNotEmpty && input.text.startsWith(replyPrefix)) {
+      final remaining = input.text.substring(replyPrefix.length);
+      input.value = TextEditingValue(
+        text: remaining,
+        selection: TextSelection.collapsed(offset: remaining.length),
+      );
+    }
+    parent = '';
+    replyTarget = '';
+    replyPrefix = '';
+  }
+
+  void _replyTo(J comment, String name) {
+    setState(() {
+      _cancelReply();
+      replyTarget = comment.str('id');
+      final root = comment.str('parent');
+      parent = root.isEmpty ? replyTarget : root;
+      replyName = name;
+      if (!widget.reel && input.text.isEmpty && name.isNotEmpty) {
+        replyPrefix = '@$name ';
+        input.value = TextEditingValue(
+          text: replyPrefix,
+          selection: TextSelection.collapsed(offset: replyPrefix.length),
+        );
+      }
+    });
+    focus.requestFocus();
+  }
+
+  Future<void> _submit(BuildContext c, GpixStore s) async {
+    final text = _hasText ? input.text.trim() : '',
+        reply = parent,
+        attachment = media;
+    if (_submitting || (text.isEmpty && attachment.isEmpty)) return;
+    setState(() => _submitting = true);
+    await perform(c, () async {
+      await s.act('comment', {
+        'id': widget.id,
+        'text': text,
+        'parent': reply,
+        'media': attachment,
+      });
+      if (!mounted) return;
+      setState(() {
+        if (input.text.trim() == text ||
+            input.text.trim() == replyPrefix.trim())
+          input.clear();
+        if (parent == reply) {
+          parent = '';
+          replyTarget = '';
+          replyPrefix = '';
+        }
+        if (media == attachment) media = '';
+        if (reply.isNotEmpty) _expandedReplies.add(reply);
+      });
+    });
+    if (mounted) setState(() => _submitting = false);
+  }
+
+  Widget _commentPanel(BuildContext c, GpixStore s, J post, List<J> comments) {
+    final canSend =
+        post.isNotEmpty &&
+        (!post.flag('commentsOff') || post.str('author') == s.myId);
+    final roots = comments.where((m) => m.str('parent').isEmpty).toList()
+      ..sort((a, b) {
+        final age = b.number('created').compareTo(a.number('created'));
+        final likes = b.ids('likes').length.compareTo(a.ids('likes').length);
+        return _recent || likes == 0 ? age : likes;
+      });
+    final replies = <String, List<J>>{};
+    for (final comment in comments) {
+      final parent = comment.str('parent');
+      if (parent.isNotEmpty) (replies[parent] ??= []).add(comment);
+    }
+    const scroll = ClampingScrollPhysics(
+      parent: AlwaysScrollableScrollPhysics(),
+    );
+    return Column(
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Padding(
+            padding: const EdgeInsets.only(left: 15),
+            child: PopupMenuButton<bool>(
+              tooltip: 'Ordina commenti',
+              onSelected: (v) => setState(() => _recent = v),
+              initialValue: _recent,
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: false, child: Text('Per te')),
+                PopupMenuItem(value: true, child: Text('Più recenti')),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _recent ? 'Più recenti' : 'Per te',
+                      style: TextStyle(
+                        color: secondaryText(c),
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    GIcon(
+                      CupertinoIcons.chevron_down,
+                      color: secondaryText(c),
+                      size: 11,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Expanded(
+          child: roots.isEmpty
+              ? CustomScrollView(
+                  physics: scroll,
+                  slivers: [
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Text(
+                            'Ancora nessun commento',
+                            style: TextStyle(
+                              color: secondaryText(c),
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  physics: scroll,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  itemCount: roots.length,
+                  itemBuilder: (c, i) {
+                    final root = roots[i], id = roots[i].str('id');
+                    final children = replies[id] ?? const <J>[];
+                    final expanded = _expandedReplies.contains(id);
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _comment(c, root, false, canReply: canSend),
+                        if (expanded)
+                          for (final child in children)
+                            _comment(c, child, true, canReply: canSend),
+                        if (children.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 52),
+                            child: TextButton.icon(
+                              style: TextButton.styleFrom(
+                                foregroundColor: secondaryText(c),
+                                minimumSize: const Size(0, 31),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 2,
+                                ),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              onPressed: () => setState(() {
+                                if (!_expandedReplies.add(id))
+                                  _expandedReplies.remove(id);
+                              }),
+                              icon: const SizedBox(
+                                width: 19,
+                                child: Divider(height: 1),
+                              ),
+                              label: Text(
+                                expanded
+                                    ? 'Nascondi risposte'
+                                    : children.length == 1
+                                    ? 'Visualizza 1 risposta'
+                                    : 'Visualizza ${children.length} risposte',
+                                style: const TextStyle(fontSize: 10.5),
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+        ),
+        if (canSend)
+          _composer(c, s)
+        else
+          Padding(
+            padding: const EdgeInsets.all(13),
+            child: Text(
+              post.isEmpty
+                  ? 'Contenuto non disponibile'
+                  : 'Commenti disattivati',
+              style: TextStyle(color: secondaryText(c), fontSize: 13),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _composer(BuildContext c, GpixStore s) {
+    final sending = _hasText || media.isNotEmpty;
+    final dark = Theme.of(c).brightness == Brightness.dark;
+    final compact =
+        MediaQuery.sizeOf(c).height - MediaQuery.viewInsetsOf(c).bottom < 420;
+    return Column(
+      children: [
+        if (!compact)
           SizedBox(
-            height: 48,
+            height: 41,
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                for (final emoji in [
+                for (final emoji in const [
                   '❤️',
                   '🙌',
                   '🔥',
@@ -969,118 +1730,182 @@ class _CommentsState extends State<Comments> {
                   '😮',
                   '😂',
                 ])
-                  InkWell(
-                    onTap: () {
-                      input.text += emoji;
-                      setState(() {});
-                      focus.requestFocus();
-                    },
-                    child: Text(emoji, style: const TextStyle(fontSize: 23)),
+                  Expanded(
+                    child: InkResponse(
+                      onTap: () {
+                        final selection = input.selection.isValid
+                            ? input.selection
+                            : TextSelection.collapsed(
+                                offset: input.text.length,
+                              );
+                        input.value = TextEditingValue(
+                          text: input.text.replaceRange(
+                            selection.start,
+                            selection.end,
+                            emoji,
+                          ),
+                          selection: TextSelection.collapsed(
+                            offset: selection.start + emoji.length,
+                          ),
+                        );
+                        setState(() {});
+                        focus.requestFocus();
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            emoji,
+                            style: const TextStyle(fontSize: 22),
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
               ],
             ),
           ),
-          if (media.isNotEmpty)
-            ListTile(
-              leading: SizedBox(
-                width: 42,
-                height: 42,
-                child: MediaView(s.url(media)),
-              ),
-              title: const Text('Immagine allegata'),
-              trailing: IconButton(
-                onPressed: () => setState(() => media = ''),
-                icon: const GIcon(CupertinoIcons.xmark),
-              ),
-            ),
-          if (parent.isNotEmpty)
-            Container(
-              color: subdued(c),
-              padding: const EdgeInsets.only(left: 18),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Rispondi a $replyName',
-                      style: const TextStyle(color: muted, fontSize: 12),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const GIcon(Icons.close, size: 17),
-                    onPressed: () => setState(() => parent = ''),
-                  ),
-                ],
-              ),
-            ),
+        if (parent.isNotEmpty || media.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.fromLTRB(15, 8, 12, 12),
+            padding: const EdgeInsets.fromLTRB(13, 0, 8, 2),
             child: Row(
               children: [
-                Avatar(s.myId, size: 32),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: TextField(
-                    controller: input,
-                    focusNode: focus,
-                    minLines: 1,
-                    maxLines: 4,
-                    onChanged: (_) => setState(() {}),
-                    decoration: InputDecoration(
-                      hintText: 'Aggiungi un commento…',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(26),
-                        borderSide: const BorderSide(color: line),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 12,
-                      ),
-                      hintStyle: TextStyle(fontSize: 13, color: muted),
+                if (media.isNotEmpty)
+                  SizedBox.square(
+                    dimension: 25,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: MediaView(media),
                     ),
+                  ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    parent.isNotEmpty
+                        ? 'Stai rispondendo a $replyName'
+                        : 'Allegato',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: secondaryText(c), fontSize: 11),
                   ),
                 ),
-                if (input.text.trim().isEmpty && media.isEmpty) ...[
-                  IconButton(
-                    tooltip: 'Foto nel commento',
-                    onPressed: () => pickComment(false),
-                    icon: const GIcon(CupertinoIcons.photo, size: 24),
+                IconButton(
+                  tooltip: media.isNotEmpty
+                      ? 'Rimuovi allegato'
+                      : 'Rimuovi risposta',
+                  constraints: const BoxConstraints.tightFor(
+                    width: 35,
+                    height: 29,
                   ),
-                  IconButton(
-                    tooltip: 'GIF nel commento',
-                    onPressed: () => pickComment(true),
-                    icon: const GIcon(Icons.gif_box_outlined, size: 26),
-                  ),
-                ],
-                if (input.text.trim().isNotEmpty || media.isNotEmpty)
-                  TextButton(
-                    onPressed: input.text.trim().isEmpty && media.isEmpty
-                        ? null
-                        : () => perform(c, () async {
-                            await s.act('comment', {
-                              'id': widget.id,
-                              'text': input.text.trim(),
-                              'parent': parent,
-                              'media': media,
-                            });
-                            input.clear();
-                            setState(() {
-                              parent = '';
-                              media = '';
-                            });
-                          }),
-                    child: const Text(
-                      'Pubblica',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
+                  padding: EdgeInsets.zero,
+                  onPressed: () => setState(() {
+                    if (media.isNotEmpty) {
+                      media = '';
+                    } else {
+                      _cancelReply();
+                    }
+                  }),
+                  icon: const GIcon(CupertinoIcons.xmark, size: 14),
+                ),
               ],
             ),
           ),
-        ],
-      ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 11, 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Avatar(s.myId, size: 32),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Material(
+                  color: dark ? const Color(0xff25262b) : subdued(c),
+                  borderRadius: BorderRadius.circular(25),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 12),
+                          child: TextField(
+                            key: ValueKey(
+                              widget.reel
+                                  ? 'reel-comment-input'
+                                  : 'post-comment-input',
+                            ),
+                            controller: input,
+                            focusNode: focus,
+                            minLines: 1,
+                            maxLines: compact ? 2 : 3,
+                            maxLength: 2000,
+                            keyboardAppearance: Theme.of(c).brightness,
+                            onChanged: (_) => setState(() {}),
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: foreground(c),
+                            ),
+                            decoration: InputDecoration(
+                              counterText: '',
+                              hintText: 'Cosa ne pensi?',
+                              hintStyle: TextStyle(
+                                fontSize: 13,
+                                color: secondaryText(c),
+                              ),
+                              isDense: true,
+                              filled: false,
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 11,
+                              ),
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (sending)
+                        IconButton(
+                          tooltip: 'Pubblica commento',
+                          constraints: const BoxConstraints.tightFor(
+                            width: 40,
+                            height: 39,
+                          ),
+                          padding: EdgeInsets.zero,
+                          onPressed: _submitting ? null : () => _submit(c, s),
+                          icon: GIcon(
+                            CupertinoIcons.arrow_up_circle_fill,
+                            color: dark ? const Color(0xff699dff) : auraBlue,
+                            size: 26,
+                          ),
+                        )
+                      else
+                        for (final (gif, label, icon) in const [
+                          (false, 'Foto nel commento', CupertinoIcons.photo),
+                          (true, 'GIF nel commento', Icons.gif_box_outlined),
+                        ])
+                          IconButton(
+                            tooltip: label,
+                            constraints: const BoxConstraints.tightFor(
+                              width: 35,
+                              height: 40,
+                            ),
+                            padding: EdgeInsets.zero,
+                            onPressed: () => pickComment(gif),
+                            icon: GIcon(icon, size: 22, color: foreground(c)),
+                          ),
+                      const SizedBox(width: 4),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -1126,12 +1951,15 @@ class _CommentsState extends State<Comments> {
     );
   }
 
-  Widget _comment(BuildContext c, J m, bool child) {
+  Widget _comment(BuildContext c, J m, bool child, {bool canReply = true}) {
     final s = GpixScope.of(c),
         uid = m.str('author'),
         liked = m.ids('likes').contains(s.myId);
-    return Padding(
-      padding: EdgeInsets.fromLTRB(child ? 62 : 17, 16, 15, 0),
+    return Container(
+      color: replyTarget == m.str('id')
+          ? accent(c).withValues(alpha: .075)
+          : null,
+      padding: EdgeInsets.fromLTRB(child ? 48 : 14, 7, 12, 1),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1153,11 +1981,30 @@ class _CommentsState extends State<Comments> {
                           text: '${s.user(uid).str('username')} ',
                           style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
-                        TextSpan(text: m.str('text')),
+                        if (m.number('created') > 0)
+                          TextSpan(
+                            text: relative(m['created']),
+                            style: TextStyle(
+                              color: secondaryText(c),
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
                       ],
                     ),
                     style: const TextStyle(fontSize: 12.5, height: 1.45),
                   ),
+                  if (m.str('text').isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Text(
+                        m.str('text'),
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.26,
+                          color: foreground(c),
+                        ),
+                      ),
+                    ),
                   if (m.flag('hidden') &&
                       s.post(widget.id).str('author') == s.myId)
                     const Padding(
@@ -1173,8 +2020,8 @@ class _CommentsState extends State<Comments> {
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(14),
                         child: SizedBox(
-                          width: 160,
-                          height: 160,
+                          width: widget.reel ? 122 : 160,
+                          height: widget.reel ? 122 : 160,
                           child: MediaView(m.str('media')),
                         ),
                       ),
@@ -1182,31 +2029,21 @@ class _CommentsState extends State<Comments> {
                   const SizedBox(height: 7),
                   Row(
                     children: [
-                      Text(
-                        relative(m['created']),
-                        style: const TextStyle(fontSize: 10.5, color: muted),
-                      ),
-                      const SizedBox(width: 15),
-                      InkWell(
-                        onTap: () {
-                          setState(() {
-                            parent = child ? m.str('parent') : m.str('id');
-                            replyName = s.user(uid).str('username');
-                          });
-                          focus.requestFocus();
-                        },
-                        child: const Text(
-                          'Rispondi',
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            color: muted,
-                            fontWeight: FontWeight.w600,
+                      if (canReply)
+                        InkWell(
+                          onTap: () => _replyTo(m, s.user(uid).str('username')),
+                          child: const Text(
+                            'Rispondi',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              color: muted,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 4),
                 ],
               ),
             ),
@@ -1224,19 +2061,24 @@ class _CommentsState extends State<Comments> {
                   padding: EdgeInsets.zero,
                   icon: const GIcon(CupertinoIcons.ellipsis, size: 19),
                 ),
-              InkWell(
-                onTap: () => perform(
+              IconButton(
+                tooltip: liked
+                    ? 'Rimuovi Mi piace al commento'
+                    : 'Mi piace al commento',
+                constraints: const BoxConstraints.tightFor(
+                  width: 35,
+                  height: 30,
+                ),
+                padding: EdgeInsets.zero,
+                onPressed: () => perform(
                   c,
                   () =>
                       s.act('likeComment', {'id': m['id'], 'enabled': !liked}),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(6),
-                  child: GIcon(
-                    liked ? CupertinoIcons.heart_fill : CupertinoIcons.heart,
-                    size: 14,
-                    color: liked ? danger : muted,
-                  ),
+                icon: GIcon(
+                  liked ? CupertinoIcons.heart_fill : CupertinoIcons.heart,
+                  size: 17,
+                  color: liked ? danger : secondaryText(c),
                 ),
               ),
               if (m.ids('likes').isNotEmpty)
@@ -1261,19 +2103,165 @@ class Explore extends StatelessWidget {
       DiscoverHome(initialQuery: initialQuery, detail: true);
 }
 
+Future<void> managePostTag(BuildContext context, J post) async {
+  final store = GpixScope.of(context, listen: false);
+  final hidden = post.ids('hiddenTagUsers').contains(store.myId);
+  final decision = await sheet<String>(
+    context,
+    Builder(
+      builder: (menu) => Column(
+        children: [
+          ActionRow(
+            hidden ? CupertinoIcons.eye : CupertinoIcons.eye_slash,
+            hidden ? 'Mostra sul mio profilo' : 'Nascondi dal mio profilo',
+            () => Navigator.pop(menu, hidden ? 'show' : 'hide'),
+          ),
+          ActionRow(
+            CupertinoIcons.tag,
+            'Rimuovi il mio tag dal post',
+            () => Navigator.pop(menu, 'remove'),
+            destructive: true,
+          ),
+        ],
+      ),
+    ),
+  );
+  if (decision == null || !context.mounted) return;
+  if (decision == 'remove' &&
+      !await gpixAlert(
+        context,
+        'Rimuovere il tuo tag?',
+        'Il tag sarà rimosso da tutto il post.',
+        confirm: 'Rimuovi',
+        cancel: true,
+        destructive: true,
+      ))
+    return;
+  if (!context.mounted) return;
+  await perform(context, () async {
+    await store.act('managePostTag', {
+      'id': post.str('id'),
+      'decision': decision,
+    });
+    if (context.mounted)
+      notice(context, switch (decision) {
+        'hide' => 'Post nascosto dal profilo',
+        'show' => 'Post visibile sul profilo',
+        _ => 'Tag rimosso',
+      });
+  });
+}
+
 class PostPage extends StatelessWidget {
+  const PostPage({
+    super.key,
+    required this.id,
+    this.postIds = const [],
+    this.taggedUser,
+  });
+  final String? taggedUser;
   final String id;
-  const PostPage({super.key, required this.id});
+  final List<String> postIds;
+
   @override
-  Widget build(BuildContext c) =>
-      GpixScope.of(c).post(id).str('kind') == 'story'
-      ? StoryViewer(user: GpixScope.of(c).post(id).str('author'), ids: [id])
-      : GpixScope.of(c).post(id).str('kind') == 'reel'
-      ? Reels(initial: id)
-      : Scaffold(
-          appBar: AppBar(title: pageTitle('Post')),
-          body: ListView(children: [PostCard(id: id, detail: true)]),
+  Widget build(BuildContext context) {
+    final store = GpixScope.of(context);
+    final post = store.post(id);
+    final author = post.str('author');
+    final kind = post.str('kind');
+    if (kind == 'story') return StoryViewer(user: author, ids: [id]);
+    if (kind == 'reel') return Reels(initial: id);
+    final selection = postIds.indexOf(id);
+    final posts = {for (final item in store.allPosts) item.str('id'): item};
+    bool visible(String id) {
+      final item = posts[id];
+      return item != null &&
+          item.str('kind') == 'post' &&
+          !item.flag('archived') &&
+          !store.blocked(item.str('author'));
+    }
+
+    final before = selection < 0
+        ? <String>[]
+        : postIds.take(selection).where(visible).toList().reversed.toList();
+    final after = [
+      if (post.isNotEmpty && (!post.flag('archived') || postIds.isEmpty)) id,
+      if (selection >= 0) ...postIds.skip(selection + 1).where(visible),
+    ];
+    const anchor = ValueKey('post-view-anchor');
+
+    Widget list(List<String> ids, {Key? key}) => SliverList.builder(
+      key: key,
+      itemCount: ids.length,
+      findChildIndexCallback: (key) {
+        final index = ids.indexOf((key as ValueKey<String>).value);
+        return index < 0 ? null : index;
+      },
+      itemBuilder: (context, index) {
+        final postId = ids[index];
+        return TimelinePost(
+          key: ValueKey(postId),
+          post: posts[postId]!,
+          detail: true,
+          taggedUser: taggedUser,
         );
+      },
+    );
+
+    return Scaffold(
+      appBar: AppBar(
+        centerTitle: true,
+        scrolledUnderElevation: 0,
+        leading: Padding(
+          padding: const EdgeInsets.all(7),
+          child: IconButton.outlined(
+            tooltip: 'Indietro',
+            onPressed: () => Navigator.maybePop(context),
+            style: IconButton.styleFrom(
+              side: BorderSide(color: Theme.of(context).dividerColor),
+            ),
+            icon: const GIcon(CupertinoIcons.chevron_back, size: 22),
+          ),
+        ),
+        actions: [
+          if (store.supportsPostTagManagement &&
+              store.taggedInPost(post, store.myId))
+            TextButton(
+              onPressed: () => managePostTag(context, post),
+              child: const Text('Gestisci'),
+            ),
+        ],
+        title: Column(
+          children: [
+            pageTitle(taggedUser == null ? 'Post' : 'Tag'),
+            if (author.isNotEmpty)
+              Text(
+                store.user(author).str('username'),
+                style: TextStyle(fontSize: 12, color: secondaryText(context)),
+              ),
+          ],
+        ),
+      ),
+      body: CustomScrollView(
+        center: anchor,
+        slivers: [
+          if (before.isNotEmpty) list(before),
+          list(after, key: anchor),
+          if (before.isEmpty && after.isEmpty)
+            const SliverToBoxAdapter(
+              child: EmptyState(
+                CupertinoIcons.photo,
+                'Contenuto non disponibile',
+                '',
+              ),
+            ),
+          const SliverToBoxAdapter(
+            child: SafeArea(top: false, child: SizedBox(height: 12)),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class Profile extends StatelessWidget {
@@ -1646,25 +2634,21 @@ class CollectionPage extends StatelessWidget {
   const CollectionPage({super.key, required this.kind});
   @override
   Widget build(BuildContext c) {
+    if (kind == 'saved') return const _SavedLibrary();
     final s = GpixScope.of(c);
     final posts = s.allPosts
         .where(
-          (p) => kind == 'saved'
-              ? p.flag('saved')
-              : p.str('author') == s.myId &&
-                    (p.flag('archived') || p.str('kind') == 'story'),
+          (p) =>
+              p.str('author') == s.myId &&
+              (p.flag('archived') || p.str('kind') == 'story'),
         )
         .toList();
     return Scaffold(
-      appBar: AppBar(
-        title: pageTitle(kind == 'saved' ? 'Salvati' : 'Archivio'),
-      ),
+      appBar: AppBar(title: pageTitle('Archivio')),
       body: posts.isEmpty
-          ? EmptyState(
-              kind == 'saved'
-                  ? CupertinoIcons.bookmark
-                  : CupertinoIcons.archivebox,
-              kind == 'saved' ? 'Tieni i tuoi preferiti' : 'Il tuo archivio',
+          ? const EmptyState(
+              CupertinoIcons.archivebox,
+              'Il tuo archivio',
               'I contenuti appariranno qui.',
             )
           : GridView.builder(
@@ -1690,6 +2674,574 @@ class CollectionPage extends StatelessWidget {
   }
 }
 
+Future<void> toggleSavedPost(BuildContext context, String id) async {
+  final store = GpixScope.of(context, listen: false);
+  final post = store.post(id);
+  if (post.isEmpty) return;
+  final enabled = !post.flag('saved');
+  await perform(context, () async {
+    await store.act('save', {'id': id, 'enabled': enabled});
+    if (!enabled || !context.mounted) return;
+    final choice = await sheet<String>(
+      context,
+      Builder(
+        builder: (menu) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ListTile(
+              leading: const GIcon(CupertinoIcons.bookmark_fill, size: 23),
+              title: const Text('Salvato'),
+              trailing: TextButton(
+                onPressed: () => Navigator.pop(menu, 'all'),
+                child: const Text('Visualizza tutto'),
+              ),
+            ),
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 18, 16, 10),
+                child: Text(
+                  'Organizza i post che salvi',
+                  style: Theme.of(menu).textTheme.titleMedium,
+                ),
+              ),
+            ),
+            for (final collection in store.savedCollections)
+              ListTile(
+                leading: const GIcon(CupertinoIcons.folder),
+                title: Text(collection.str('name')),
+                onTap: () => Navigator.pop(menu, collection.str('id')),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: FilledButton(
+                onPressed: () => Navigator.pop(menu, 'create'),
+                child: const Text('Crea una raccolta'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!context.mounted || choice == null) return;
+    if (choice == 'all') {
+      await open(context, const CollectionPage(kind: 'saved'));
+    } else if (choice == 'create') {
+      await editSavedCollection(context, store, initial: [id]);
+    } else {
+      final album = store.savedCollections
+          .where((item) => item.str('id') == choice)
+          .firstOrNull;
+      if (album == null) return;
+      await store.saveCollection(choice, album.str('name'), [
+        ...album.ids('posts'),
+        id,
+      ]);
+      if (context.mounted) notice(context, 'Aggiunto alla raccolta');
+    }
+  });
+}
+
+Future<void> editSavedCollection(
+  BuildContext context,
+  GpixStore store, {
+  List<String> initial = const [],
+  J? album,
+}) async {
+  final name = await textDialog(
+    context,
+    album == null ? 'Nuova raccolta' : 'Rinomina raccolta',
+    album?.str('name') ?? '',
+  );
+  final title = name?.trim() ?? '';
+  if (title.isEmpty || !context.mounted) return;
+  await perform(
+    context,
+    () => store.saveCollection(
+      album?.str('id') ?? newId(),
+      title.characters.take(70).toString(),
+      album?.ids('posts') ?? initial,
+    ),
+  );
+}
+
+class _SavedLibrary extends StatefulWidget {
+  const _SavedLibrary({this.collectionId});
+
+  final String? collectionId;
+
+  @override
+  State<_SavedLibrary> createState() => _SavedLibraryState();
+}
+
+class _SavedLibraryState extends State<_SavedLibrary> {
+  static const labels = ['Tutti', 'Raccolte', 'Reel', 'Post'];
+  final search = TextEditingController();
+  final selected = <String>{};
+  int tab = 0;
+  bool searching = false, managing = false, busy = false;
+
+  @override
+  void dispose() {
+    search.dispose();
+    super.dispose();
+  }
+
+  void stopManaging() => setState(() {
+    managing = false;
+    selected.clear();
+  });
+
+  Future<void> addToCollection(GpixStore store) async {
+    final choice = await sheet<String>(
+      context,
+      Builder(
+        builder: (menu) => Column(
+          children: [
+            const ListTile(title: Text('Aggiungi alla raccolta')),
+            for (final album in store.savedCollections)
+              ListTile(
+                leading: const GIcon(CupertinoIcons.folder),
+                title: Text(album.str('name')),
+                onTap: () => Navigator.pop(menu, album.str('id')),
+              ),
+            ListTile(
+              leading: const GIcon(CupertinoIcons.plus),
+              title: const Text('Nuova raccolta'),
+              onTap: () => Navigator.pop(menu, 'create'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || choice == null) return;
+    if (choice == 'create') {
+      await editSavedCollection(context, store, initial: selected.toList());
+    } else {
+      final album = store.savedCollections
+          .where((item) => item.str('id') == choice)
+          .firstOrNull;
+      if (album != null)
+        await perform(
+          context,
+          () => store.saveCollection(choice, album.str('name'), [
+            ...album.ids('posts'),
+            ...selected,
+          ]),
+        );
+    }
+    if (mounted) stopManaging();
+  }
+
+  Future<void> removeSelected(GpixStore store, J? album) async {
+    if (busy || selected.isEmpty) return;
+    setState(() => busy = true);
+    await perform(context, () async {
+      if (album != null) {
+        await store.saveCollection(
+          album.str('id'),
+          album.str('name'),
+          album.ids('posts').where((id) => !selected.contains(id)),
+        );
+      } else {
+        for (final id in selected.toList()) {
+          await store.act('save', {'id': id, 'enabled': false});
+        }
+      }
+      if (mounted) stopManaging();
+    });
+    if (mounted) setState(() => busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final store = GpixScope.of(context);
+    final saved = store.allPosts.where((item) => item.flag('saved'));
+    final query = search.text.trim().toLowerCase();
+    final album = store.savedCollections
+        .where((item) => item.str('id') == widget.collectionId)
+        .firstOrNull;
+    final albums = store.savedCollections
+        .where((item) => item.str('name').toLowerCase().contains(query))
+        .toList();
+    final contents = saved.where((item) {
+      if (album != null && !album.ids('posts').contains(item.str('id')))
+        return false;
+      final reel = item.str('kind') == 'reel';
+      if (album == null && ((tab == 2 && !reel) || (tab == 3 && reel)))
+        return false;
+      final author = store.user(item.str('author'));
+      return '${item.str('text')} ${author.str('username')} ${author.str('name')}'
+          .toLowerCase()
+          .contains(query);
+    }).toList();
+    final visibleIds = contents.map((item) => item.str('id')).toSet();
+    final allSelected =
+        visibleIds.isNotEmpty && visibleIds.every(selected.contains);
+    return Scaffold(
+      appBar: AppBar(
+        toolbarHeight: 62,
+        centerTitle: true,
+        title: searching
+            ? DirectSearchField(
+                controller: search,
+                autofocus: true,
+                hint: 'Cerca nei salvati',
+                onChanged: (_) => setState(() {}),
+              )
+            : Text(
+                managing
+                    ? 'Seleziona contenuti'
+                    : album?.str('name') ?? 'Salvato',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+        leading: IconButton(
+          tooltip: managing || searching ? 'Annulla' : 'Indietro',
+          icon: GIcon(
+            managing || searching
+                ? CupertinoIcons.xmark
+                : CupertinoIcons.chevron_left,
+          ),
+          onPressed: () {
+            if (busy) return;
+            if (managing) {
+              stopManaging();
+            } else if (searching) {
+              setState(() {
+                searching = false;
+                search.clear();
+              });
+            } else {
+              Navigator.maybePop(context);
+            }
+          },
+        ),
+        actions: [
+          if (managing)
+            TextButton(
+              onPressed: busy || visibleIds.isEmpty
+                  ? null
+                  : () => setState(() {
+                      if (allSelected) {
+                        selected.removeAll(visibleIds);
+                      } else {
+                        selected.addAll(visibleIds);
+                      }
+                    }),
+              child: Text(allSelected ? 'Deseleziona' : 'Seleziona tutti'),
+            )
+          else if (!searching) ...[
+            IconButton(
+              tooltip: 'Cerca nei salvati',
+              icon: const GIcon(CupertinoIcons.search),
+              onPressed: () => setState(() => searching = true),
+            ),
+            IconButton(
+              tooltip: album == null ? 'Nuova raccolta' : 'Opzioni raccolta',
+              icon: GIcon(
+                album == null ? CupertinoIcons.plus : CupertinoIcons.ellipsis,
+              ),
+              onPressed: album == null
+                  ? () => editSavedCollection(context, store)
+                  : () => collectionOptions(store, album),
+            ),
+          ],
+        ],
+      ),
+      body: CustomScrollView(
+        slivers: [
+          if (album == null && !managing)
+            SliverToBoxAdapter(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.fromLTRB(14, 4, 14, 12),
+                child: Row(
+                  children: [
+                    for (final (index, label) in labels.indexed)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(label),
+                          selected: tab == index,
+                          showCheckmark: false,
+                          onSelected: (_) => setState(() => tab = index),
+                          shape: const StadiumBorder(),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          if (album == null && !managing && (tab == 0 || tab == 1))
+            SliverToBoxAdapter(
+              child: Column(
+                children: [
+                  ListTile(
+                    title: const Text(
+                      'Raccolte',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    trailing: tab == 0
+                        ? TextButton(
+                            onPressed: () => setState(() => tab = 1),
+                            child: const Text('Mostra tutte'),
+                          )
+                        : null,
+                  ),
+                  if (albums.isEmpty)
+                    ListTile(
+                      leading: const GIcon(
+                        CupertinoIcons.folder_badge_plus,
+                        size: 24,
+                      ),
+                      title: const Text('Crea una raccolta'),
+                      onTap: () => editSavedCollection(context, store),
+                    ),
+                  for (final item in (tab == 0 ? albums.take(3) : albums))
+                    ListTile(
+                      leading: SizedBox.square(
+                        dimension: 54,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(11),
+                          child: _SavedThumbnail(
+                            post:
+                                saved
+                                    .where(
+                                      (post) => item
+                                          .ids('posts')
+                                          .contains(post.str('id')),
+                                    )
+                                    .firstOrNull ??
+                                {},
+                          ),
+                        ),
+                      ),
+                      title: Text(
+                        item.str('name'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: const Text('🔒 Privata'),
+                      onTap: () => open(
+                        context,
+                        _SavedLibrary(collectionId: item.str('id')),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          if (tab != 1 || album != null || managing) ...[
+            SliverToBoxAdapter(
+              child: ListTile(
+                title: Text(
+                  album != null
+                      ? 'Contenuti'
+                      : tab == 2
+                      ? 'Reel'
+                      : tab == 3
+                      ? 'Post'
+                      : 'Reel e post',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                trailing: !managing && contents.isNotEmpty
+                    ? TextButton(
+                        onPressed: () => setState(() => managing = true),
+                        child: const Text('Gestisci'),
+                      )
+                    : null,
+              ),
+            ),
+            if (contents.isEmpty)
+              const SliverToBoxAdapter(
+                child: EmptyState(
+                  CupertinoIcons.bookmark,
+                  'Nessun contenuto',
+                  'I contenuti salvati appariranno qui.',
+                ),
+              ),
+            SliverGrid.builder(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 1,
+                mainAxisSpacing: 1,
+                childAspectRatio: .75,
+              ),
+              itemCount: contents.length,
+              itemBuilder: (c, index) {
+                final post = contents[index], id = contents[index].str('id');
+                return Semantics(
+                  selected: managing ? selected.contains(id) : null,
+                  button: true,
+                  label: post.str('text', 'Contenuto salvato'),
+                  child: InkWell(
+                    onTap: busy
+                        ? null
+                        : managing
+                        ? () => setState(() {
+                            if (!selected.add(id)) selected.remove(id);
+                          })
+                        : () => open(
+                            context,
+                            PostPage(
+                              id: id,
+                              postIds: contents
+                                  .map((post) => post.str('id'))
+                                  .toList(),
+                            ),
+                          ),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        _SavedThumbnail(post: post),
+                        if (managing ||
+                            store.isVideoPost(post) ||
+                            store.media(post).length > 1)
+                          Positioned(
+                            top: 6,
+                            right: 6,
+                            child: GIcon(
+                              managing
+                                  ? selected.contains(id)
+                                        ? CupertinoIcons
+                                              .check_mark_circled_solid
+                                        : CupertinoIcons.circle
+                                  : store.isVideoPost(post)
+                                  ? CupertinoIcons.play_rectangle_fill
+                                  : CupertinoIcons.square_stack_fill,
+                              size: 19,
+                              color: managing && selected.contains(id)
+                                  ? const Color(0xff78a7ff)
+                                  : Colors.white,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ],
+      ),
+      bottomNavigationBar: !managing
+          ? null
+          : SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 6,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: busy || selected.isEmpty
+                            ? null
+                            : () => removeSelected(store, album),
+                        child: Text(
+                          album == null
+                              ? 'Rimuovi dai salvati'
+                              : 'Rimuovi dalla raccolta',
+                        ),
+                      ),
+                    ),
+                    if (album == null)
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: busy || selected.isEmpty
+                              ? null
+                              : () => addToCollection(store),
+                          child: const Text('Aggiungi alla raccolta'),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
+
+  Future<void> collectionOptions(GpixStore store, J album) async {
+    final choice = await sheet<String>(
+      context,
+      Builder(
+        builder: (menu) => Column(
+          children: [
+            ListTile(
+              title: const Text('Rinomina raccolta'),
+              onTap: () => Navigator.pop(menu, 'rename'),
+            ),
+            ListTile(
+              title: const Text('Elimina raccolta'),
+              onTap: () => Navigator.pop(menu, 'delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (choice == 'rename') {
+      await editSavedCollection(context, store, album: album);
+    } else if (choice == 'delete' &&
+        await gpixAlert(
+          context,
+          'Eliminare la raccolta?',
+          'I contenuti resteranno nei salvati.',
+          destructive: true,
+          cancel: true,
+          confirm: 'Elimina',
+        )) {
+      if (!mounted) return;
+      await perform(context, () async {
+        await store.deleteCollection(album.str('id'));
+        if (mounted) Navigator.pop(context);
+      });
+    }
+  }
+}
+
+class _SavedThumbnail extends StatelessWidget {
+  const _SavedThumbnail({required this.post});
+
+  final J post;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = GpixScope.of(context);
+    final cover = store.isVideoPost(post)
+        ? store.reelCover(post)
+        : store.media(post).firstOrNull ?? '';
+    final fallback = ColoredBox(
+      color: subdued(context),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: post.str('text').isEmpty
+              ? const GIcon(CupertinoIcons.bookmark, size: 24)
+              : Text(
+                  post.str('text'),
+                  maxLines: 5,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
+        ),
+      ),
+    );
+    return cover.isEmpty
+        ? fallback
+        : MediaView(
+            cover,
+            fit: BoxFit.cover,
+            thumbnail: true,
+            fallback: fallback,
+          );
+  }
+}
+
 class Activity extends StatefulWidget {
   const Activity({super.key});
   @override
@@ -1699,7 +3251,7 @@ class Activity extends StatefulWidget {
 class _ActivityState extends State<Activity> {
   static const filters = ['Tutte', 'Mi piace', 'Commenti', 'Follower'];
   static const headings = [
-    'In evidenza',
+    'In primo piano',
     'Oggi',
     'Ieri',
     'Ultimi 7 giorni',
@@ -1730,6 +3282,14 @@ class _ActivityState extends State<Activity> {
     final result = await anchoredMenu<String>(
       anchor,
       [
+        for (final (index, filter) in filters.indexed)
+          dropdownRow(
+            anchor,
+            'filter-$index',
+            filter,
+            CupertinoIcons.line_horizontal_3_decrease,
+            selected: index == selected,
+          ),
         dropdownRow(
           anchor,
           'settings',
@@ -1757,6 +3317,10 @@ class _ActivityState extends State<Activity> {
     );
     menuOpen = false;
     if (!mounted) return;
+    if (result != null && result.startsWith('filter-')) {
+      selectFilter(int.parse(result.substring(7)));
+      return;
+    }
     switch (result) {
       case 'settings':
         open(context, const PushSettings());
@@ -1792,6 +3356,9 @@ class _ActivityState extends State<Activity> {
       'like' => 'ha messo Mi piace al tuo post.',
       'follow' => 'ha iniziato a seguirti.',
       'followRequest' => 'ha chiesto di seguirti.',
+      'postTag' => 'ti ha taggato in un post.',
+      'collaborationInvite' => 'ti ha invitato a collaborare a un post.',
+      'collaborationAccepted' => 'ha accettato il tuo invito a collaborare.',
       'followAccepted' => 'ha accettato la tua richiesta.',
       'repost' => 'ha ripubblicato il tuo post.',
       'noteLike' => 'ha messo Mi piace alla tua nota.',
@@ -1799,10 +3366,11 @@ class _ActivityState extends State<Activity> {
     };
   }
 
-  Future<void> openNotification(GpixStore store, J notification) async {
+  Future<void> openNotification(GpixStore store, List<J> group) async {
+    final notification = group.first;
     await perform(context, () async {
-      if (!notification.flag('seen')) {
-        await store.act('notificationsRead', {'id': notification['id']});
+      for (final entry in group.where((item) => !item.flag('seen'))) {
+        await store.act('notificationsRead', {'id': entry['id']});
       }
       if (!mounted) return;
       final type = notification.str('type');
@@ -1822,7 +3390,18 @@ class _ActivityState extends State<Activity> {
           notice(context, 'Questa storia non è più disponibile');
         }
       } else if (post.isNotEmpty) {
-        open(context, PostPage(id: post.str('id')));
+        open(
+          context,
+          PostPage(
+            id: post.str('id'),
+            taggedUser: type == 'postTag' ? store.myId : null,
+          ),
+        );
+      } else if (const [
+        'collaborationInvite',
+        'collaborationAccepted',
+      ].contains(type)) {
+        notice(context, 'Questo post non è più disponibile');
       } else if (actor.isNotEmpty) {
         open(context, Profile(user: actor));
       }
@@ -1851,7 +3430,10 @@ class _ActivityState extends State<Activity> {
       };
       if (!matches) continue;
       final time = item.number('created');
-      final index = item.flag('highlighted') || type == 'system'
+      final index =
+          item.flag('highlighted') ||
+              type == 'system' ||
+              (type == 'storyLike' && !item.flag('seen') && time >= today)
           ? 0
           : time >= today
           ? 1
@@ -1865,6 +3447,35 @@ class _ActivityState extends State<Activity> {
     return rows;
   }
 
+  List<List<J>> _groupLikes(List<J> section) {
+    final rows = <List<J>>[];
+    final likes = <(String, String), List<J>>{};
+    for (final notification in section) {
+      final type = notification.str('type');
+      final ref = notification.str('ref');
+      if (ref.isNotEmpty && (type == 'like' || type == 'storyLike')) {
+        likes
+            .putIfAbsent((type, ref), () {
+              final row = <J>[];
+              rows.add(row);
+              return row;
+            })
+            .add(notification);
+      } else {
+        rows.add([notification]);
+      }
+    }
+    return rows;
+  }
+
+  Widget _sectionTitle(String title) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
+    child: Text(
+      title,
+      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final store = GpixScope.of(context);
@@ -1873,47 +3484,85 @@ class _ActivityState extends State<Activity> {
         .where((id) => !store.blocked(id))
         .toSet();
     final notifications = store.socialNotifications;
-    final sections = _sections(notifications);
-    final allEmpty = sections.every((section) => section.isEmpty);
-    final colors = Theme.of(context).colorScheme;
+    final sections = _sections(notifications).map(_groupLikes).toList();
+    final username = store.me.str('username').toLowerCase();
+    final mentions = [
+      for (final post in store.allPosts)
+        if (username.isNotEmpty &&
+            post.str('kind') == 'story' &&
+            post.str('author') != store.myId &&
+            !store.blocked(post.str('author')) &&
+            !post.flag('archived') &&
+            post.number('expires') > now &&
+            !store.preferences
+                .ids('hiddenStories')
+                .contains(post.str('author')) &&
+            post
+                .obj('style')
+                .rows('stickers')
+                .any(
+                  (sticker) =>
+                      sticker.str('type') == 'mention' &&
+                      sticker
+                              .str('label')
+                              .toLowerCase()
+                              .replaceFirst('@', '') ==
+                          username,
+                ))
+          post,
+    ]..sort((a, b) => b.number('created').compareTo(a.number('created')));
     return AccountSheetBackdrop(
       child: Scaffold(
         appBar: AppBar(
           centerTitle: false,
-          titleSpacing: 0,
-          leading: const BackButton(),
+          titleSpacing: 5,
+          toolbarHeight: 60,
+          leadingWidth: 70,
+          backgroundColor: surface(context),
+          surfaceTintColor: Colors.transparent,
+          leading: Padding(
+            padding: const EdgeInsets.fromLTRB(15, 8, 8, 8),
+            child: IconButton.outlined(
+              tooltip: 'Indietro',
+              onPressed: () => Navigator.maybePop(context),
+              padding: EdgeInsets.zero,
+              style: IconButton.styleFrom(
+                side: BorderSide(color: Theme.of(context).dividerColor),
+                shape: const CircleBorder(),
+              ),
+              icon: const GIcon(CupertinoIcons.chevron_left, size: 23),
+            ),
+          ),
           title: Tooltip(
             message: 'Cambia account',
             child: InkWell(
-              borderRadius: BorderRadius.circular(12),
               onTap: () => inboxAccounts(context, store),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 4,
-                  vertical: 10,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        store.me.str('username', 'Attività'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      store.me.str('username', 'Attività'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: foreground(context),
+                        fontSize: 23,
+                        letterSpacing: -.65,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(width: 7),
-                    GIcon(
-                      CupertinoIcons.chevron_down,
-                      size: 12,
-                      color: secondaryText(context),
+                  ),
+                  const SizedBox(width: 6),
+                  const GIcon(CupertinoIcons.chevron_down, size: 11),
+                  if (store.hasActivity) ...[
+                    const SizedBox(width: 6),
+                    const CircleAvatar(
+                      radius: 4,
+                      backgroundColor: Color(0xffff0035),
                     ),
-                    if (notifications.any((item) => !item.flag('seen'))) ...[
-                      const SizedBox(width: 8),
-                      const CircleAvatar(radius: 3.5, backgroundColor: danger),
-                    ],
                   ],
-                ),
+                ],
               ),
             ),
           ),
@@ -1921,112 +3570,131 @@ class _ActivityState extends State<Activity> {
             Builder(
               builder: (anchor) => IconButton(
                 tooltip: 'Opzioni attività',
-                icon: const GIcon(CupertinoIcons.bell, size: 23),
+                icon: const GIcon(CupertinoIcons.ellipsis, size: 20),
                 onPressed: () => showOptions(anchor, store),
               ),
             ),
-            const SizedBox(width: 6),
           ],
         ),
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Attività',
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -.65,
-                          ),
-                    ),
-                  ),
-                  if (unreadOnly)
-                    TextButton.icon(
-                      onPressed: () => setState(() => unreadOnly = false),
-                      icon: const GIcon(CupertinoIcons.xmark, size: 12),
-                      label: const Text('Da leggere'),
-                    ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 13),
-              child: CommunityTabs(
-                filters,
-                filters[selected],
-                (label) => selectFilter(filters.indexOf(label)),
-              ),
-            ),
-            Expanded(
-              child: SectionSwipe(
-                section: selected,
-                onStep: (step) {
-                  final next = selected + step;
-                  if (next >= 0 && next < filters.length) selectFilter(next);
-                },
-                child: RefreshIndicator(
-                  onRefresh: () => store.sync(silent: true),
-                  child: CustomScrollView(
-                    controller: scroll,
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    slivers: [
-                      if (selected == 0 || selected == 3)
-                        SliverToBoxAdapter(
-                          child: _requestSummary(context, store, requests),
+        body: RefreshIndicator(
+          onRefresh: () => store.sync(silent: true),
+          child: CustomScrollView(
+            controller: scroll,
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              if (selected == 0 || selected == 3)
+                SliverToBoxAdapter(
+                  child: _requestSummary(context, store, requests),
+                ),
+              if (selected == 0 && !unreadOnly && mentions.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Divider(height: 1),
+                      _sectionTitle('Storie su di te'),
+                      ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
                         ),
-                      if (allEmpty)
-                        SliverToBoxAdapter(
-                          child: EmptyState(
-                            CupertinoIcons.heart,
-                            unreadOnly
-                                ? 'Tutto letto'
-                                : 'Nessuna nuova attività',
-                            unreadOnly
-                                ? 'Le nuove attività appariranno qui.'
-                                : 'Qui trovi Mi piace, commenti e nuovi follower.',
-                          ),
+                        leading: Avatar(
+                          mentions.first.str('author'),
+                          size: 47,
+                          ring: true,
                         ),
-                      for (final (index, section) in sections.indexed)
-                        if (section.isNotEmpty) ...[
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 19, 16, 7),
-                              child: Text(
-                                headings[index],
-                                style: TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w800,
-                                  color: colors.onSurface,
-                                ),
-                              ),
-                            ),
-                          ),
-                          SliverList.builder(
-                            itemCount: section.length,
-                            itemBuilder: (context, row) => _notificationRow(
-                              context,
-                              store,
-                              section[row],
-                              requests,
-                            ),
-                          ),
-                        ],
-                      SliverToBoxAdapter(
-                        child: SizedBox(
-                          height: MediaQuery.paddingOf(context).bottom + 20,
+                        title: const Text(
+                          'Menzioni',
+                          style: TextStyle(fontWeight: FontWeight.w700),
                         ),
+                        subtitle: Text(
+                          mentions.length == 1
+                              ? 'Ti hanno menzionato in 1 storia.'
+                              : 'Ti hanno menzionato in ${mentions.length} storie.',
+                        ),
+                        onTap: () => _openMentions(mentions),
                       ),
                     ],
                   ),
                 ),
+              if (selected != 0 || unreadOnly)
+                SliverToBoxAdapter(
+                  child: ListTile(
+                    title: Text(unreadOnly ? 'Da leggere' : filters[selected]),
+                    trailing: IconButton(
+                      tooltip: 'Ripristina tutte le attività',
+                      icon: const GIcon(CupertinoIcons.xmark),
+                      onPressed: () => setState(() {
+                        selected = 0;
+                        unreadOnly = false;
+                      }),
+                    ),
+                  ),
+                ),
+              if (sections.every((section) => section.isEmpty) &&
+                  (mentions.isEmpty || selected != 0 || unreadOnly))
+                SliverToBoxAdapter(
+                  child: EmptyState(
+                    CupertinoIcons.heart,
+                    unreadOnly ? 'Tutto letto' : 'Nessuna nuova attività',
+                    unreadOnly
+                        ? 'Le nuove attività appariranno qui.'
+                        : 'Qui trovi Mi piace, commenti e nuovi follower.',
+                  ),
+                ),
+              for (final (index, section) in sections.indexed)
+                if (section.isNotEmpty) ...[
+                  SliverToBoxAdapter(child: _sectionTitle(headings[index])),
+                  SliverList.builder(
+                    itemCount: section.length,
+                    itemBuilder: (context, index) => _notificationRow(
+                      context,
+                      store,
+                      section[index],
+                      requests,
+                    ),
+                  ),
+                ],
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: MediaQuery.paddingOf(context).bottom + 16,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openMentions(List<J> stories) {
+    if (stories.length == 1) {
+      final post = stories.single;
+      open(
+        context,
+        StoryViewer(user: post.str('author'), ids: [post.str('id')]),
+      );
+      return;
+    }
+    open(
+      context,
+      Scaffold(
+        appBar: AppBar(title: const Text('Menzioni')),
+        body: ListView.builder(
+          itemCount: stories.length,
+          itemBuilder: (context, index) {
+            final post = stories[index];
+            final actor = post.str('author');
+            final store = GpixScope.of(context);
+            return ListTile(
+              leading: Avatar(actor, size: 44),
+              title: Text(store.user(actor).str('username')),
+              onTap: () => open(
+                context,
+                StoryViewer(user: actor, ids: [post.str('id')]),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -2037,221 +3705,195 @@ class _ActivityState extends State<Activity> {
     GpixStore store,
     Set<String> requests,
   ) {
-    final colors = Theme.of(context).colorScheme;
     final multiple = requests.length > 1;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-      child: Material(
-        color: colors.surfaceContainerLow,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(15),
-          side: BorderSide(color: colors.outlineVariant),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 4,
-          ),
-          horizontalTitleGap: 11,
-          leading: SizedBox.square(
-            dimension: 48,
-            child: requests.isEmpty
-                ? CircleAvatar(
-                    backgroundColor: subdued(context),
-                    child: GIcon(
-                      CupertinoIcons.person_add,
-                      color: foreground(context),
-                      size: 20,
-                    ),
-                  )
-                : Stack(
-                    children: [
-                      Avatar(requests.first, size: multiple ? 34 : 48),
-                      if (multiple)
-                        Align(
-                          alignment: Alignment.bottomRight,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: colors.surfaceContainerLow,
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(2),
-                              child: Avatar(requests.elementAt(1), size: 32),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-          ),
-          title: const Text(
-            'Richieste di seguirti',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-          ),
-          subtitle: Text(
-            requests.isEmpty
-                ? 'Nessuna richiesta in attesa'
-                : '${store.user(requests.first).str('username')}${multiple ? ' + altri ${requests.length - 1}' : ''}',
-            style: TextStyle(color: secondaryText(context), fontSize: 12),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (requests.isNotEmpty) ...[
-                CircleAvatar(radius: 3.5, backgroundColor: accent(context)),
-                const SizedBox(width: 8),
-              ],
-              GIcon(
-                CupertinoIcons.chevron_right,
-                size: 15,
-                color: secondaryText(context),
-              ),
-            ],
-          ),
-          onTap: () => open(context, const Requests()),
-        ),
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      horizontalTitleGap: 12,
+      leading: requests.isEmpty
+          ? CircleAvatar(
+              radius: 27,
+              backgroundColor: subdued(context),
+              child: const GIcon(CupertinoIcons.person_add, size: 22),
+            )
+          : _avatars(context, requests.take(2).toList()),
+      title: const Text(
+        'Richieste di seguirti',
+        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
       ),
+      subtitle: Text(
+        requests.isEmpty
+            ? 'Nessuna richiesta in attesa'
+            : '${store.user(requests.first).str('username')}${multiple ? ' + altri ${requests.length - 1}' : ''}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (requests.isNotEmpty) ...[
+            CircleAvatar(radius: 4, backgroundColor: accent(context)),
+            const SizedBox(width: 10),
+          ],
+          const GIcon(CupertinoIcons.chevron_right, size: 18),
+        ],
+      ),
+      onTap: () => open(context, const Requests()),
     );
   }
+
+  Widget _avatars(
+    BuildContext context,
+    List<String> actors, {
+    bool like = false,
+  }) => SizedBox.square(
+    dimension: 56,
+    child: Stack(
+      clipBehavior: Clip.none,
+      children: [
+        if (actors.isEmpty)
+          const Center(child: GIcon(CupertinoIcons.bell, size: 23))
+        else if (actors.length == 1)
+          Center(child: Avatar(actors.first, size: 50))
+        else ...[
+          Positioned(top: 0, left: 0, child: Avatar(actors[1], size: 37)),
+          Positioned(
+            bottom: 0,
+            right: 1,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: surface(context),
+                shape: BoxShape.circle,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(1.5),
+                child: Avatar(actors.first, size: 39),
+              ),
+            ),
+          ),
+        ],
+        if (like)
+          Positioned(
+            bottom: -1,
+            right: -1,
+            child: Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                color: const Color(0xffff0035),
+                shape: BoxShape.circle,
+                border: Border.all(color: surface(context), width: 1.5),
+              ),
+              child: const GIcon(
+                CupertinoIcons.heart_fill,
+                color: Colors.white,
+                size: 11,
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
 
   Widget _notificationRow(
     BuildContext context,
     GpixStore store,
-    J item,
+    List<J> group,
     Set<String> requests,
   ) {
+    final item = group.first;
+    final actors = group
+        .map((entry) => entry.str('actor'))
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
     final actor = item.str('actor');
     final post = store.post(item.str('ref'));
     final type = item.str('type');
-    final unread = !item.flag('seen');
     final pending = type == 'followRequest' && requests.contains(actor);
+    final like = const ['like', 'storyLike', 'noteLike'].contains(type);
     final thumbnail = post.str('kind') == 'reel'
-        ? post.obj('style').str('cover')
+        ? store.reelCover(post)
         : store.media(post).firstOrNull ?? '';
     final time = item.number('created');
-    final badge = switch (type) {
-      'like' ||
-      'storyLike' ||
-      'noteLike' => (CupertinoIcons.heart_fill, danger),
-      'comment' => (CupertinoIcons.chat_bubble_fill, accent(context)),
-      'follow' ||
-      'followRequest' ||
-      'followAccepted' => (CupertinoIcons.person_add, accent(context)),
-      'repost' => (CupertinoIcons.repeat, accent(context)),
-      _ => null,
-    };
-    final avatar = actor.isEmpty
-        ? CircleAvatar(
-            radius: 23,
-            backgroundColor: subdued(context),
-            child: GIcon(
-              CupertinoIcons.bell,
-              color: foreground(context),
-              size: 20,
-            ),
-          )
-        : Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Avatar(actor, size: 46),
-              if (badge != null)
-                Positioned(
-                  right: -2,
-                  bottom: -2,
-                  child: Container(
-                    width: 18,
-                    height: 18,
-                    decoration: BoxDecoration(
-                      color: badge.$2,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: surface(context), width: 1.5),
-                    ),
-                    child: GIcon(badge.$1, size: 10, color: Colors.white),
-                  ),
-                ),
-            ],
-          );
     final description = Text.rich(
       TextSpan(
         children: [
-          if (actor.isNotEmpty)
+          if (actors.isNotEmpty)
             TextSpan(
-              text: '${store.user(actor).str('username')} ',
+              text: actors
+                  .take(2)
+                  .map((id) => store.user(id).str('username'))
+                  .join(', '),
               style: const TextStyle(fontWeight: FontWeight.w700),
             ),
-          TextSpan(text: _label(item, post)),
+          if (actors.length > 2)
+            TextSpan(text: ' e altri ${actors.length - 2}'),
+          TextSpan(
+            text: actors.length > 1 && like
+                ? (type == 'storyLike' || post.str('kind') == 'story'
+                      ? ' hanno messo Mi piace alla tua storia.'
+                      : ' hanno messo Mi piace al tuo post.')
+                : '${actors.isEmpty ? '' : ' '}${_label(item, post)}',
+          ),
           if (time > 0)
             TextSpan(
               text: '  ${relative(time)}',
-              style: TextStyle(color: secondaryText(context), fontSize: 12),
+              style: TextStyle(color: secondaryText(context), fontSize: 11),
             ),
         ],
       ),
-      style: TextStyle(fontSize: 14, height: 1.28, color: foreground(context)),
+      style: TextStyle(fontSize: 13, height: 1.22, color: foreground(context)),
     );
-    return Padding(
+    return InkWell(
       key: ValueKey(item.str('id')),
-      padding: const EdgeInsets.fromLTRB(12, 1, 12, 1),
-      child: Material(
-        color: unread
-            ? accent(context).withValues(alpha: .06)
-            : surface(context),
-        borderRadius: BorderRadius.circular(13),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(13),
-          onTap: () => openNotification(store, item),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(5, 9, 7, 9),
-            child: LayoutBuilder(
-              builder: (context, size) {
-                final inline =
-                    pending &&
-                    size.maxWidth >= 342 &&
-                    MediaQuery.textScalerOf(context).scale(13) < 15;
-                return Row(
-                  children: [
-                    avatar,
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          description,
-                          if (pending && !inline) ...[
-                            const SizedBox(height: 4),
-                            _requestActions(context, store, actor),
-                          ],
-                        ],
-                      ),
-                    ),
-                    if (inline) ...[
-                      const SizedBox(width: 8),
-                      _requestActions(context, store, actor),
-                    ],
-                    if (!pending && thumbnail.isNotEmpty) ...[
-                      const SizedBox(width: 9),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: MediaView(
-                          thumbnail,
-                          width: 44,
-                          height: 47,
-                          thumbnail: true,
-                        ),
-                      ),
-                    ],
-                    if (!pending && unread) ...[
-                      const SizedBox(width: 7),
-                      CircleAvatar(radius: 3, backgroundColor: accent(context)),
-                    ],
-                  ],
-                );
-              },
+      onTap: () => openNotification(store, group),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 9, 16, 9),
+        child: Row(
+          children: [
+            _avatars(context, actors, like: like),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  description,
+                  if (pending) _requestActions(context, store, actor),
+                ],
+              ),
             ),
-          ),
+            if (thumbnail.isNotEmpty) ...[
+              const SizedBox(width: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: MediaView(
+                  thumbnail,
+                  width: 40,
+                  height: 55,
+                  thumbnail: true,
+                ),
+              ),
+            ] else if (type == 'follow' && actor.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: subdued(context),
+                  foregroundColor: foreground(context),
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  textStyle: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                onPressed: () => perform(context, () async {
+                  final thread = await store.openThread(actor);
+                  if (context.mounted) open(context, Chat(id: thread));
+                }),
+                child: const Text('Messaggio'),
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -2321,7 +3963,9 @@ class _RequestsState extends State<Requests> {
     final width = MediaQuery.sizeOf(c).width, compact = width < 360;
     final requests = order
         .where(
-          (id) => s.state.ids('requests').contains(id) || accepted.contains(id),
+          (id) =>
+              s.state.ids('requests').contains(id) ||
+              (!editing && accepted.contains(id)),
         )
         .where(
           (id) => '${s.user(id).str('name')} ${s.user(id).str('username')}'
@@ -2330,6 +3974,8 @@ class _RequestsState extends State<Requests> {
         )
         .toList();
     selected.removeWhere((id) => !s.state.ids('requests').contains(id));
+    final allSelected =
+        requests.isNotEmpty && requests.every(selected.contains);
     Widget button(String text, bool accept, VoidCallback? action) =>
         FilledButton(
           style: FilledButton.styleFrom(
@@ -2364,9 +4010,19 @@ class _RequestsState extends State<Requests> {
                 color: Theme.of(c).dividerColor.withValues(alpha: .35),
               ),
             ),
-            tooltip: 'Indietro',
-            onPressed: () => Navigator.maybePop(c),
-            icon: const GIcon(CupertinoIcons.chevron_left, size: 24),
+            tooltip: editing ? 'Annulla selezione' : 'Indietro',
+            onPressed: busy
+                ? null
+                : editing
+                ? () => setState(() {
+                    editing = false;
+                    selected.clear();
+                  })
+                : () => Navigator.maybePop(c),
+            icon: GIcon(
+              editing ? CupertinoIcons.xmark : CupertinoIcons.chevron_left,
+              size: 23,
+            ),
           ),
         ),
         title: Text(
@@ -2388,12 +4044,22 @@ class _RequestsState extends State<Requests> {
               ),
               onPressed: busy
                   ? null
+                  : editing && requests.isEmpty
+                  ? null
                   : () => setState(() {
-                      editing = !editing;
-                      selected.clear();
+                      if (!editing) {
+                        editing = true;
+                        selected.clear();
+                      } else if (allSelected) {
+                        selected.removeAll(requests);
+                      } else {
+                        selected.addAll(requests);
+                      }
                     }),
               child: Text(
-                editing ? 'Fine' : 'Modifica',
+                editing
+                    ? (allSelected ? 'Deseleziona tutti' : 'Seleziona tutti')
+                    : 'Gestisci',
                 style: const TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 14,
@@ -2430,70 +4096,72 @@ class _RequestsState extends State<Requests> {
               ),
             ),
           ),
-          ListTile(
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 2,
-            ),
-            leading: Container(
-              width: 54,
-              height: 54,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: foreground(c)),
+          if (!editing)
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 2,
               ),
-              child: const Stack(
-                children: [
-                  Center(child: GIcon(CupertinoIcons.search, size: 29)),
-                  Positioned(
-                    top: 10,
-                    right: 10,
-                    child: GIcon(CupertinoIcons.sparkles, size: 12),
-                  ),
-                ],
-              ),
-            ),
-            title: const Text(
-              'Scopri altri profili',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-            ),
-            subtitle: const Text(
-              'Vedi suggerimenti non personalizzati',
-              style: TextStyle(color: muted, fontSize: 12),
-            ),
-            trailing: const GIcon(
-              CupertinoIcons.chevron_right,
-              color: muted,
-              size: 19,
-            ),
-            onTap: () => open(
-              c,
-              Scaffold(
-                appBar: AppBar(title: pageTitle('Scopri altri profili')),
-                body: ListView(
+              leading: Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: foreground(c)),
+                ),
+                child: const Stack(
                   children: [
-                    for (final u
-                        in (s.users
-                            .where(
-                              (u) =>
-                                  u.str('id') != s.myId &&
-                                  !s.blocked(u.str('id')) &&
-                                  !s.follows(u.str('id')),
-                            )
-                            .toList()
-                          ..sort(
-                            (a, b) =>
-                                a.str('username').compareTo(b.str('username')),
-                          )))
-                      PersonTile(
-                        u.str('id'),
-                        onTap: () => open(c, Profile(user: u.str('id'))),
-                      ),
+                    Center(child: GIcon(CupertinoIcons.search, size: 29)),
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: GIcon(CupertinoIcons.sparkles, size: 12),
+                    ),
                   ],
                 ),
               ),
+              title: const Text(
+                'Scopri altri profili',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+              ),
+              subtitle: const Text(
+                'Vedi suggerimenti non personalizzati',
+                style: TextStyle(color: muted, fontSize: 12),
+              ),
+              trailing: const GIcon(
+                CupertinoIcons.chevron_right,
+                color: muted,
+                size: 19,
+              ),
+              onTap: () => open(
+                c,
+                Scaffold(
+                  appBar: AppBar(title: pageTitle('Scopri altri profili')),
+                  body: ListView(
+                    children: [
+                      for (final u
+                          in (s.users
+                              .where(
+                                (u) =>
+                                    u.str('id') != s.myId &&
+                                    !s.blocked(u.str('id')) &&
+                                    !s.follows(u.str('id')),
+                              )
+                              .toList()
+                            ..sort(
+                              (a, b) => a
+                                  .str('username')
+                                  .compareTo(b.str('username')),
+                            )))
+                        PersonTile(
+                          u.str('id'),
+                          onTap: () => open(c, Profile(user: u.str('id'))),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
             ),
-          ),
           Expanded(
             child: requests.isEmpty
                 ? Center(
@@ -2714,7 +4382,7 @@ class _RequestsState extends State<Requests> {
                       children: [
                         Expanded(
                           child: button(
-                            'Elimina',
+                            'Elimina (${selected.length})',
                             false,
                             busy || selected.isEmpty
                                 ? null
@@ -2724,7 +4392,7 @@ class _RequestsState extends State<Requests> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: button(
-                            busy ? 'Attendi…' : 'Conferma',
+                            busy ? 'Attendi…' : 'Conferma (${selected.length})',
                             true,
                             busy || selected.isEmpty
                                 ? null

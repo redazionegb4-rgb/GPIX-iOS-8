@@ -52,9 +52,19 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> threadPresence(String tid) async {
     if (demo || !foreground || token.isEmpty || presenceBusy) return;
+    final session = token, endpoint = server;
     presenceBusy = true;
     try {
-      final result = await api('/threads/$tid/presence');
+      final result = await _request(
+        '/threads/$tid/presence',
+        session: session,
+        endpoint: endpoint,
+      );
+      if (session != token ||
+          endpoint != server ||
+          _changingAccount ||
+          thread(tid).isEmpty)
+        return;
       final people = users;
       for (final fresh in result.rows('users')) {
         final id = fresh.str('id'),
@@ -214,7 +224,11 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   List<J> chatReactions(J t) {
-    final ids = t.rows('messages').map((m) => m.str('id')).toSet();
+    final ids = t
+        .rows('messages')
+        .where((m) => !expired(m))
+        .map((m) => m.str('id'))
+        .toSet();
     return state
         .rows('notifications')
         .where(
@@ -239,6 +253,7 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
       .rows('notes')
       .where((n) => n.number('expires') > now && !blocked(n.str('owner')))
       .toList();
+  bool get supportsChatTools => demo || state.flag('richChat');
   bool get readReceipts =>
       me['readReceipts'] != false && me['readReceipts'] != 0;
   String get myId => me.str('id');
@@ -267,6 +282,111 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   List<J> get users => state.rows('users');
+  bool isVideoPost(J post) {
+    final reference = post.str('media', media(post).firstOrNull ?? '');
+    return post.str('kind') == 'reel' ||
+        post.flag('video') ||
+        post.obj('style').flag('video') ||
+        isVideoMedia(reference);
+  }
+
+  bool isVideoMedia(String reference) {
+    final path = Uri.tryParse(reference)?.path.toLowerCase() ?? '';
+    return const ['.mp4', '.mov', '.webm', '.m4v', '.mkv'].any(path.endsWith);
+  }
+
+  final _savedCollections = <String, List<J>>{};
+  String get _collectionsKey => 'gpix.savedCollections.$server.$myId';
+
+  List<J> get savedCollections =>
+      _savedCollections.putIfAbsent(_collectionsKey, () {
+        try {
+          return objects(jsonDecode(prefs?.getString(_collectionsKey) ?? '[]'));
+        } on FormatException {
+          return [];
+        }
+      });
+
+  Future<void> saveCollection(
+    String id,
+    String name,
+    Iterable<String> posts,
+  ) async {
+    final key = _collectionsKey;
+    final next = [
+      for (final album in savedCollections)
+        if (album.str('id') != id) album,
+      {'id': id, 'name': name, 'posts': posts.toSet().toList()},
+    ];
+    await prefs?.setString(key, jsonEncode(next));
+    _savedCollections[key] = next;
+    notifyListeners();
+  }
+
+  Future<void> deleteCollection(String id) async {
+    final key = _collectionsKey;
+    final next = savedCollections
+        .where((album) => album.str('id') != id)
+        .toList();
+    await prefs?.setString(key, jsonEncode(next));
+    _savedCollections[key] = next;
+    notifyListeners();
+  }
+
+  bool canViewSharedPost(J post) {
+    final author = post.str('author');
+    return const ['post', 'reel'].contains(post.str('kind')) &&
+        author.isNotEmpty &&
+        !post.flag('archived') &&
+        !blocked(author);
+  }
+
+  bool canSharePublicPost(J post) {
+    final author = post.str('author');
+    return canViewSharedPost(post) &&
+        post.str('audience', 'all') == 'all' &&
+        (author == myId || users.any((user) => user.str('id') == author)) &&
+        !user(author).flag('private');
+  }
+
+  bool canSharePostOutsideChat(J post) =>
+      canViewSharedPost(post) &&
+      (post.str('author') == myId || canSharePublicPost(post));
+
+  bool get supportsPostCollaborations =>
+      demo || state.flag('postCollaborations');
+
+  bool get supportsPostTagManagement => demo || state.flag('postTagManagement');
+
+  bool taggedInPost(J post, String user) {
+    final style = post.obj('style');
+    return post.str('kind') == 'post' &&
+        (style.ids('taggedUsers').contains(user) ||
+            style.rows('photoTags').any((tag) => tag.str('user') == user));
+  }
+
+  int? postTagSlide(J post, String user) {
+    final count = media(post).length;
+    for (final tag in post.obj('style').rows('photoTags')) {
+      final page = tag.number('slide', -1);
+      if (tag.str('user') == user &&
+          page >= 0 &&
+          page < count &&
+          page == page.toInt()) {
+        return page.toInt();
+      }
+    }
+    return null;
+  }
+
+  List<J> taggedPosts(String user, {bool hidden = false}) => posts
+      .where(
+        (post) =>
+            taggedInPost(post, user) &&
+            post.ids('hiddenTagUsers').contains(user) == hidden,
+      )
+      .toList();
+
   List<J> get allPosts => state.rows('posts');
   List<J> get posts => allPosts
       .where(
@@ -295,17 +415,43 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
               (a.obj('chatSettings').flag('pinned') ? 1 : 0);
           return pin == 0 ? _last(b).compareTo(_last(a)) : pin;
         });
+  bool threadContactRestricted(J t) =>
+      t.str('owner').isEmpty &&
+      (preferences.ids('restricted').contains(other(t)) ||
+          (!state.flag('richInbox') &&
+              !demo &&
+              t.str('requestDecision') == 'restricted'));
+
   bool messageRequest(J t) {
-    if (t.str('requestDecision') == 'restricted' ||
-        preferences.ids('restricted').contains(other(t)))
-      return true;
-    if (t.str('owner').isNotEmpty || t.str('requestDecision') == 'accepted')
-      return false;
+    if (t.isEmpty || t.str('owner').isNotEmpty) return false;
+    if (threadContactRestricted(t)) return true;
+    if (t.str('requestDecision') == 'accepted') return false;
+    if (t.containsKey('requestPending')) return t.flag('requestPending');
     final messages = t.rows('messages');
     return messages.isNotEmpty &&
         messages.first.str('author') != myId &&
         !messages.any((m) => m.str('author') == myId) &&
         !follows(other(t));
+  }
+
+  bool needsMessageAcceptance(J t) =>
+      t.str('requestDecision') == 'hidden' || messageRequest(t);
+
+  Future<void> acceptChatRequest(String id, {bool unrestrict = false}) async {
+    final t = thread(id);
+    if (threadContactRestricted(t)) {
+      if (!unrestrict)
+        throw Exception('Apri la richiesta per rimuovere le restrizioni.');
+      if (!state.flag('richInbox') && !demo) {
+        final next = preferences.ids('restricted')..remove(other(t));
+        await setPreference('restricted', next);
+      }
+    }
+    await act('messageRequest', {
+      'id': id,
+      'decision': 'accepted',
+      if (unrestrict) 'unrestrict': true,
+    });
   }
 
   List<J> get inboxThreads => threads
@@ -318,10 +464,20 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
       )
       .toList();
   List<J> get requestedThreads => threads
-      .where((t) => t.str('requestDecision') != 'hidden' && messageRequest(t))
+      .where(
+        (t) =>
+            t.str('requestDecision') != 'hidden' &&
+            t.rows('messages').isNotEmpty &&
+            messageRequest(t),
+      )
       .toList();
-  List<J> get hiddenRequests =>
-      threads.where((t) => t.str('requestDecision') == 'hidden').toList();
+  List<J> get hiddenRequests => threads
+      .where(
+        (t) =>
+            t.str('requestDecision') == 'hidden' &&
+            t.rows('messages').isNotEmpty,
+      )
+      .toList();
   double _last(J t) {
     final message = t.rows('messages').lastOrNull?.number('created') ?? 0;
     final reaction = chatReactions(t).firstOrNull?.number('created') ?? 0;
@@ -344,8 +500,16 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
       threads.firstWhere((t) => t.str('id') == id, orElse: () => {});
   String other(J t) =>
       t.ids('members').firstWhere((e) => e != myId, orElse: () => myId);
-  String threadName(J t) =>
-      t.str('title').isNotEmpty ? t.str('title') : user(other(t)).str('name');
+  String threadName(J t) {
+    final title = t.str('title');
+    if (title.isNotEmpty) return title;
+    final peer = other(t);
+    return t
+        .obj('chatStyle')
+        .obj('nicknames')
+        .str(peer, user(peer).str('name'));
+  }
+
   bool blocked(String id) => state.ids('blocks').contains(id);
   bool closeStory(String id) {
     final list = stories(id);
@@ -372,6 +536,17 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
       .toList();
   List<J> highlights(String userId) =>
       state.rows('highlights').where((h) => h.str('owner') == userId).toList();
+  String reelCover(J post) {
+    final style = post.obj('style');
+    final id = style.str('coverId');
+    return post
+            .rows('mediaItems')
+            .where((item) => id.isNotEmpty && item.str('id') == id)
+            .firstOrNull
+            ?.str('url') ??
+        (demo && id.isNotEmpty ? id : style.str('cover'));
+  }
+
   List<String> media(J p) {
     final list = p['mediaItems'];
     if (list is List && list.isNotEmpty)
@@ -392,7 +567,12 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
 
   int unread(J t) => t
       .rows('messages')
-      .where((m) => m.str('author') != myId && !m.ids('readBy').contains(myId))
+      .where(
+        (m) =>
+            !expired(m) &&
+            m.str('author') != myId &&
+            !m.ids('readBy').contains(myId),
+      )
       .length;
   Future<void> init() async {
     WidgetsBinding.instance.addObserver(this);
@@ -632,6 +812,28 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  final _feedFavorites = <String, List<String>>{};
+  String get _favoritesKey => 'gpix.feedFavorites.$server.$myId';
+
+  List<String> get feedFavorites =>
+      _feedFavorites[_favoritesKey] ??
+      prefs?.getStringList(_favoritesKey) ??
+      [];
+
+  Future<void> setFeedFavorite(String user, bool enabled) async {
+    final key = _favoritesKey;
+    final next = feedFavorites.toSet();
+    if (enabled) {
+      next.add(user);
+    } else {
+      next.remove(user);
+    }
+    final updated = next.toList();
+    _feedFavorites[key] = updated;
+    notifyListeners();
+    await prefs?.setStringList(key, updated);
+  }
+
   J get preferences => state.obj('preferences');
   Future<void> setPreference(String key, dynamic value) =>
       act('preferences', {'key': key, 'value': value});
@@ -730,10 +932,22 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> act(String action, [J payload = const {}]) async {
     if (action == 'note' && !payload.flag('delete')) {
       final value = payload.str('text').trim();
-      if (value.isEmpty ||
+      final details = payload.obj('details');
+      final attached =
+          details.str('place').isNotEmpty ||
+          details.str('gif').isNotEmpty ||
+          details.obj('music').isNotEmpty;
+      if ((value.isEmpty && !attached) ||
           value.characters.length > 60 ||
           !['mutual', 'close'].contains(payload.str('audience', 'mutual'))) {
-        throw Exception('Scrivi una nota entro 60 caratteri.');
+        throw Exception(
+          'Scrivi una nota entro 60 caratteri o aggiungi un allegato.',
+        );
+      }
+      if (details.isNotEmpty && !demo && !state.flag('richNotes')) {
+        throw Exception(
+          'Aggiorna il server GPIX alla versione 2.24.14 per condividere note personalizzate.',
+        );
       }
     }
     final key = '$token:$action:${payload['id'] ?? payload['user'] ?? ''}';
@@ -848,9 +1062,18 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> markRead(String tid) async {
-    if (!_readingThreads.add(tid)) return;
+    final t = thread(tid);
+    if (t.isEmpty ||
+        needsMessageAcceptance(t) ||
+        !chatHasUnread(t) ||
+        !_readingThreads.add(tid))
+      return;
     try {
-      if (thread(tid).obj('chatSettings').flag('unread')) {
+      if (!demo && state.flag('richInbox')) {
+        await act('readThread', {'id': tid});
+        return;
+      }
+      if (t.obj('chatSettings').flag('unread')) {
         await act('chatSettings', {
           'id': tid,
           'field': 'unread',
@@ -864,7 +1087,10 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
       final unread = thread(tid)
           .rows('messages')
           .where(
-            (m) => m.str('author') != myId && !m.ids('readBy').contains(myId),
+            (m) =>
+                !expired(m) &&
+                m.str('author') != myId &&
+                !m.ids('readBy').contains(myId),
           )
           .map((m) => m.str('id'))
           .toList();
@@ -1420,9 +1646,15 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
         me['gridOrder'] = p.ids('ids');
         break;
       case 'messageRequest':
-        t['requestDecision'] = p.str('decision') == 'accepted'
-            ? 'accepted'
-            : 'hidden';
+        final accepted = p.str('decision') == 'accepted';
+        if (accepted && p.flag('unrestrict')) {
+          state['preferences'] = {
+            ...preferences,
+            'restricted': preferences.ids('restricted')..remove(other(t)),
+          };
+        }
+        t['requestDecision'] = accepted ? 'accepted' : 'hidden';
+        t['requestPending'] = !accepted;
         break;
       case 'messageExpiry':
         t['messageTTL'] = p.number('seconds');
@@ -1437,9 +1669,11 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
             )
             .firstOrNull;
         if (note == null) throw Exception('Nota non disponibile');
-        if (!note.flag('likedByMe')) {
-          note['likedByMe'] = true;
-          note['likesCount'] = note.number('likesCount') + 1;
+        final enabled = p['enabled'] != false;
+        if (enabled != note.flag('likedByMe')) {
+          note['likedByMe'] = enabled;
+          note['likesCount'] = (note.number('likesCount') + (enabled ? 1 : -1))
+              .clamp(0, double.infinity);
         }
         break;
       case 'note':
@@ -1453,6 +1687,7 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
               'owner': myId,
               'text': p.str('text').trim(),
               'audience': p.str('audience', 'mutual'),
+              'details': p.obj('details'),
               'created': now,
               'expires': now + 86400,
             },
@@ -1472,11 +1707,33 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
       case 'profile':
         me.addAll(p);
         break;
+      case 'chatAppearance':
+        t['chatStyle'] = {
+          ...t.obj('chatStyle'),
+          if (p.containsKey('theme')) 'theme': p.str('theme'),
+          if (p.containsKey('font')) 'font': p.str('font'),
+        };
+        break;
+      case 'chatNickname':
+        final style = t.obj('chatStyle');
+        final nicknames = style.obj('nicknames');
+        final name = p.str('text').trim();
+        if (!t.ids('members').contains(uid) || name.length > 30) {
+          throw Exception('Scegli un soprannome di massimo 30 caratteri.');
+        }
+        if (name.isEmpty) {
+          nicknames.remove(uid);
+        } else {
+          nicknames[uid] = name;
+        }
+        t['chatStyle'] = {...style, 'nicknames': nicknames};
+        break;
       case 'chatSettings':
         final settings = t.obj('chatSettings');
         if (p.str('field') == 'clear') {
           settings.addAll({'cleared': now, 'unread': false, 'pinned': false});
           t['messages'] = <J>[];
+          t['chatStyle'] = t.obj('chatStyle')..remove('pinnedMessage');
         } else {
           settings[p.str('field')] = p.flag('enabled');
         }
@@ -1535,6 +1792,8 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
             'mediaItems': p['mediaItems'] ?? [],
             'location': p.str('location'),
             'style': p['style'] ?? {},
+            if (p.ids('collaboratorInvites').isNotEmpty)
+              'pendingCollaborators': p.ids('collaboratorInvites'),
             'audience': p.str('audience', 'all'),
             'created': now,
             'expires': p.str('kind') == 'story' ? now + 86400 : 0,
@@ -1545,6 +1804,42 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
           },
           ...items,
         ];
+        break;
+      case 'managePostTag':
+        final hidden = item.ids('hiddenTagUsers')..remove(myId);
+        final decision = p.str('decision');
+        if (decision == 'hide') hidden.add(myId);
+        item['hiddenTagUsers'] = hidden;
+        if (decision == 'remove') {
+          final style = item.obj('style');
+          style['taggedUsers'] = style.ids('taggedUsers')
+            ..removeWhere((user) => user == myId);
+          style['photoTags'] = style
+              .rows('photoTags')
+              .where((tag) => tag.str('user') != myId)
+              .toList();
+          item['style'] = style;
+          state['notifications'] = state
+              .rows('notifications')
+              .where((n) => n.str('type') != 'postTag' || n.str('ref') != id)
+              .toList();
+        }
+        break;
+      case 'postCollaboration':
+        final decision = p.str('decision');
+        if (decision == 'accept' && item.flag('collaborationPending')) {
+          item['collaborators'] = {...item.ids('collaborators'), myId}.toList();
+        } else if (decision == 'leave') {
+          item['collaborators'] = item.ids('collaborators')..remove(myId);
+        }
+        item['collaborationPending'] = false;
+        state['notifications'] = state
+            .rows('notifications')
+            .where(
+              (n) =>
+                  n.str('type') != 'collaborationInvite' || n.str('ref') != id,
+            )
+            .toList();
         break;
       case 'deletePost':
         state['posts'] = items.where((e) => e.str('id') != id).toList();
@@ -1773,6 +2068,50 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
           'text': source.str('text'),
         });
         thread(id).rows('messages').last['post'] = source.str('id');
+        if (source.isNotEmpty) {
+          source['shareCount'] = source.number('shareCount') + 1;
+        }
+        break;
+      case 'pinMessage':
+      case 'hideMessage':
+      case 'messageSticker':
+        final conversation = groups.firstWhere(
+          (chat) => chat.rows('messages').any((m) => m.str('id') == id),
+          orElse: () => {},
+        );
+        if (conversation.isEmpty) break;
+        final m = message(id);
+        final style = conversation.obj('chatStyle');
+        if (action == 'hideMessage') {
+          conversation['messages'] = conversation
+              .rows('messages')
+              .where((item) => item.str('id') != id)
+              .toList();
+          if (style.str('pinnedMessage') == id) style.remove('pinnedMessage');
+        } else {
+          if (m.flag('viewOnce') ||
+              m.flag('afterRead') ||
+              m.number('expires') > 0) {
+            throw Exception('Messaggio temporaneo.');
+          }
+          if (action == 'pinMessage') {
+            if (p.flag('enabled')) {
+              style['pinnedMessage'] = id;
+            } else if (style.str('pinnedMessage') == id) {
+              style.remove('pinnedMessage');
+            }
+          } else {
+            final stickers = m.obj('stickers');
+            final emoji = p.str('emoji');
+            if (emoji.isEmpty) {
+              stickers.remove(myId);
+            } else {
+              stickers[myId] = emoji;
+            }
+            m['stickers'] = stickers;
+          }
+        }
+        conversation['chatStyle'] = style;
         break;
       case 'read':
       case 'react':
@@ -1811,8 +2150,13 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
             m['text'] = p.str('text');
             m['edited'] = true;
           }
-          if (action == 'deleteMessage')
+          if (action == 'deleteMessage') {
             messages.removeWhere((e) => e.str('id') == id);
+            final style = conversation.obj('chatStyle');
+            if (style.str('pinnedMessage') == id) {
+              conversation['chatStyle'] = style..remove('pinnedMessage');
+            }
+          }
           conversation['messages'] = messages;
           if (action == 'forward') {
             _local('thread', {'user': uid});
@@ -1831,6 +2175,7 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
                 'created': now,
                 'reply': '',
                 'readBy': <String>[],
+                'stickers': <String, dynamic>{},
                 'reactions': <String, dynamic>{},
               },
             ];

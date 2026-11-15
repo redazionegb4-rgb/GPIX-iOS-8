@@ -1,591 +1,443 @@
-import 'stories.dart';
-import 'dart:io';
 import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_kit_video/media_kit_video.dart';
-import '../core/data.dart';
+
 import '../core/store.dart';
 import '../ui/kit.dart';
-import 'social.dart';
+
+export 'reels.dart' show Reels, reelDockBottom, reelDockHeight;
+
+typedef ClipProgress = ({Duration position, Duration duration});
+
+class ClipControls {
+  final progress = ValueNotifier<ClipProgress>((
+    position: Duration.zero,
+    duration: Duration.zero,
+  ));
+  final hasSubtitles = ValueNotifier<bool>(false);
+  _ClipPlayerState? _player;
+
+  void togglePlayback() => _player?._toggle();
+  void seek(double fraction) => _player?._seek(fraction);
+
+  void dispose() {
+    _player = null;
+    progress.dispose();
+    hasSubtitles.dispose();
+  }
+}
 
 class ClipPlayer extends StatefulWidget {
-  final String reference;
-  final bool active;
-  final BoxFit fit;
-  final ValueChanged<Duration>? onDuration;
   const ClipPlayer({
     super.key,
     required this.reference,
     this.active = true,
     this.fit = BoxFit.contain,
     this.onDuration,
+    this.controls,
+    this.placeholder,
+    this.suspended = false,
+    this.loop = true,
+    this.showSubtitles = true,
+    this.muted,
+    this.subtitleBottom = 24,
+    this.onCompleted,
   });
+
+  final String reference;
+  final bool active, suspended, loop, showSubtitles;
+  final BoxFit fit;
+  final bool? muted;
+  final double subtitleBottom;
+  final ClipControls? controls;
+  final Widget? placeholder;
+  final ValueChanged<Duration>? onDuration;
+  final VoidCallback? onCompleted;
+
   @override
   State<ClipPlayer> createState() => _ClipPlayerState();
 }
 
 class _ClipPlayerState extends State<ClipPlayer> with WidgetsBindingObserver {
-  mk.Player? player;
-  VideoController? controller;
-  final subscriptions = <StreamSubscription<dynamic>>[];
-  String? error;
-  bool mutedVideo = false, playing = false, buffering = true, software = false;
-  int generation = 0;
+  mk.Player? _player;
+  VideoController? _video;
+  final _subscriptions = <StreamSubscription<dynamic>>[];
+  String? _error;
+  bool _muted = false, _playing = false, _buffering = true;
+  bool _starting = false, _ready = false, _userPaused = false;
+  bool _foreground = true;
+  int _generation = 0;
+
+  bool get _shouldPlay =>
+      widget.active && !widget.suspended && _foreground && !_userPaused;
+  bool get _isMuted => widget.muted ?? _muted;
+  double get _volume => _isMuted ? 0 : 100;
+  bool _current(int generation) => mounted && generation == _generation;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    final state = WidgetsBinding.instance.lifecycleState;
+    _foreground = state == null || state == AppLifecycleState.resumed;
+    widget.controls?._player = this;
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (widget.active && player == null && error == null) initialize();
+    unawaited(_start());
   }
 
-  Future<void> initialize({bool softwareDecoder = false}) async {
-    final current = ++generation;
-    software = softwareDecoder;
-    error = null;
-    buffering = true;
+  Future<void> _start({bool software = false}) async {
+    if (!widget.active ||
+        widget.reference.isEmpty ||
+        _starting ||
+        _player != null ||
+        _error != null)
+      return;
+
+    final generation = ++_generation;
+    _starting = true;
+    _buffering = true;
     try {
-      final reference = GpixScope.of(
-        context,
-        listen: false,
-      ).url(widget.reference);
-      if (reference.startsWith('/') &&
-          (!await File(reference).exists() ||
-              await File(reference).length() == 0)) {
-        throw const FileSystemException(
-          'Il file video non è più disponibile. Selezionalo nuovamente.',
-        );
+      final source = GpixScope.of(context, listen: false).url(widget.reference);
+      if (source.startsWith('/') && !await File(source).exists()) {
+        throw const FileSystemException('Il file video non è più disponibile.');
       }
-      if (!mounted || current != generation || !widget.active) return;
+      if (!_current(generation)) return;
       mk.MediaKit.ensureInitialized();
-      final next = mk.Player(
+      final player = mk.Player(
         configuration: const mk.PlayerConfiguration(
           bufferSize: 16 * 1024 * 1024,
         ),
       );
-      player = next;
-      controller = VideoController(
-        next,
+      _player = player;
+      _video = VideoController(
+        player,
         configuration: VideoControllerConfiguration(
-          enableHardwareAcceleration: !softwareDecoder,
-          hwdec: softwareDecoder ? 'no' : 'auto-safe',
+          enableHardwareAcceleration: !software,
+          hwdec: software ? 'no' : 'auto-safe',
         ),
       );
-      subscriptions.add(
-        next.stream.error.listen((message) {
-          if (!mounted || current != generation) return;
-          if (!softwareDecoder) {
-            release();
-            initialize(softwareDecoder: true);
-          } else {
-            setState(
-              () => error = 'Questo video non è riproducibile. $message',
-            );
+      _subscriptions.addAll([
+        player.stream.error.listen((_) {
+          if (_current(generation)) _fail(software);
+        }),
+        player.stream.playing.listen((playing) {
+          if (_current(generation) && playing != _playing) {
+            setState(() => _playing = playing);
           }
         }),
-      );
-      subscriptions.add(
-        next.stream.playing.listen((value) {
-          if (mounted && current == generation) setState(() => playing = value);
+        player.stream.buffering.listen((buffering) {
+          if (_current(generation) && buffering != _buffering) {
+            setState(() => _buffering = buffering);
+          }
         }),
-      );
-      subscriptions.add(
-        next.stream.buffering.listen((value) {
-          if (mounted && current == generation)
-            setState(() => buffering = value);
+        player.stream.duration.listen((duration) {
+          if (!_current(generation)) return;
+          if (duration > Duration.zero) widget.onDuration?.call(duration);
+          _publishProgress(player);
         }),
-      );
-      subscriptions.add(
-        next.stream.duration.listen((value) {
-          if (mounted && current == generation && value > Duration.zero)
-            widget.onDuration?.call(value);
+        if (widget.controls != null) ...[
+          player.stream.position.listen((_) {
+            if (_current(generation)) _publishProgress(player);
+          }),
+          player.stream.tracks.listen((tracks) {
+            if (_current(generation)) {
+              widget.controls?.hasSubtitles.value = tracks.subtitle.any(
+                (track) => track.id != 'auto' && track.id != 'no',
+              );
+            }
+          }),
+        ],
+        player.stream.completed.listen((complete) {
+          if (complete &&
+              _current(generation) &&
+              _ready &&
+              !widget.loop &&
+              _shouldPlay) {
+            widget.onCompleted?.call();
+          }
         }),
+      ]);
+      final uri = source.startsWith('/')
+          ? Uri.file(source).toString()
+          : source.contains('://')
+          ? source
+          : 'asset:///assets/media/$source';
+      await player.open(mk.Media(uri), play: false);
+      if (!_current(generation)) return;
+      await player.setPlaylistMode(
+        widget.loop ? mk.PlaylistMode.single : mk.PlaylistMode.none,
       );
-      await next.setPlaylistMode(mk.PlaylistMode.single);
-      await next.setVolume(mutedVideo ? 0 : 100);
-      final uri = reference.startsWith('/')
-          ? Uri.file(reference).toString()
-          : reference.contains('://')
-          ? reference
-          : 'asset:///assets/media/$reference';
-      await next.open(mk.Media(uri), play: widget.active);
-      if (mounted && current == generation) setState(() {});
-    } catch (e) {
-      if (mounted && current == generation)
+      if (!_current(generation)) return;
+      await player.setVolume(_volume);
+      if (!_current(generation)) return;
+      setState(() {
+        _ready = true;
+        _starting = false;
+      });
+      _publishProgress(player);
+      _applyPlayback();
+    } catch (error) {
+      if (!_current(generation)) return;
+      if (_player == null || error is FileSystemException) {
+        _release();
         setState(
-          () => error = e is FileSystemException
-              ? e.message
-              : 'Impossibile aprire il video. ${e.toString()}',
+          () => _error = error is FileSystemException
+              ? error.message
+              : 'Impossibile aprire il video.',
         );
+      } else {
+        _fail(software);
+      }
     }
   }
 
-  void release() {
-    generation++;
-    for (final subscription in subscriptions) {
+  void _publishProgress(mk.Player player) {
+    widget.controls?.progress.value = (
+      position: player.state.position,
+      duration: player.state.duration,
+    );
+  }
+
+  void _fail(bool software) {
+    _release();
+    if (software) {
+      setState(() => _error = 'Questo video non è riproducibile.');
+    } else {
+      unawaited(_start(software: true));
+    }
+  }
+
+  void _release() {
+    _generation++;
+    for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());
     }
-    subscriptions.clear();
-    final old = player;
-    player = null;
-    controller = null;
-    if (old != null) unawaited(old.dispose().catchError((Object _) {}));
+    _subscriptions.clear();
+    final player = _player;
+    _player = null;
+    _video = null;
+    _starting = false;
+    _ready = false;
+    _playing = false;
+    if (player != null) unawaited(player.dispose().catchError((Object _) {}));
+  }
+
+  void _applyPlayback() {
+    final player = _player;
+    if (!_ready || player == null) return;
+    final operation = _shouldPlay ? player.play() : player.pause();
+    unawaited(operation.catchError((Object _) {}));
+  }
+
+  void _toggle() {
+    final player = _player;
+    if (!_ready || player == null || widget.suspended) return;
+    _userPaused = !_userPaused && player.state.playing;
+    if (!_userPaused && player.state.completed) {
+      unawaited(
+        player
+            .seek(Duration.zero)
+            .then((_) {
+              if (mounted && _player == player) _applyPlayback();
+            })
+            .catchError((Object _) {}),
+      );
+    } else {
+      _applyPlayback();
+    }
+  }
+
+  void _seek(double fraction) {
+    final player = _player;
+    if (!_ready || player == null || !fraction.isFinite) return;
+    final micros =
+        player.state.duration.inMicroseconds * fraction.clamp(0.0, 1.0);
+    unawaited(
+      player
+          .seek(Duration(microseconds: micros.round()))
+          .catchError((Object _) {}),
+    );
   }
 
   @override
   void didUpdateWidget(ClipPlayer old) {
     super.didUpdateWidget(old);
-    if (old.reference != widget.reference || old.active != widget.active) {
-      release();
-      error = null;
-      if (widget.active) initialize();
+    if (old.controls != widget.controls) {
+      if (old.controls?._player == this) old.controls?._player = null;
+      widget.controls?._player = this;
     }
+    if (old.reference != widget.reference || old.active != widget.active) {
+      _release();
+      _error = null;
+      _userPaused = false;
+      final controls = widget.controls;
+      if (controls != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && widget.controls == controls && !_ready) {
+            controls.progress.value = (
+              position: Duration.zero,
+              duration: Duration.zero,
+            );
+            controls.hasSubtitles.value = false;
+          }
+        });
+      }
+      unawaited(_start());
+      return;
+    }
+    final player = _player;
+    if (!_ready || player == null) return;
+    if (old.loop != widget.loop) {
+      unawaited(
+        player
+            .setPlaylistMode(
+              widget.loop ? mk.PlaylistMode.single : mk.PlaylistMode.none,
+            )
+            .catchError((Object _) {}),
+      );
+    }
+    if (old.muted != widget.muted) {
+      unawaited(player.setVolume(_volume).catchError((Object _) {}));
+    }
+    if (old.suspended != widget.suspended) _applyPlayback();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && widget.active) {
-      player?.play();
-    } else {
-      player?.pause();
-    }
+    _foreground = state == AppLifecycleState.resumed;
+    _applyPlayback();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    release();
+    if (widget.controls?._player == this) widget.controls?._player = null;
+    _release();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext c) {
-    if (!widget.active) return const ColoredBox(color: Colors.black);
-    if (error != null)
-      return ColoredBox(
-        color: Colors.black,
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const GIcon(
-                  CupertinoIcons.exclamationmark_circle,
-                  color: Colors.white70,
-                  size: 32,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  error!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
-                ),
-                TextButton(
-                  onPressed: () {
-                    release();
-                    setState(() => error = null);
-                    initialize(softwareDecoder: true);
-                  },
-                  child: const Text('Riprova con decoder compatibile'),
-                ),
-              ],
+    final background =
+        widget.placeholder ?? const ColoredBox(color: Colors.black);
+    if (!widget.active || widget.reference.isEmpty) return background;
+    if (_error != null) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          background,
+          const ColoredBox(color: Colors.black54),
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(17),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      setState(() => _error = null);
+                      unawaited(_start(software: true));
+                    },
+                    child: const Text(
+                      'Riprova',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
+        ],
       );
-    if (controller == null)
-      return const ColoredBox(
-        color: Colors.black,
-        child: Center(
-          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-        ),
-      );
+    }
     return GestureDetector(
-      onTap: () => player?.playOrPause(),
+      behavior: HitTestBehavior.opaque,
+      onTap: widget.controls == null ? _toggle : null,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          Video(
-            controller: controller!,
-            controls: NoVideoControls,
-            fit: widget.fit,
-            pauseUponEnteringBackgroundMode: false,
-          ),
-          if (buffering)
+          background,
+          if (_video != null)
+            Video(
+              controller: _video!,
+              controls: NoVideoControls,
+              fit: widget.fit,
+              pauseUponEnteringBackgroundMode: false,
+              subtitleViewConfiguration: widget.controls == null
+                  ? const SubtitleViewConfiguration()
+                  : SubtitleViewConfiguration(
+                      visible: widget.showSubtitles,
+                      padding: EdgeInsets.fromLTRB(
+                        16,
+                        0,
+                        16,
+                        widget.subtitleBottom,
+                      ),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.white,
+                        backgroundColor: Colors.black87,
+                      ),
+                    ),
+            ),
+          if (_buffering || !_ready)
             const Center(
-              child: CircularProgressIndicator(
-                color: Colors.white,
-                strokeWidth: 2,
-              ),
-            ),
-          if (!playing && !buffering)
-            const Center(
-              child: GIcon(
-                CupertinoIcons.play_fill,
-                color: Colors.white,
-                size: 48,
-              ),
-            ),
-          Positioned(
-            right: 12,
-            bottom: 12,
-            child: IconButton(
-              tooltip: mutedVideo ? 'Attiva audio' : 'Disattiva audio',
-              onPressed: () {
-                setState(() => mutedVideo = !mutedVideo);
-                player?.setVolume(mutedVideo ? 0 : 100);
-              },
-              icon: GIcon(
-                mutedVideo
-                    ? CupertinoIcons.speaker_slash_fill
-                    : CupertinoIcons.speaker_2_fill,
-                color: Colors.white,
-                size: 21,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class Reels extends StatefulWidget {
-  final bool active;
-  final String? initial;
-  final double bottomOverlay;
-  const Reels({
-    super.key,
-    this.active = true,
-    this.initial,
-    this.bottomOverlay = 0,
-  });
-  @override
-  State<Reels> createState() => _ReelsState();
-}
-
-class _ReelsState extends State<Reels> {
-  int page = 0;
-  PageController? controller;
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (controller == null) {
-      final reels = GpixScope.of(context, listen: false).reels;
-      page = widget.initial == null
-          ? 0
-          : reels
-                .indexWhere((r) => r.str('id') == widget.initial)
-                .clamp(0, (reels.length - 1).clamp(0, reels.length));
-      controller = PageController(initialPage: page);
-    }
-  }
-
-  @override
-  void dispose() {
-    controller?.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext c) {
-    final s = GpixScope.of(c), reels = s.reels;
-    final topInset = MediaQuery.paddingOf(c).top;
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        top: false,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (reels.isEmpty)
-              const Center(
-                child: Text(
-                  'I nuovi reel appariranno qui.',
-                  style: TextStyle(color: Colors.white),
-                ),
-              )
-            else
-              PageView.builder(
-                controller: controller,
-                scrollDirection: Axis.vertical,
-                itemCount: reels.length,
-                onPageChanged: (i) => setState(() => page = i),
-                itemBuilder: (c, i) {
-                  final p = reels[i], uid = p.str('author');
-                  return Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      ClipPlayer(
-                        key: ValueKey(p['id']),
-                        reference: p.str('media'),
-                        active:
-                            widget.active &&
-                            i == page &&
-                            (ModalRoute.of(c)?.isCurrent ?? true),
-                        fit: BoxFit.cover,
-                      ),
-                      const Positioned.fill(
-                        child: IgnorePointer(
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.center,
-                                end: Alignment.bottomCenter,
-                                colors: [Colors.transparent, Colors.black87],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        left: 17,
-                        right: 75,
-                        bottom: 20 + widget.bottomOverlay,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            InkWell(
-                              onTap: () => open(c, Profile(user: uid)),
-                              child: Row(
-                                children: [
-                                  Avatar(uid, size: 33),
-                                  const SizedBox(width: 10),
-                                  Flexible(
-                                    child: Text(
-                                      s.user(uid).str('username'),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                  ),
-                                  if (uid != s.myId && !s.follows(uid))
-                                    TextButton(
-                                      onPressed: () => perform(
-                                        c,
-                                        () => s.act('follow', {
-                                          'user': uid,
-                                          'enabled': true,
-                                        }),
-                                      ),
-                                      style: TextButton.styleFrom(
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                        ),
-                                        side: const BorderSide(
-                                          color: Colors.white54,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            7,
-                                          ),
-                                        ),
-                                      ),
-                                      child: const Text('Segui'),
-                                    ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              p.str('text'),
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
-                                height: 1.4,
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-                            const Row(
-                              children: [
-                                GIcon(
-                                  CupertinoIcons.music_note_2,
-                                  color: Colors.white,
-                                  size: 13,
-                                ),
-                                SizedBox(width: 6),
-                                Text(
-                                  'Audio originale',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      Positioned(
-                        right: 8,
-                        bottom: 45 + widget.bottomOverlay,
-                        child: Column(
-                          children: [
-                            action(
-                              p.ids('likes').contains(s.myId)
-                                  ? CupertinoIcons.heart_fill
-                                  : CupertinoIcons.heart,
-                              '${p.ids('likes').length}',
-                              () => perform(
-                                c,
-                                () => s.act('like', {
-                                  'id': p['id'],
-                                  'enabled': !p.ids('likes').contains(s.myId),
-                                }),
-                              ),
-                              color: p.ids('likes').contains(s.myId)
-                                  ? danger
-                                  : Colors.white,
-                            ),
-                            const SizedBox(height: 18),
-                            action(
-                              CupertinoIcons.chat_bubble,
-                              '${p.rows('comments').length}',
-                              () => comments(c, p.str('id')),
-                            ),
-                            if (!s.user(uid).flag('private') &&
-                                ![
-                                  'close',
-                                  'followers',
-                                ].contains(p.str('audience'))) ...[
-                              const SizedBox(height: 12),
-                              action(
-                                CupertinoIcons.repeat,
-                                '${p.ids('reposts').length}',
-                                () => perform(
-                                  c,
-                                  () => s.act('repost', {
-                                    'id': p['id'],
-                                    'enabled': !p
-                                        .ids('reposts')
-                                        .contains(s.myId),
-                                  }),
-                                ),
-                                color: p.ids('reposts').contains(s.myId)
-                                    ? Colors.greenAccent
-                                    : Colors.white,
-                              ),
-                            ],
-                            const SizedBox(height: 12),
-                            action(
-                              CupertinoIcons.paperplane,
-                              'Invia',
-                              () => sharePost(c, p),
-                            ),
-                            const SizedBox(height: 15),
-                            action(
-                              p.flag('saved')
-                                  ? CupertinoIcons.bookmark_fill
-                                  : CupertinoIcons.bookmark,
-                              'Salva',
-                              () => perform(
-                                c,
-                                () => s.act('save', {
-                                  'id': p['id'],
-                                  'enabled': !p.flag('saved'),
-                                }),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            IconButton(
-                              tooltip: 'Opzioni reel',
-                              onPressed: () => postMenu(c, p),
-                              icon: const GIcon(
-                                CupertinoIcons.ellipsis,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            Positioned(
-              top: topInset + 8,
-              left: 56,
-              right: 56,
-              child: const Text(
-                'Reel',
-                textAlign: TextAlign.center,
-                style: TextStyle(
+              child: SizedBox.square(
+                dimension: 23,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
                   color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 21,
                 ),
               ),
             ),
-            if (widget.initial != null)
-              Positioned(
-                top: topInset,
-                left: 0,
-                child: IconButton(
-                  onPressed: () => Navigator.pop(c),
-                  icon: const GIcon(CupertinoIcons.back, color: Colors.white),
+          if (!_playing && !_buffering && _ready && !widget.suspended)
+            const IgnorePointer(
+              child: Center(
+                child: GIcon(
+                  CupertinoIcons.play_fill,
+                  color: Colors.white,
+                  size: 45,
                 ),
               ),
+            ),
+          if (widget.controls == null)
             Positioned(
-              top: topInset,
-              right: 8,
+              right: 12,
+              bottom: 12,
               child: IconButton(
-                tooltip: 'Crea reel',
-                onPressed: () => open(c, const Composer(kind: 'reel')),
-                icon: const GIcon(
-                  CupertinoIcons.camera,
+                tooltip: _isMuted ? 'Attiva audio' : 'Disattiva audio',
+                onPressed: () {
+                  setState(() => _muted = !_muted);
+                  final player = _player;
+                  if (player != null)
+                    unawaited(
+                      player.setVolume(_volume).catchError((Object _) {}),
+                    );
+                },
+                icon: GIcon(
+                  _isMuted
+                      ? CupertinoIcons.speaker_slash_fill
+                      : CupertinoIcons.speaker_2_fill,
                   color: Colors.white,
-                  size: 26,
+                  size: 21,
                 ),
               ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
-
-  Widget action(
-    IconData icon,
-    String count,
-    VoidCallback tap, {
-    Color color = Colors.white,
-  }) => InkWell(
-    onTap: tap,
-    child: SizedBox(
-      width: 46,
-      child: Column(
-        children: [
-          AnimatedSwitcher(
-            duration: MediaQuery.disableAnimationsOf(context)
-                ? Duration.zero
-                : const Duration(milliseconds: 180),
-            transitionBuilder: (child, animation) =>
-                ScaleTransition(scale: animation, child: child),
-            child: GIcon(icon, key: ValueKey(icon), size: 29, color: color),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            count,
-            style: const TextStyle(
-              fontSize: 10,
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
 }

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
@@ -19,7 +20,10 @@ import 'stories.dart';
 import 'calls.dart';
 import 'emoji_picker.dart';
 import 'chat_media.dart';
+import 'chat_ui.dart';
+import 'chat_translation.dart';
 import 'giphy.dart';
+import 'inbox_widgets.dart';
 import 'photo_send.dart';
 import 'auth.dart';
 
@@ -246,26 +250,15 @@ Future<void> inboxThreadOptions(
   if (choice == null || !context.mounted) return;
   final id = thread.str('id');
   if (choice == 'clear') {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialog) => AlertDialog(
-        title: const Text('Eliminare la conversazione?'),
-        content: const Text(
-          'La cronologia verrà rimossa solo dal tuo account.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialog),
-            child: const Text('Annulla'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialog, true),
-            child: const Text('Elimina', style: TextStyle(color: danger)),
-          ),
-        ],
-      ),
+    final confirmed = await gpixAlert(
+      context,
+      'Eliminare la conversazione?',
+      'La cronologia verrà rimossa solo dal tuo account.',
+      confirm: 'Elimina',
+      cancel: true,
+      destructive: true,
     );
-    if (confirmed != true || !context.mounted) return;
+    if (!confirmed || !context.mounted) return;
   }
   await perform(context, () async {
     if (choice == 'unread' && store.chatHasUnread(thread)) {
@@ -287,7 +280,12 @@ class _InboxChatPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final messages = thread.rows('messages');
+    final messages = thread
+        .rows('messages')
+        .where((m) => !m.flag('afterRead') || !store.expired(m))
+        .toList();
+    final showPreviews = store.preferences['messagePreviews'] != false;
+    final colors = ChatColors.fromName(thread.obj('chatStyle').str('theme'));
     final recent = messages.skip(
       (messages.length - 5).clamp(0, messages.length),
     );
@@ -322,30 +320,30 @@ class _InboxChatPreview extends StatelessWidget {
                       alignment: message.str('author') == store.myId
                           ? Alignment.centerRight
                           : Alignment.centerLeft,
-                      child: Container(
+                      child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 242),
-                        margin: const EdgeInsets.only(bottom: 4),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 11,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: message.str('author') == store.myId
-                              ? const Color(0xff7528ed)
-                              : subdued(context),
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: Text(
-                          message.flag('viewOnce')
-                              ? 'Foto visualizzabile una volta'
-                              : preview(message),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: message.str('author') == store.myId
-                                ? Colors.white
-                                : foreground(context),
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: ChatBubble(
+                            colors: colors,
+                            own: message.str('author') == store.myId,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 11,
+                              vertical: 8,
+                            ),
+                            child: Text(
+                              showPreviews
+                                  ? _messagePreview(store, message)
+                                  : 'Messaggio',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: message.str('author') == store.myId
+                                    ? Colors.white
+                                    : foreground(context),
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -369,314 +367,184 @@ class Inbox extends StatelessWidget {
 }
 
 class MessageRequests extends StatefulWidget {
-  final bool hidden;
   const MessageRequests({super.key, this.hidden = false});
+
+  final bool hidden;
+
   @override
   State<MessageRequests> createState() => _MessageRequestsState();
 }
 
 class _MessageRequestsState extends State<MessageRequests> {
-  bool showAll = false, editing = false, busy = false;
+  bool editing = false, busy = false;
   final selected = <String>{};
-  Future<void> decide(List<String> ids, String decision) async {
-    if (busy) return;
+
+  Future<void> decideRequests(List<String> ids) async {
+    if (busy || ids.isEmpty) return;
+    final s = GpixScope.of(context, listen: false);
+    final account = s.myId;
     setState(() => busy = true);
     await perform(context, () async {
-      final s = GpixScope.of(context, listen: false);
       for (final id in ids) {
-        await s.act('messageRequest', {'id': id, 'decision': decision});
+        if (!mounted || s.myId != account) return;
+        if (widget.hidden) {
+          await s.acceptChatRequest(id);
+        } else {
+          await s.act('messageRequest', {'id': id, 'decision': 'hidden'});
+        }
+        if (mounted) setState(() => selected.remove(id));
       }
-      if (mounted)
-        setState(() {
-          selected.clear();
-          editing = false;
-        });
+      if (mounted) setState(() => editing = false);
     });
     if (mounted) setState(() => busy = false);
   }
 
   @override
   Widget build(BuildContext c) {
-    final s = GpixScope.of(c),
-        all = widget.hidden ? s.hiddenRequests : s.requestedThreads;
-    final requests = all
-        .where(
-          (t) =>
-              widget.hidden ||
-              showAll ||
-              t.rows('messages').isEmpty ||
-              t.rows('messages').last.number('created') >= now - 30 * 86400,
-        )
-        .toList();
-    selected.removeWhere((id) => !requests.any((t) => t.str('id') == id));
+    final s = GpixScope.of(c);
+    final requests = widget.hidden ? s.hiddenRequests : s.requestedThreads;
+    final editingRequests = selected.intersection(
+      requests.map((t) => t.str('id')).toSet(),
+    );
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
         title: Text(
           widget.hidden ? 'Richieste nascoste' : 'Richieste di messaggi',
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          style: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -.25,
+          ),
         ),
         actions: [
-          TextButton(
-            onPressed: requests.isEmpty || busy
-                ? null
-                : () => setState(() {
-                    editing = !editing;
-                    selected.clear();
-                  }),
-            child: Text(editing ? 'Fine' : 'Modifica'),
-          ),
+          if (requests.isNotEmpty || editing)
+            TextButton(
+              onPressed: busy
+                  ? null
+                  : () => setState(() {
+                      editing = !editing;
+                      selected.clear();
+                    }),
+              child: Text(editing ? 'Fine' : 'Modifica'),
+            ),
         ],
       ),
-      body: Column(
-        children: [
-          if (!widget.hidden)
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 8,
-              ),
-              leading: const GIcon(CupertinoIcons.eye_slash, size: 30),
-              title: const Text(
-                'Richieste nascoste',
-                style: TextStyle(fontSize: 17),
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '${s.hiddenRequests.length}',
-                    style: const TextStyle(color: muted, fontSize: 16),
+      body: RefreshIndicator(
+        onRefresh: s.refreshHome,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            if (!widget.hidden)
+              SliverToBoxAdapter(
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 6,
                   ),
-                  const SizedBox(width: 14),
-                  const GIcon(
-                    CupertinoIcons.chevron_right,
-                    color: muted,
-                    size: 20,
+                  leading: CircleAvatar(
+                    radius: 23,
+                    backgroundColor: chatReplyColor(c),
+                    foregroundColor: foreground(c),
+                    child: const GIcon(CupertinoIcons.eye_slash, size: 22),
                   ),
-                ],
-              ),
-              onTap: () => open(c, const MessageRequests(hidden: true)),
-            ),
-          Expanded(
-            child: requests.isEmpty
-                ? LayoutBuilder(
-                    builder: (c, box) => SingleChildScrollView(
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(minHeight: box.maxHeight),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(28, 32, 28, 80),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                width: 116,
-                                height: 116,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: foreground(c),
-                                    width: 2,
-                                  ),
-                                ),
-                                child: Center(
-                                  child: GIcon(
-                                    widget.hidden
-                                        ? CupertinoIcons.eye_slash
-                                        : CupertinoIcons.paperplane,
-                                    size: 54,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 25),
-                              Text(
-                                widget.hidden
-                                    ? 'Nessuna richiesta nascosta'
-                                    : showAll
-                                    ? 'Nessuna richiesta di messaggi'
-                                    : 'Nessuna richiesta di messaggi recente',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  fontSize: 27,
-                                  height: 1.16,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const SizedBox(height: 22),
-                              Text(
-                                widget.hidden
-                                    ? 'Le richieste che nascondi appariranno qui. Puoi accettarle in qualsiasi momento.'
-                                    : showAll
-                                    ? 'Le nuove richieste appariranno qui.'
-                                    : 'Le richieste più vecchie di 30 giorni non sono visibili.',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: muted,
-                                  fontSize: 16,
-                                  height: 1.5,
-                                ),
-                              ),
-                              if (!widget.hidden && !showAll)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 27),
-                                  child: TextButton(
-                                    onPressed: () =>
-                                        setState(() => showAll = true),
-                                    child: const Text(
-                                      'Mostra tutto',
-                                      style: TextStyle(
-                                        fontSize: 17,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  )
-                : ListView(
-                    padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
+                  title: const Text(
+                    'Richieste nascoste',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (widget.hidden)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          child: Text(
-                            'Queste richieste rimangono separate dalle conversazioni finché non le accetti.',
-                            style: TextStyle(color: muted, height: 1.4),
-                          ),
+                      if (s.hiddenRequests.isNotEmpty)
+                        Text(
+                          '${s.hiddenRequests.length}',
+                          style: TextStyle(color: secondaryText(c)),
                         ),
-                      for (final t in requests)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Column(
-                            children: [
-                              ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                leading: editing
-                                    ? Checkbox(
-                                        value: selected.contains(t.str('id')),
-                                        onChanged: busy
-                                            ? null
-                                            : (v) => setState(() {
-                                                if (v == true) {
-                                                  selected.add(t.str('id'));
-                                                } else {
-                                                  selected.remove(t.str('id'));
-                                                }
-                                              }),
-                                      )
-                                    : Avatar(
-                                        s.other(t),
-                                        size: 58,
-                                        ring: s.hasUnseenStories(s.other(t)),
-                                      ),
-                                title: Text(
-                                  s.threadName(t),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                subtitle: Text(
-                                  inboxPreview(s, t),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                onTap: editing
-                                    ? () => setState(() {
-                                        if (!selected.add(t.str('id')))
-                                          selected.remove(t.str('id'));
-                                      })
-                                    : () => open(c, Chat(id: t.str('id'))),
-                              ),
-                              if (!editing)
-                                Row(
-                                  children: [
-                                    if (!widget.hidden) ...[
-                                      Expanded(
-                                        child: OutlinedButton.icon(
-                                          icon: const Icon(
-                                            CupertinoIcons.eye_slash,
-                                            size: 17,
-                                          ),
-                                          style: OutlinedButton.styleFrom(
-                                            minimumSize: const Size(0, 46),
-                                            foregroundColor: foreground(c),
-                                            backgroundColor: subdued(c),
-                                            side: BorderSide.none,
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(14),
-                                            ),
-                                          ),
-                                          onPressed: busy
-                                              ? null
-                                              : () => decide([
-                                                  t.str('id'),
-                                                ], 'hidden'),
-                                          label: const Text('Nascondi'),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                    ],
-                                    Expanded(
-                                      child: FilledButton.icon(
-                                        icon: const Icon(
-                                          CupertinoIcons.check_mark,
-                                          size: 17,
-                                        ),
-                                        style: FilledButton.styleFrom(
-                                          minimumSize: const Size(0, 46),
-                                          backgroundColor: auraBlue,
-                                          foregroundColor: Colors.white,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              14,
-                                            ),
-                                          ),
-                                        ),
-                                        onPressed: busy
-                                            ? null
-                                            : () => decide([
-                                                t.str('id'),
-                                              ], 'accepted'),
-                                        label: const Text('Accetta'),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                            ],
-                          ),
-                        ),
-                      if (!widget.hidden && !showAll)
-                        TextButton(
-                          onPressed: () => setState(() => showAll = true),
-                          child: const Text('Mostra tutto'),
-                        ),
+                      const SizedBox(width: 8),
+                      GIcon(
+                        CupertinoIcons.chevron_right,
+                        color: secondaryText(c),
+                        size: 15,
+                      ),
                     ],
                   ),
-          ),
-        ],
+                  onTap: () => open(c, const MessageRequests(hidden: true)),
+                ),
+              ),
+            if (requests.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: EmptyState(
+                    widget.hidden
+                        ? CupertinoIcons.eye_slash
+                        : CupertinoIcons.paperplane,
+                    widget.hidden
+                        ? 'Nessuna richiesta nascosta'
+                        : 'Nessuna richiesta di messaggi',
+                    '',
+                  ),
+                ),
+              )
+            else
+              SliverList.builder(
+                itemCount: requests.length,
+                itemBuilder: (c, index) {
+                  final t = requests[index];
+                  final id = t.str('id');
+                  final peer = s.other(t);
+                  final info = inboxSummary(s, t);
+                  final canSelect =
+                      !widget.hidden || !s.threadContactRestricted(t);
+                  void toggle() {
+                    if (busy || !canSelect) return;
+                    setState(() {
+                      if (!selected.add(id)) selected.remove(id);
+                    });
+                  }
+
+                  return DirectThreadRow(
+                    key: ValueKey('message-request-$id'),
+                    name: s.threadName(t),
+                    portrait: Avatar(peer, size: 53),
+                    preview: Text(
+                      s.threadContactRestricted(t)
+                          ? 'Account con restrizioni'
+                          : info.caption,
+                    ),
+                    time: info.time,
+                    unread: s.chatHasUnread(t),
+                    trailing: editing
+                        ? Checkbox(
+                            value: selected.contains(id),
+                            onChanged: busy || !canSelect
+                                ? null
+                                : (_) => toggle(),
+                          )
+                        : GIcon(
+                            CupertinoIcons.chevron_right,
+                            size: 15,
+                            color: secondaryText(c),
+                          ),
+                    onTap: editing ? toggle : () => open(c, Chat(id: id)),
+                  );
+                },
+              ),
+          ],
+        ),
       ),
       bottomNavigationBar: editing
           ? SafeArea(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: FilledButton(
-                  onPressed: busy || selected.isEmpty
+                  onPressed: busy || editingRequests.isEmpty
                       ? null
-                      : () => decide(
-                          selected.toList(),
-                          widget.hidden ? 'accepted' : 'hidden',
-                        ),
+                      : () => decideRequests(editingRequests.toList()),
                   child: Text(
-                    busy
-                        ? 'Attendi…'
-                        : widget.hidden
-                        ? 'Accetta selezionate (${selected.length})'
-                        : 'Nascondi selezionate (${selected.length})',
+                    widget.hidden
+                        ? 'Accetta selezionate (${editingRequests.length})'
+                        : 'Nascondi selezionate (${editingRequests.length})',
                   ),
                 ),
               ),
@@ -695,36 +563,91 @@ Widget groupAvatar() => Container(
   ),
   child: const GIcon(CupertinoIcons.person_2_fill, color: auraBlue, size: 25),
 );
-String inboxPreview(GpixStore s, J t) {
+({String caption, String time}) inboxSummary(GpixStore s, J t) {
   final messages = t
       .rows('messages')
       .where((m) => !m.flag('afterRead') || !s.expired(m))
       .toList();
   final composing = s.typingPeers(t.str('id'));
-  if (composing.isNotEmpty)
-    return composing.any((x) => x.str('kind') == 'recording')
-        ? 'Sta registrando un audio…'
-        : 'Sta scrivendo…';
-  final reactions = s.chatReactions(t);
-  if (reactions.isNotEmpty &&
-      (messages.isEmpty ||
-          reactions.first.number('created') >=
-              messages.last.number('created'))) {
-    final n = reactions.first;
-    return s.preferences['messagePreviews'] == false
-        ? 'Nuova reazione · ${relative(n['created'])}'
-        : '${s.user(n.str('actor')).str('username')} ha reagito a un tuo messaggio · ${relative(n['created'])}';
+  if (composing.isNotEmpty) {
+    return (
+      caption: composing.any((x) => x.str('kind') == 'recording')
+          ? 'Sta registrando un audio…'
+          : 'Sta scrivendo…',
+      time: '',
+    );
   }
-  if (messages.isEmpty) return 'Inizia la conversazione';
-  final m = messages.last, unread = s.unread(t);
-  if (s.preferences['messagePreviews'] == false)
-    return '${s.chatHasUnread(t) ? 'Nuovo messaggio' : 'Messaggio'} · ${relative(m['created'])}';
-  if (unread > 1) return '$unread nuovi messaggi · ${relative(m['created'])}';
-  if (m.str('author') == s.myId &&
-      s.readReceipts &&
-      m.ids('readBy').any((id) => id != s.myId))
-    return 'Visualizzato · ${relative(m['created'])}';
-  return '${m.str('author') == s.myId ? 'Tu: ' : ''}${preview(m)} · ${relative(m['created'])}';
+  final reactions = s.chatReactions(t);
+  final last = messages.lastOrNull;
+  final showPreviews = s.preferences['messagePreviews'] != false;
+  if (reactions.isNotEmpty &&
+      (last == null ||
+          reactions.first.number('created') >= last.number('created'))) {
+    final n = reactions.first;
+    return (
+      caption: showPreviews
+          ? '${s.user(n.str('actor')).str('name')} ha reagito a un tuo messaggio'
+          : 'Nuova reazione',
+      time: directTimeAgo(n.number('created'), compact: true),
+    );
+  }
+  if (last == null) return (caption: 'Inizia la conversazione', time: '');
+  final time = directTimeAgo(last.number('created'), compact: true);
+  final unread = s.unread(t);
+  if (unread > 1) return (caption: '$unread nuovi messaggi', time: time);
+  if (!showPreviews) {
+    return (
+      caption: s.chatHasUnread(t) ? 'Nuovo messaggio' : 'Messaggio',
+      time: time,
+    );
+  }
+  if (s.expired(last)) return (caption: 'Messaggio scaduto', time: time);
+  if (last.flag('viewOnce') ||
+      last.flag('afterRead') ||
+      last.number('expires') > 0) {
+    return (
+      caption: last.flag('viewOnce')
+          ? 'Foto a visualizzazione limitata'
+          : 'Messaggio temporaneo',
+      time: time,
+    );
+  }
+  if (last.str('author') == s.myId) {
+    return (caption: _messageStatus(s, last), time: '');
+  }
+  return (caption: preview(last), time: time);
+}
+
+String inboxPreview(GpixStore s, J t) {
+  final info = inboxSummary(s, t);
+  return info.time.isEmpty ? info.caption : '${info.caption} · ${info.time}';
+}
+
+bool matchesDirectMessage(GpixStore s, J m, String term) =>
+    term.isNotEmpty &&
+    m.str('kind') == 'text' &&
+    !s.expired(m) &&
+    !m.flag('viewOnce') &&
+    !m.flag('afterRead') &&
+    m.number('expires') == 0 &&
+    directSearchTerm(m.str('text')).contains(term);
+
+String _messageStatus(GpixStore s, J m) {
+  if (m.ids('openedBy').any((id) => id != s.myId)) return 'Foto aperta';
+  if (s.readReceipts && m.ids('readBy').any((id) => id != s.myId)) {
+    final times = m
+        .obj('readAt')
+        .entries
+        .where((e) => e.key != s.myId && e.value is num);
+    final last = times.fold<num>(0, (latest, item) {
+      final timestamp = item.value as num;
+      return timestamp > latest ? timestamp : latest;
+    });
+    final time = directTimeAgo(last);
+    return time.isEmpty ? 'Visualizzato' : 'Visualizzato $time';
+  }
+  final time = directTimeAgo(m.number('created'));
+  return time.isEmpty ? 'Inviato' : 'Inviato $time';
 }
 
 String preview(J m) =>
@@ -732,134 +655,230 @@ String preview(J m) =>
         (m.number('expires') > 0 && m.number('expires') <= now))
     ? 'Messaggio scaduto'
     : switch (m.str('kind')) {
-        'image' => '📷 Foto',
-        'audio' => '🎙 Messaggio vocale',
-        'story' => '↩ ${m.str('text')}',
+        'image' => 'Foto',
+        'gif' => 'GIF',
+        'audio' => 'Messaggio vocale',
+        'story' =>
+          m.str('text').isEmpty
+              ? 'Ha risposto alla tua storia'
+              : 'Ha risposto alla tua storia: ${m.str('text')}',
         'post' => 'Post condiviso',
         _ => m.str('text'),
       };
-Future<void> newConversation(BuildContext c) =>
-    sheet(c, const NewConversation());
+
+Future<void> newConversation(
+  BuildContext c, {
+  bool startGroup = false,
+  String initialMember = '',
+}) async {
+  final id = await open<String>(
+    c,
+    NewConversation(startGroup: startGroup, initialMember: initialMember),
+  );
+  if (id != null && c.mounted) await open(c, Chat(id: id));
+}
 
 class NewConversation extends StatefulWidget {
-  const NewConversation({super.key});
+  const NewConversation({
+    super.key,
+    this.startGroup = false,
+    this.initialMember = '',
+  });
+
+  final bool startGroup;
+  final String initialMember;
+
   @override
   State<NewConversation> createState() => _NewConversationState();
 }
 
 class _NewConversationState extends State<NewConversation> {
-  String query = '';
-  bool group = false;
-  Set<String> selected = {};
+  late bool group = widget.startGroup;
+  late final Set<String> selected = {
+    if (widget.initialMember.isNotEmpty) widget.initialMember,
+  };
   final title = TextEditingController();
+  final search = TextEditingController();
+  String query = '';
+  bool busy = false;
+
   @override
   void dispose() {
     title.dispose();
+    search.dispose();
     super.dispose();
+  }
+
+  Future<void> select(GpixStore s, String id) async {
+    if (busy) return;
+    if (group) {
+      setState(() {
+        if (!selected.add(id)) selected.remove(id);
+      });
+      return;
+    }
+    setState(() => busy = true);
+    await perform(context, () async {
+      final thread = await s.openThread(id);
+      if (mounted) Navigator.pop(context, thread);
+    });
+    if (mounted) setState(() => busy = false);
+  }
+
+  Future<void> createGroup(GpixStore s) async {
+    if (busy || selected.length < 2 || title.text.trim().isEmpty) return;
+    setState(() => busy = true);
+    final name = title.text.trim();
+    final existing = s.threads.map((t) => t.str('id')).toSet();
+    await perform(context, () async {
+      await s.act('group', {'title': name, 'users': selected.toList()});
+      final thread = s.threads
+          .where(
+            (t) =>
+                t.str('title') == name &&
+                t.str('owner') == s.myId &&
+                !existing.contains(t.str('id')),
+          )
+          .firstOrNull;
+      if (thread == null)
+        throw Exception('Il gruppo non è ancora disponibile.');
+      if (mounted) Navigator.pop(context, thread.str('id'));
+    });
+    if (mounted) setState(() => busy = false);
   }
 
   @override
   Widget build(BuildContext c) {
-    final s = GpixScope.of(c),
-        users = s.users.where(
-          (u) =>
-              u.str('id') != s.myId &&
-              !s.blocked(u.str('id')) &&
-              '${u['name']} ${u['username']}'.toLowerCase().contains(
-                query.toLowerCase(),
-              ),
-        );
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  group ? 'Nuovo gruppo' : 'Nuovo messaggio',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
+    final s = GpixScope.of(c);
+    final term = directSearchTerm(query);
+    final users =
+        s.users
+            .where(
+              (u) =>
+                  u.str('id') != s.myId &&
+                  !s.blocked(u.str('id')) &&
+                  directSearchTerm(
+                    '${u.str('name')} ${u.str('username')}',
+                  ).contains(term),
+            )
+            .toList()
+          ..sort((a, b) {
+            final following =
+                (s.follows(b.str('id')) ? 1 : 0) -
+                (s.follows(a.str('id')) ? 1 : 0);
+            return following == 0
+                ? a
+                      .str('name')
+                      .toLowerCase()
+                      .compareTo(b.str('name').toLowerCase())
+                : following;
+          });
+    return Scaffold(
+      appBar: AppBar(
+        centerTitle: true,
+        title: Text(
+          group ? 'Nuovo gruppo' : 'Nuovo messaggio',
+          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+        ),
+        actions: [
+          if (group)
+            TextButton(
+              onPressed:
+                  busy || selected.length < 2 || title.text.trim().isEmpty
+                  ? null
+                  : () => createGroup(s),
+              child: const Text('Crea'),
+            ),
+        ],
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (group)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(15, 6, 15, 8),
+              child: TextField(
+                controller: title,
+                onChanged: (_) => setState(() {}),
+                maxLength: 50,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  hintText: 'Nome del gruppo',
+                  counterText: '',
                 ),
               ),
-              TextButton(
-                onPressed: () => setState(() => group = !group),
-                child: Text(group ? 'Messaggio' : 'Gruppo'),
+            )
+          else
+            ListTile(
+              leading: CircleAvatar(
+                radius: 22,
+                backgroundColor: chatReplyColor(c),
+                foregroundColor: foreground(c),
+                child: const GIcon(CupertinoIcons.person_2, size: 22),
               ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: TextField(
-            onChanged: (v) => setState(() => query = v),
-            decoration: const InputDecoration(
-              hintText: 'Cerca persone',
-              prefixIcon: GIcon(CupertinoIcons.search, size: 19),
-              border: InputBorder.none,
+              title: const Text(
+                'Crea una chat di gruppo',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              ),
+              trailing: const GIcon(CupertinoIcons.chevron_right, size: 14),
+              onTap: busy ? null : () => setState(() => group = true),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+            child: DirectSearchField(
+              controller: search,
+              hint: 'Cerca persone',
+              onChanged: (value) => setState(() => query = value),
             ),
           ),
-        ),
-        if (group)
-          Padding(
-            padding: const EdgeInsets.all(18),
-            child: AppInput(title, 'Nome del gruppo'),
-          ),
-        for (final u in users)
-          PersonTile(
-            u.str('id'),
-            onTap: group
-                ? () => setState(
-                    () => selected.contains(u.str('id'))
-                        ? selected.remove(u.str('id'))
-                        : selected.add(u.str('id')),
-                  )
-                : () => perform(c, () async {
-                    final id = await s.openThread(u.str('id'));
-                    if (c.mounted) {
-                      Navigator.pop(c);
-                      open(c, Chat(id: id));
-                    }
-                  }),
-            trailing: group
-                ? GIcon(
-                    selected.contains(u.str('id'))
-                        ? CupertinoIcons.check_mark_circled_solid
-                        : CupertinoIcons.circle,
-                    color: selected.contains(u.str('id')) ? auraBlue : muted,
-                  )
-                : null,
-          ),
-        if (group)
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: PrimaryButton(
-              'Crea gruppo (${selected.length})',
-              onTap: selected.length < 2
-                  ? null
-                  : () => perform(c, () async {
-                      if (title.text.trim().isEmpty)
-                        throw Exception('Inserisci un nome per il gruppo.');
-                      await s.act('group', {
-                        'title': title.text.trim(),
-                        'users': selected.toList(),
-                      });
-                      final t = s.threads.firstWhere(
-                        (t) =>
-                            t.str('title') == title.text.trim() &&
-                            t.str('owner') == s.myId,
+          if (group && selected.isNotEmpty)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Row(
+                children: [
+                  for (final id in selected)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: InputChip(
+                        avatar: Avatar(id, size: 22),
+                        label: Text(
+                          s.user(id).str('name', s.user(id).str('username')),
+                        ),
+                        onDeleted: busy
+                            ? null
+                            : () => setState(() => selected.remove(id)),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          Expanded(
+            child: users.isEmpty
+                ? const Center(child: Text('Nessun risultato'))
+                : ListView.builder(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    itemCount: users.length,
+                    itemBuilder: (_, index) {
+                      final u = users[index];
+                      final id = u.str('id');
+                      return PersonTile(
+                        id,
+                        subtitle: '@${u.str('username')}',
+                        onTap: () => select(s, id),
+                        trailing: group
+                            ? Checkbox(
+                                value: selected.contains(id),
+                                onChanged: busy ? null : (_) => select(s, id),
+                              )
+                            : null,
                       );
-                      if (c.mounted) {
-                        Navigator.pop(c);
-                        open(c, Chat(id: t.str('id')));
-                      }
-                    }),
-            ),
+                    },
+                  ),
           ),
-        const SizedBox(height: 20),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -867,18 +886,25 @@ class _NewConversationState extends State<NewConversation> {
 class Chat extends StatefulWidget {
   final String id;
   final bool openCamera;
-  const Chat({super.key, required this.id, this.openCamera = false});
+  final String initialMessage;
+  const Chat({
+    super.key,
+    required this.id,
+    this.openCamera = false,
+    this.initialMessage = '',
+  });
   @override
   State<Chat> createState() => _ChatState();
 }
 
-class _ChatState extends State<Chat> with WidgetsBindingObserver {
+class _ChatState extends State<Chat>
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   Timer? presenceTimer;
   double lastEdit = 0;
   bool wasTyping = false;
   void signalTyping(bool active, {String kind = 'typing'}) {
     final s = store;
-    if (s == null) return;
+    if (s == null || (active && _pendingRequest)) return;
     wasTyping = active;
     unawaited(s.typingSignal(widget.id, active, kind: kind).catchError((_) {}));
   }
@@ -898,12 +924,111 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
     if (!focus.hasFocus && !recording) signalTyping(false);
   }
 
-  final input = TextEditingController(), scroll = ScrollController();
+  final input = TextEditingController();
+  final scroll = ScrollController(keepScrollOffset: false);
+  late String anchorMessage = widget.initialMessage;
+  int timelineRevision = 0;
+  bool decidingRequest = false;
+  bool get _pendingRequest =>
+      store!.needsMessageAcceptance(store!.thread(widget.id));
+
+  void _goToMessage(String id) {
+    if (!mounted || id.isNotEmpty && store!.message(id).isEmpty) return;
+    focus.unfocus();
+    setState(() {
+      anchorMessage = id;
+      timelineRevision++;
+    });
+  }
+
+  void _scrollToLatest() {
+    if (anchorMessage.isNotEmpty) {
+      setState(() {
+        anchorMessage = '';
+        timelineRevision++;
+      });
+    } else if (scroll.hasClients) {
+      if (MediaQuery.disableAnimationsOf(context)) {
+        scroll.jumpTo(0);
+      } else {
+        scroll.animateTo(
+          0,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+        );
+      }
+    }
+  }
+
   final focus = FocusNode();
   AudioRecorder? _recorder;
   AudioRecorder get recorder => _recorder ??= AudioRecorder();
   String replyId = '', editId = '';
-  String searchQuery = '';
+  String draftBeforeEdit = '';
+  bool hasReplied = false;
+  final timeOffset = ValueNotifier<double>(0);
+  late final AnimationController timeRelease;
+
+  @override
+  void initState() {
+    super.initState();
+    timeRelease =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 195),
+        )..addListener(() {
+          timeOffset.value = timeRelease.value * ChatSwipeRow.timeWidth;
+        });
+  }
+
+  void _dragTimes(double value) {
+    timeRelease.stop();
+    timeOffset.value = value;
+  }
+
+  void _releaseTimes() {
+    timeRelease.value = timeOffset.value / ChatSwipeRow.timeWidth;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      timeRelease.value = 0;
+    } else {
+      timeRelease.animateTo(0, curve: Curves.easeOutCubic);
+    }
+  }
+
+  void _restoreDraft() {
+    input.value = TextEditingValue(
+      text: draftBeforeEdit,
+      selection: TextSelection.collapsed(offset: draftBeforeEdit.length),
+    );
+    draftBeforeEdit = '';
+  }
+
+  void _replyTo(J message) {
+    if (sending || store!.expired(message)) return;
+    setState(() {
+      if (editId.isNotEmpty) _restoreDraft();
+      replyId = message.str('id');
+      editId = '';
+      hasReplied = true;
+    });
+    focus.requestFocus();
+  }
+
+  void _editMessage(J message) {
+    if (sending) return;
+    setState(() {
+      if (editId.isEmpty) draftBeforeEdit = input.text;
+      editId = message.str('id');
+      replyId = '';
+      final text = message.str('text');
+      input.value = TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
+      );
+    });
+    focus.requestFocus();
+  }
+
   int expiresIn = 0;
   bool recording = false, sending = false;
   Timer? timer, expiryTimer;
@@ -921,7 +1046,8 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
         if (!mounted) return;
         final active =
             s.foreground && ModalRoute.of(context)?.isCurrent == true;
-        if (active) {
+        if (active && !_pendingRequest) {
+          changed();
           unawaited(s.threadPresence(widget.id).catchError((_) {}));
           final typing =
               recording ||
@@ -938,11 +1064,12 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
         }
       });
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(s.threadPresence(widget.id).catchError((_) {}));
+        if (mounted && !_pendingRequest)
+          unawaited(s.threadPresence(widget.id).catchError((_) {}));
       });
       if (widget.openCamera)
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) photo(camera: true);
+          if (mounted && !_pendingRequest) photo(camera: true);
         });
       expiryTimer = Timer.periodic(const Duration(seconds: 1), (_) {
         if (!mounted) return;
@@ -956,16 +1083,17 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
         if (changed) setState(() {});
       });
       s.addListener(changed);
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => perform(context, () => s.markRead(widget.id)),
-      );
+      WidgetsBinding.instance.addPostFrameCallback((_) => changed());
     }
   }
 
   void changed() {
-    if (mounted && store!.chatHasUnread(store!.thread(widget.id))) {
-      store!.markRead(widget.id);
-    }
+    if (!mounted ||
+        !store!.foreground ||
+        ModalRoute.of(context)?.isCurrent != true ||
+        _pendingRequest)
+      return;
+    unawaited(store!.markRead(widget.id).catchError((_) {}));
   }
 
   @override
@@ -981,41 +1109,51 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
     timer?.cancel();
     expiryTimer?.cancel();
     _recorder?.dispose();
+    timeRelease.dispose();
+    timeOffset.dispose();
     super.dispose();
   }
 
   Future<void> send() async {
-    if (input.text.trim().isEmpty || sending) return;
+    if (input.text.trim().isEmpty || sending || _pendingRequest) return;
     signalTyping(false);
     setState(() => sending = true);
     await perform(context, () async {
       final s = store!;
       if (editId.isNotEmpty) {
+        final editing = s.message(editId);
+        if (editing.isEmpty || s.expired(editing)) {
+          _forgetSelection(editId);
+          throw Exception('Il messaggio non è più disponibile.');
+        }
         await s.act('editMessage', {'id': editId, 'text': input.text.trim()});
       } else {
+        final target = s.message(replyId);
         await s.send(
           widget.id,
           input.text.trim(),
-          reply: replyId,
+          reply: target.isNotEmpty && !s.expired(target) ? replyId : '',
           expiresIn: expiresIn,
         );
       }
-      input.clear();
+      if (!mounted) return;
       setState(() {
+        if (editId.isNotEmpty) {
+          _restoreDraft();
+        } else {
+          input.clear();
+        }
         replyId = '';
         editId = '';
       });
-      if (scroll.hasClients)
-        scroll.animateTo(
-          0,
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOut,
-        );
+      _scrollToLatest();
     });
     if (mounted) setState(() => sending = false);
   }
 
-  Future<void> photo({bool camera = false}) async {
+  Future<void> photo({bool camera = false, String? replyingTo}) async {
+    final draftReply = replyingTo ?? replyId;
+    focus.unfocus();
     await perform(context, () async {
       final f = await ImagePicker().pickImage(
         source: camera ? ImageSource.camera : ImageSource.gallery,
@@ -1040,69 +1178,51 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
         '',
         kind: 'image',
         media: ref,
-        reply: replyId,
+        reply: draftReply,
         viewOnce: mode != 0,
         maxOpens: mode == 2 ? 2 : 1,
         expiresIn: mode != 0 ? 86400 : expiresIn,
       );
-      setState(() => replyId = '');
+      if (mounted && replyId == draftReply) setState(() => replyId = '');
     });
   }
 
-  void attachments() => sheet(
-    context,
-    Column(
-      children: [
-        const Text(
-          'Invia un contenuto',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 10),
-        ActionRow(CupertinoIcons.photo, 'Foto', () {
-          Navigator.pop(context);
-          photo();
-        }),
-        ActionRow(CupertinoIcons.play_rectangle, 'GIF', () {
-          Navigator.pop(context);
-          gifs();
-        }),
-        ActionRow(CupertinoIcons.smiley, 'Sticker', () {
-          Navigator.pop(context);
-          sheet(
-            context,
-            EmojiPicker(
-              title: 'Invia uno sticker',
-              onSelected: (emoji) {
-                Navigator.pop(context);
-                perform(
-                  context,
-                  () => store!.send(
-                    widget.id,
-                    emoji,
-                    kind: 'sticker',
-                    expiresIn: expiresIn,
-                  ),
-                );
-              },
-            ),
-            scroll: false,
-          );
-        }),
-        ActionRow(CupertinoIcons.clock, 'Messaggi a scadenza', () {
-          Navigator.pop(context);
-          expirySettings();
-        }),
-        const SizedBox(height: 15),
-      ],
-    ),
-  );
-  Future<void> expirySettings() async {
-    final result = await open<int>(context, MessageExpiry(seconds: expiresIn));
-    if (result == null || !mounted) return;
-    await perform(context, () async {
-      await store!.act('messageExpiry', {'id': widget.id, 'seconds': result});
-      setState(() => expiresIn = result);
-    });
+  void attachments() {
+    focus.unfocus();
+    sheet(
+      context,
+      Column(
+        children: [
+          const Text(
+            'Invia un contenuto',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 10),
+          ActionRow(CupertinoIcons.photo, 'Foto', () {
+            Navigator.pop(context);
+            photo();
+          }),
+          ActionRow(CupertinoIcons.play_rectangle, 'GIF', () {
+            Navigator.pop(context);
+            gifs();
+          }),
+          ActionRow(CupertinoIcons.smiley, 'Sticker', () {
+            Navigator.pop(context);
+            pickSticker();
+          }),
+          ActionRow(CupertinoIcons.clock, 'Messaggi a scadenza', () {
+            Navigator.pop(context);
+            expirySettings();
+          }),
+          const SizedBox(height: 15),
+        ],
+      ),
+    );
+  }
+
+  Future<void> expirySettings() {
+    focus.unfocus();
+    return _editExpiry(context, store!, widget.id);
   }
 
   void gifs() => sheet(
@@ -1185,15 +1305,10 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext c) {
-    final s = GpixScope.of(c),
-        t = s.thread(widget.id),
-        messages = t
-            .rows('messages')
-            .where((m) => !m.flag('afterRead') || !s.expired(m))
-            .toList(),
-        group = t.str('owner').isNotEmpty;
-    expiresIn = t.number('messageTTL').toInt();
-    if (t.isEmpty)
+    final s = GpixScope.of(c);
+    final t = s.thread(widget.id);
+    final pending = s.needsMessageAcceptance(t);
+    if (t.isEmpty) {
       return Scaffold(
         appBar: AppBar(title: pageTitle('Conversazione')),
         body: const EmptyState(
@@ -1202,969 +1317,1555 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
           'Potrebbe essere stata rimossa o l’account bloccato.',
         ),
       );
-    final quote = messages.firstWhere(
-      (m) => m.str('id') == replyId || m.str('id') == editId,
-      orElse: () => {},
+    }
+
+    final messages = t
+        .rows('messages')
+        .where((m) => !m.flag('afterRead') || !s.expired(m))
+        .toList();
+    final byId = {for (final m in messages) m.str('id'): m};
+    final group = t.str('owner').isNotEmpty;
+    final style = t.obj('chatStyle');
+    final colors = ChatColors.fromName(style.str('theme'));
+    final messageFont = ChatFont.fromName(style.str('font'));
+    final quote = byId[editId.isNotEmpty ? editId : replyId];
+    final candidate =
+        byId[style.str('pinnedMessage')] ?? style.obj('pinnedPreview');
+    final pin = !pending && candidate.isNotEmpty && !_temporary(candidate)
+        ? candidate
+        : null;
+    final lastOwn = messages
+        .lastWhere((m) => m.str('author') == s.myId, orElse: () => {})
+        .str('id');
+    expiresIn = pending ? 0 : t.number('messageTTL').toInt();
+    final statusHeight = MediaQuery.paddingOf(c).top;
+    final dark = Theme.of(c).brightness == Brightness.dark;
+    final motion = MediaQuery.disableAnimationsOf(c)
+        ? Duration.zero
+        : const Duration(milliseconds: 180);
+    final textScaler = MediaQuery.textScalerOf(c);
+    final toolbarHeight = math.max(
+      63.0,
+      15 + textScaler.scale(15) * 1.24 + textScaler.scale(12.5) * 2.52,
     );
-    return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 0,
-        title: InkWell(
-          onTap: () => open(c, ThreadInfo(id: widget.id)),
-          child: Row(
-            children: [
-              if (group)
-                SizedBox(
-                  width: 36,
-                  height: 36,
-                  child: FittedBox(child: groupAvatar()),
-                )
-              else
-                GestureDetector(
-                  onTap: () => s.stories(s.other(t)).isNotEmpty
-                      ? open(c, StoryViewer(user: s.other(t)))
-                      : open(c, Profile(user: s.other(t))),
-                  child: ChatPresenceAvatar(
-                    s.other(t),
-                    size: 38,
-                    ring: s.hasUnseenStories(s.other(t)),
-                  ),
+    final headerHeight = statusHeight + toolbarHeight;
+    final banners = (pin == null ? 0.0 : 40.0) + (expiresIn == 0 ? 0.0 : 35.0);
+    final timelinePadding = EdgeInsets.only(
+      top: headerHeight + banners + 8,
+      bottom: 5,
+    );
+    final indices = {for (final (i, m) in messages.indexed) m.str('id'): i};
+    final anchorIndex = pending ? -1 : indices[anchorMessage] ?? -1;
+
+    Widget rowAt(BuildContext c, int index) {
+      if (index < 0) {
+        return KeyedSubtree(
+          key: const ValueKey('chat-introduction'),
+          child: _chatIntroduction(c, s, t, group),
+        );
+      }
+      final m = messages[index];
+      return KeyedSubtree(
+        key: ValueKey(m.str('id')),
+        child: message(
+          c,
+          m,
+          quote: pending ? null : byId[m.str('reply')],
+          before: index > 0 ? messages[index - 1] : null,
+          after: index + 1 < messages.length ? messages[index + 1] : null,
+          thread: t,
+          group: group,
+          pending: pending,
+          focused: index == anchorIndex,
+          showReceipt: !pending && m.str('id') == lastOwn,
+          colors: colors,
+          messageFont: messageFont,
+        ),
+      );
+    }
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: (dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark)
+          .copyWith(statusBarColor: Colors.transparent),
+      child: Scaffold(
+        backgroundColor: surface(c),
+        body: Stack(
+          children: [
+            Column(
+              children: [
+                Expanded(
+                  child: anchorIndex < 0
+                      ? ListView.builder(
+                          key: ValueKey(('chat-timeline', timelineRevision)),
+                          reverse: true,
+                          controller: scroll,
+                          padding: timelinePadding,
+                          itemCount: messages.length + 1,
+                          itemBuilder: (c, i) =>
+                              rowAt(c, messages.length - 1 - i),
+                          findChildIndexCallback: (key) {
+                            final id = (key as ValueKey<String>).value;
+                            if (id == 'chat-introduction')
+                              return messages.length;
+                            final index = indices[id];
+                            return index == null
+                                ? null
+                                : messages.length - 1 - index;
+                          },
+                        )
+                      : CustomScrollView(
+                          key: ValueKey((
+                            'chat-search-timeline',
+                            timelineRevision,
+                          )),
+                          controller: scroll,
+                          reverse: true,
+                          anchor: .40,
+                          center: const ValueKey('chat-search-anchor'),
+                          slivers: [
+                            SliverPadding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              sliver: SliverList.builder(
+                                itemCount: messages.length - 1 - anchorIndex,
+                                itemBuilder: (c, i) =>
+                                    rowAt(c, anchorIndex + 1 + i),
+                                findChildIndexCallback: (key) {
+                                  final index =
+                                      indices[(key as ValueKey<String>).value];
+                                  return index == null || index <= anchorIndex
+                                      ? null
+                                      : index - anchorIndex - 1;
+                                },
+                              ),
+                            ),
+                            SliverPadding(
+                              key: const ValueKey('chat-search-anchor'),
+                              padding: EdgeInsets.only(
+                                top: timelinePadding.top,
+                              ),
+                              sliver: SliverList.builder(
+                                itemCount: anchorIndex + 2,
+                                itemBuilder: (c, i) =>
+                                    rowAt(c, anchorIndex - i),
+                                findChildIndexCallback: (key) {
+                                  final id = (key as ValueKey<String>).value;
+                                  if (id == 'chat-introduction')
+                                    return anchorIndex + 1;
+                                  final index = indices[id];
+                                  return index == null || index > anchorIndex
+                                      ? null
+                                      : anchorIndex - index;
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
                 ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      s.threadName(t),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
+                if (pending)
+                  _requestActions(c, s, t)
+                else ...[
+                  if (anchorIndex >= 0)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 12),
+                        child: ActionChip(
+                          avatar: const Icon(
+                            CupertinoIcons.arrow_down,
+                            size: 15,
+                          ),
+                          label: const Text('Più recenti'),
+                          onPressed: _scrollToLatest,
+                        ),
                       ),
                     ),
-                    if (group) ChatActivityLabel(thread: t),
-                  ],
+                  if (s.typingPeers(widget.id).isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 1, 16, 4),
+                      child: ConversationActivity(thread: t),
+                    ),
+                  AnimatedSize(
+                    duration: motion,
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.bottomCenter,
+                    child: quote == null
+                        ? (messages.isNotEmpty && !hasReplied
+                              ? Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      57,
+                                      1,
+                                      12,
+                                      4,
+                                    ),
+                                    child: Text(
+                                      'Scorri un messaggio per rispondere',
+                                      style: TextStyle(
+                                        fontSize: 9.5,
+                                        color: secondaryText(c),
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              : const SizedBox.shrink())
+                        : _quoteBar(c, s, t, quote, colors),
+                  ),
+                  SafeArea(
+                    top: false,
+                    minimum: const EdgeInsets.fromLTRB(8, 0, 8, 7),
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: ChatComposer(
+                        input: input,
+                        focus: focus,
+                        colors: colors,
+                        sending: sending,
+                        recording: recording,
+                        seconds: seconds,
+                        onChanged: (_) => edited(),
+                        onSend: send,
+                        onCamera: () => photo(camera: true),
+                        onGallery: photo,
+                        onVoice: voice,
+                        onCancelVoice: () => voice(cancel: true),
+                        onSticker: () => pickSticker(),
+                        onMore: attachments,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: ChatBlurHeader(
+                child: Padding(
+                  padding: EdgeInsets.only(top: statusHeight),
+                  child: Column(
+                    children: [
+                      _header(
+                        c,
+                        s,
+                        t,
+                        group,
+                        pending: pending,
+                        height: toolbarHeight,
+                      ),
+                      if (pin != null)
+                        _headerBanner(
+                          c,
+                          CupertinoIcons.pin_fill,
+                          'Messaggio fissato · ${preview(pin)}',
+                          height: 40,
+                          onTap: () => _showPinned(c, pin, colors),
+                        ),
+                      if (expiresIn != 0)
+                        _headerBanner(
+                          c,
+                          CupertinoIcons.timer,
+                          expiresIn == -1
+                              ? 'Messaggi temporanei · Dopo la lettura'
+                              : 'Messaggi temporanei · ${expiryLabel(expiresIn)}',
+                          height: 35,
+                          onTap: expirySettings,
+                        ),
+                    ],
+                  ),
                 ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _chatIntroduction(BuildContext c, GpixStore s, J thread, bool group) {
+    final other = s.other(thread);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 24),
+      child: Column(
+        children: [
+          if (group) groupAvatar() else Avatar(other, size: 82),
+          const SizedBox(height: 12),
+          Text(
+            s.threadName(thread),
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700),
+          ),
+          if (!group) ...[
+            const SizedBox(height: 4),
+            Text(
+              s.user(other).str('username'),
+              style: TextStyle(fontSize: 13, color: secondaryText(c)),
+            ),
+            const SizedBox(height: 10),
+            TextButton(
+              onPressed: () => open(c, Profile(user: other)),
+              style: TextButton.styleFrom(
+                backgroundColor: chatReplyColor(c),
+                foregroundColor: foreground(c),
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+              ),
+              child: const Text('Visualizza profilo'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _header(
+    BuildContext c,
+    GpixStore s,
+    J thread,
+    bool group, {
+    required bool pending,
+    required double height,
+  }) {
+    final other = s.other(thread);
+    final small = MediaQuery.sizeOf(c).width < 355;
+    final buttonSize = small ? 40.0 : 44.0;
+    final presence = group || pending ? '' : activityLabel(s, other);
+    final subtitle = group
+        ? '${thread.ids('members').length} partecipanti'
+        : presence.isNotEmpty
+        ? presence
+        : s.user(other).str('username');
+    return SizedBox(
+      height: height,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: small ? 10 : 15),
+        child: Row(
+          children: [
+            ChatGlassButton(
+              label: 'Indietro',
+              icon: CupertinoIcons.chevron_back,
+              size: buttonSize,
+              onTap: () => Navigator.maybePop(c),
+            ),
+            SizedBox(width: small ? 7 : 9),
+            if (group)
+              SizedBox.square(
+                dimension: 38,
+                child: FittedBox(child: groupAvatar()),
+              )
+            else
+              Semantics(
+                button: true,
+                label: pending || s.stories(other).isEmpty
+                    ? 'Foto profilo'
+                    : 'Visualizza storia',
+                child: GestureDetector(
+                  onTap: () {
+                    focus.unfocus();
+                    if (!pending && s.stories(other).isNotEmpty) {
+                      open(c, StoryViewer(user: other));
+                    } else {
+                      open(c, Profile(user: other));
+                    }
+                  },
+                  child: pending
+                      ? Avatar(other, size: small ? 34 : 39)
+                      : ChatPresenceAvatar(
+                          other,
+                          size: small ? 34 : 39,
+                          ring: s.stories(other).isNotEmpty,
+                        ),
+                ),
+              ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Semantics(
+                button: !pending,
+                label: pending ? null : 'Dettagli chat',
+                child: InkWell(
+                  key: const ValueKey('chat-details'),
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: pending
+                      ? null
+                      : () async {
+                          focus.unfocus();
+                          final id = await open<String>(
+                            c,
+                            ThreadInfo(id: widget.id),
+                          );
+                          if (id != null && mounted) _goToMessage(id);
+                        },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 5),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                (group
+                                    ? s.threadName(thread)
+                                    : _participantName(s, thread, other)),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.1,
+                                ),
+                              ),
+                            ),
+                            if (!pending) ...[
+                              const SizedBox(width: 4),
+                              const GIcon(
+                                CupertinoIcons.chevron_right,
+                                size: 13,
+                              ),
+                            ],
+                          ],
+                        ),
+                        if (subtitle.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 3),
+                            child: Text(
+                              subtitle,
+                              key: const ValueKey('chat-presence-label'),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                height: 1.12,
+                                color: foreground(c),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(width: small ? 5 : 8),
+            if (!group && !pending) ...[
+              ChatGlassButton(
+                label: 'Chiamata vocale',
+                icon: CupertinoIcons.phone,
+                size: buttonSize,
+                onTap: () => launchCall(c, widget.id, false),
+              ),
+              SizedBox(width: small ? 7 : 10),
+              ChatGlassButton(
+                label: 'Videochiamata',
+                icon: CupertinoIcons.video_camera,
+                size: buttonSize,
+                onTap: () => launchCall(c, widget.id, true),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _requestActions(BuildContext c, GpixStore s, J thread) {
+    final hidden = thread.str('requestDecision') == 'hidden';
+    final restricted = s.threadContactRestricted(thread);
+    final peer = s.other(thread);
+    final name = s.user(peer).str('name', s.user(peer).str('username'));
+    return SafeArea(
+      top: false,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: surface(c),
+          border: Border(top: BorderSide(color: Theme.of(c).dividerColor)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(15, 14, 15, 9),
+          child: Column(
+            children: [
+              Text(
+                hidden ? 'Richiesta nascosta' : 'Richiesta di messaggio',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                restricted
+                    ? 'Rimuovi le restrizioni per rispondere a $name.'
+                    : 'Accetta per rispondere a $name.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: secondaryText(c)),
+              ),
+              const SizedBox(height: 11),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 6,
+                runSpacing: 5,
+                children: [
+                  if (!hidden)
+                    TextButton(
+                      onPressed: decidingRequest
+                          ? null
+                          : () => _respondToRequest('block'),
+                      style: TextButton.styleFrom(foregroundColor: danger),
+                      child: const Text('Blocca'),
+                    ),
+                  TextButton(
+                    onPressed: decidingRequest
+                        ? null
+                        : () => _respondToRequest(hidden ? 'delete' : 'hide'),
+                    child: Text(hidden ? 'Elimina' : 'Nascondi'),
+                  ),
+                  FilledButton(
+                    onPressed: decidingRequest
+                        ? null
+                        : () => _respondToRequest('accept'),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(0, 39),
+                      shape: const StadiumBorder(),
+                    ),
+                    child: Text(restricted ? 'Rimuovi restrizioni' : 'Accetta'),
+                  ),
+                ],
               ),
             ],
           ),
         ),
-        actions: [
-          if (!group) ...[
-            IconButton(
-              tooltip: 'Chiamata vocale',
-              onPressed: () => launchCall(c, widget.id, false),
-              icon: const GIcon(CupertinoIcons.phone, size: 22),
-            ),
-            IconButton(
-              tooltip: 'Videochiamata',
-              onPressed: () => launchCall(c, widget.id, true),
-              icon: const GIcon(CupertinoIcons.video_camera, size: 25),
-            ),
-          ],
+      ),
+    );
+  }
 
-          PopupMenuButton<String>(
-            tooltip: 'Opzioni conversazione',
-            icon: const GIcon(CupertinoIcons.ellipsis),
-            onSelected: (choice) {
-              switch (choice) {
-                case 'search':
-                  showSearchMessages(context, widget.id);
-                case 'expiry':
-                  expirySettings();
-                case 'details':
-                  open(c, ThreadInfo(id: widget.id));
-              }
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'search', child: Text('Cerca nei messaggi')),
-              PopupMenuItem(
-                value: 'expiry',
-                child: Text('Scadenza dei messaggi'),
+  Future<void> _respondToRequest(String action) async {
+    if (decidingRequest) return;
+    final c = context, s = store!, thread = s.thread(widget.id);
+    final restricted = s.threadContactRestricted(thread);
+    if (action == 'block' ||
+        action == 'delete' ||
+        action == 'accept' && restricted) {
+      final accepted = await gpixAlert(
+        c,
+        switch (action) {
+          'block' => 'Bloccare l’account?',
+          'delete' => 'Eliminare la richiesta?',
+          _ => 'Rimuovere le restrizioni?',
+        },
+        switch (action) {
+          'block' => 'L’account non potrà più contattarti su GPIX.',
+          'delete' => 'La conversazione verrà rimossa dal tuo account.',
+          _ =>
+            'La conversazione tornerà nei Messaggi e seguirà le impostazioni di privacy del tuo account.',
+        },
+        confirm: switch (action) {
+          'block' => 'Blocca',
+          'delete' => 'Elimina',
+          _ => 'Rimuovi restrizioni',
+        },
+        cancel: true,
+        destructive: action != 'accept',
+      );
+      if (!accepted || !mounted) return;
+    }
+    setState(() => decidingRequest = true);
+    await perform(c, () async {
+      switch (action) {
+        case 'accept':
+          await s.acceptChatRequest(widget.id, unrestrict: restricted);
+        case 'block':
+          await s.act('block', {'user': s.other(thread), 'enabled': true});
+        case 'delete':
+          await s.act('chatSettings', {'id': widget.id, 'field': 'clear'});
+        case 'hide':
+          await s.act('messageRequest', {
+            'id': widget.id,
+            'decision': 'hidden',
+          });
+      }
+      if (mounted && action != 'accept' && ModalRoute.of(c)?.isCurrent == true)
+        Navigator.maybePop(c);
+    });
+    if (mounted) setState(() => decidingRequest = false);
+  }
+
+  Widget _headerBanner(
+    BuildContext c,
+    IconData icon,
+    String label, {
+    required double height,
+    required VoidCallback onTap,
+  }) => SizedBox(
+    height: height,
+    child: Material(
+      color: chatReplyColor(c).withValues(alpha: .82),
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              GIcon(icon, size: 15, color: secondaryText(c)),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: foreground(c)),
+                ),
               ),
-              PopupMenuItem(value: 'details', child: Text('Dettagli chat')),
+              const GIcon(CupertinoIcons.chevron_right, size: 12),
             ],
           ),
-        ],
+        ),
       ),
-      body: Column(
+    ),
+  );
+
+  Widget _quoteBar(
+    BuildContext c,
+    GpixStore s,
+    J thread,
+    J quote,
+    ChatColors colors,
+  ) {
+    final author = quote.str('author');
+    final title = editId.isNotEmpty
+        ? 'Modifica messaggio'
+        : author == s.myId
+        ? 'Stai rispondendo a te'
+        : 'Stai rispondendo a ${_participantName(s, thread, author)}';
+    return Container(
+      key: const ValueKey('chat-reply-bar'),
+      padding: const EdgeInsets.fromLTRB(17, 0, 6, 0),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: Theme.of(c).dividerColor, width: .6),
+        ),
+      ),
+      child: Row(
         children: [
-          if (!group && activityLabel(s, s.other(t)).isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 7),
-              child: ChatActivityLabel(thread: t, wrap: true),
-            ),
-          const Divider(height: 1, thickness: .5),
-          if (expiresIn != 0)
-            InkWell(
-              onTap: expirySettings,
-              child: Container(
-                width: double.infinity,
-                color: subdued(c),
-                padding: const EdgeInsets.all(10),
-                child: Text(
-                  'Nuovi messaggi: eliminazione dopo ${expiryLabel(expiresIn)} · Modifica',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 12, color: auraBlue),
-                ),
-              ),
-            ),
+          Container(width: 2, height: 31, color: colors.bottom),
+          const SizedBox(width: 8),
           Expanded(
-            child: ListView.builder(
-              reverse: true,
-              controller: scroll,
-              padding: const EdgeInsets.fromLTRB(13, 20, 13, 15),
-              itemCount: messages.length + 1,
-              itemBuilder: (c, i) {
-                if (i == messages.length)
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 20, bottom: 35),
-                    child: Column(
-                      children: [
-                        if (group)
-                          groupAvatar()
-                        else
-                          Avatar(s.other(t), size: 75),
-                        const SizedBox(height: 14),
-                        Text(
-                          s.threadName(t),
-                          style: const TextStyle(
-                            fontSize: 19,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          group
-                              ? 'Un posto per le vostre conversazioni'
-                              : '@${s.user(s.other(t)).str('username')}',
-                          style: const TextStyle(fontSize: 12, color: muted),
-                        ),
-                        const SizedBox(height: 16),
-                        if (!group)
-                          OutlinedButton(
-                            onPressed: () => open(c, Profile(user: s.other(t))),
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: line),
-                            ),
-                            child: const Text(
-                              'Visualizza profilo',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                          ),
-                      ],
-                    ),
-                  );
-                final m = messages[messages.length - 1 - i];
-                return message(c, m, messages, i, group);
-              },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  _messagePreview(s, quote),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11, color: secondaryText(c)),
+                ),
+              ],
             ),
           ),
-          if (s.typingPeers(widget.id).isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
-              child: ConversationActivity(thread: t),
-            ),
-          if (quote.isNotEmpty)
-            Container(
-              color: subdued(c),
-              padding: const EdgeInsets.only(left: 18),
-              child: Row(
-                children: [
-                  Container(width: 2, height: 32, color: auraBlue),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          editId.isNotEmpty
-                              ? 'Modifica messaggio'
-                              : 'Rispondi a ${s.user(quote.str('author')).str('username')}',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          preview(quote),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 11, color: muted),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => setState(() {
-                      replyId = '';
-                      editId = '';
-                      input.clear();
-                    }),
-                    icon: const GIcon(CupertinoIcons.xmark, size: 17),
-                  ),
-                ],
-              ),
-            ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(11, 8, 11, 9),
-              child: Container(
-                key: const ValueKey('chat-composer-pill'),
-                clipBehavior: Clip.antiAlias,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-                decoration: BoxDecoration(
-                  color: subdued(c),
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: recording
-                    ? Row(
-                        children: [
-                          IconButton(
-                            tooltip: 'Scarta vocale',
-                            onPressed: () => voice(cancel: true),
-                            icon: const GIcon(
-                              CupertinoIcons.trash,
-                              color: danger,
-                              size: 22,
-                            ),
-                          ),
-                          const GIcon(
-                            CupertinoIcons.mic_fill,
-                            color: danger,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 9),
-                          Expanded(
-                            child: Text(
-                              'Registrazione · ${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}',
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: 'Invia vocale',
-                            onPressed: voice,
-                            icon: const GIcon(
-                              CupertinoIcons.paperplane_fill,
-                              color: auraBlue,
-                              size: 23,
-                            ),
-                          ),
-                        ],
-                      )
-                    : IconButtonTheme(
-                        data: IconButtonThemeData(
-                          style: IconButton.styleFrom(
-                            minimumSize: const Size(34, 42),
-                            maximumSize: const Size(38, 48),
-                            padding: const EdgeInsets.all(5),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            IconButton(
-                              tooltip: 'Fotocamera chat',
-                              onPressed: () => photo(camera: true),
-                              style: IconButton.styleFrom(
-                                backgroundColor: auraBlue,
-                                foregroundColor: Colors.white,
-                                fixedSize: const Size(38, 38),
-                                shape: const CircleBorder(),
-                                padding: EdgeInsets.zero,
-                              ),
-                              icon: const Icon(
-                                CupertinoIcons.camera,
-                                color: Colors.white,
-                                size: 22,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: TextField(
-                                controller: input,
-                                focusNode: focus,
-                                minLines: 1,
-                                maxLines: 5,
-                                onChanged: (_) => edited(),
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  color: foreground(c),
-                                ),
-                                decoration: InputDecoration(
-                                  filled: false,
-                                  hintText: expiresIn != 0
-                                      ? 'Scrivi a scadenza…'
-                                      : 'Scrivi…',
-                                  hintStyle: TextStyle(
-                                    color: muted,
-                                    fontSize: 13,
-                                  ),
-                                  border: InputBorder.none,
-                                  enabledBorder: InputBorder.none,
-                                  focusedBorder: InputBorder.none,
-                                  disabledBorder: InputBorder.none,
-                                  isDense: true,
-                                  contentPadding: EdgeInsets.symmetric(
-                                    vertical: 12,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            if (input.text.trim().isEmpty) ...[
-                              IconButton(
-                                tooltip: 'Foto',
-                                onPressed: photo,
-                                icon: const GIcon(
-                                  CupertinoIcons.photo,
-                                  size: 24,
-                                ),
-                              ),
-                              IconButton(
-                                tooltip: 'Registra vocale',
-                                onPressed: voice,
-                                icon: const GIcon(CupertinoIcons.mic, size: 23),
-                              ),
-                              IconButton(
-                                tooltip: 'Allegati',
-                                onPressed: attachments,
-                                icon: const GIcon(
-                                  CupertinoIcons.plus_circle,
-                                  size: 25,
-                                ),
-                              ),
-                            ] else
-                              TextButton(
-                                style: TextButton.styleFrom(
-                                  backgroundColor: auraBlue,
-                                  foregroundColor: Colors.white,
-                                  minimumSize: const Size(54, 36),
-                                  shape: const StadiumBorder(),
-                                ),
-                                onPressed: sending ? null : send,
-                                child: const Text(
-                                  'Invia',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-              ),
-            ),
+          IconButton(
+            tooltip: editId.isEmpty ? 'Chiudi risposta' : 'Annulla modifica',
+            onPressed: () => setState(() {
+              if (editId.isNotEmpty) _restoreDraft();
+              editId = '';
+              replyId = '';
+            }),
+            icon: const GIcon(CupertinoIcons.xmark, size: 17),
           ),
         ],
       ),
     );
   }
 
+  bool _joinable(J a, J? b) =>
+      b != null &&
+      a.str('author') == b.str('author') &&
+      (a.number('created') - b.number('created')).abs() <= 120 &&
+      a.str('kind') == 'text' &&
+      b.str('kind') == 'text' &&
+      a.str('reply').isEmpty &&
+      b.str('reply').isEmpty &&
+      a.obj('reactions').isEmpty &&
+      b.obj('reactions').isEmpty &&
+      a.obj('stickers').isEmpty &&
+      b.obj('stickers').isEmpty &&
+      !_standaloneEmoji(a.str('text')) &&
+      !_standaloneEmoji(b.str('text')) &&
+      !_temporary(a) &&
+      !_temporary(b);
+
   Widget message(
     BuildContext c,
-    J m,
-    List<J> all,
-    int reverseIndex,
-    bool group,
-  ) {
-    final s = GpixScope.of(c),
-        own = m.str('author') == s.myId,
-        quote = all.firstWhere(
-          (x) => x.str('id') == m.str('reply'),
-          orElse: () => {},
+    J m, {
+    required J? quote,
+    required J? before,
+    required J? after,
+    required J thread,
+    required bool group,
+    required bool pending,
+    required bool focused,
+    required bool showReceipt,
+    required ChatColors colors,
+    required ChatFont messageFont,
+  }) {
+    final s = GpixScope.of(c, listen: false);
+    final id = m.str('id');
+    final author = m.str('author');
+    final own = author == s.myId;
+    final reactions = pending ? <String, dynamic>{} : m.obj('reactions');
+    final stickers = pending ? <String, dynamic>{} : m.obj('stickers');
+    final gone = s.expired(m);
+    final reactionSpace = !gone && reactions.isNotEmpty
+        ? 13.0
+        : !gone && stickers.isNotEmpty
+        ? 10.0
+        : 0.0;
+    final joinAbove = _joinable(m, before);
+    final joinBelow = _joinable(m, after);
+    final showTime =
+        before == null || m.number('created') - before.number('created') > 900;
+    final side = own ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    final textColor = own ? Colors.white : foreground(c);
+    final width = MediaQuery.sizeOf(c).width;
+    return Column(
+      children: [
+        if (showTime)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 15),
+            child: Text(
+              '${relative(m['created'])} · ${clock(m['created'])}',
+              style: TextStyle(color: secondaryText(c), fontSize: 10),
+            ),
+          ),
+        ChatSwipeRow(
+          key: ValueKey('swipe-$id'),
+          time: clock(m['created']),
+          timeOffset: timeOffset,
+          onTimeDrag: _dragTimes,
+          onTimeRelease: _releaseTimes,
+          onReply: gone || pending ? null : () => _replyTo(m),
+          replyIndicatorLeft: own ? 26 : 16,
+          child: SizedBox(
+            width: double.infinity,
+            child: ColoredBox(
+              key: focused ? const ValueKey('chat-search-highlight') : null,
+              color: focused
+                  ? accent(c).withValues(alpha: .08)
+                  : Colors.transparent,
+              child: Row(
+                mainAxisAlignment: own
+                    ? MainAxisAlignment.end
+                    : MainAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (!own) ...[
+                    const SizedBox(width: 16),
+                    if (joinBelow)
+                      const SizedBox(width: 28)
+                    else
+                      Padding(
+                        padding: EdgeInsets.only(bottom: reactionSpace),
+                        child: Avatar(author, size: 28),
+                      ),
+                    const SizedBox(width: 12),
+                  ],
+                  Flexible(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: (width * (own ? .76 : .77)).clamp(0.0, 450.0),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: side,
+                        children: [
+                          if (group && !own && !joinAbove)
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                left: 10,
+                                bottom: 4,
+                              ),
+                              child: Text(
+                                _participantName(s, thread, author),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: secondaryText(c),
+                                ),
+                              ),
+                            ),
+                          if (quote != null && !gone)
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 4),
+                              padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+                              decoration: BoxDecoration(
+                                color: chatComposerColor(c),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: side,
+                                children: [
+                                  Text(
+                                    _participantName(
+                                      s,
+                                      thread,
+                                      quote.str('author'),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Text(
+                                    _messagePreview(s, quote),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: secondaryText(c),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          Builder(
+                            builder: (anchor) => GestureDetector(
+                              key: ValueKey('chat-message-$id'),
+                              behavior: HitTestBehavior.opaque,
+                              onDoubleTap: gone || pending
+                                  ? null
+                                  : () => _reactTo(m, '❤️'),
+                              onLongPress: pending
+                                  ? null
+                                  : () => options(anchor, m, colors),
+                              child: Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  Padding(
+                                    padding: EdgeInsets.only(
+                                      bottom: reactionSpace,
+                                    ),
+                                    child: pending
+                                        ? ChatBubble(
+                                            colors: colors,
+                                            own: own,
+                                            child: Text(
+                                              _messagePreview(s, m),
+                                              style: TextStyle(
+                                                color: textColor,
+                                              ),
+                                            ),
+                                          )
+                                        : _messageBody(
+                                            c,
+                                            s,
+                                            m,
+                                            own: own,
+                                            gone: gone,
+                                            colors: colors,
+                                            messageFont: messageFont,
+                                            joinAbove: joinAbove,
+                                            joinBelow: joinBelow,
+                                            textColor: textColor,
+                                          ),
+                                  ),
+                                  if (!gone && reactions.isNotEmpty)
+                                    Positioned(
+                                      bottom: 0,
+                                      right: own ? 6 : null,
+                                      left: own ? null : 6,
+                                      child: _messageReactions(c, reactions),
+                                    ),
+                                  if (!gone && stickers.isNotEmpty)
+                                    Positioned(
+                                      bottom: 0,
+                                      left: own ? -10 : null,
+                                      right: own ? null : -10,
+                                      child: _messageStickers(c, stickers),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+              ),
+            ),
+          ),
         ),
-        reactions = m.obj('reactions');
-    final emojiOnly =
-        m.str('kind') == 'text' &&
-        m.str('text').trim().isNotEmpty &&
-        m.str('text').runes.length <= 24 &&
-        m
-            .str('text')
-            .runes
-            .every(
-              (r) =>
-                  (r >= 0x1f000 && r <= 0x1faff) ||
-                  (r >= 0x2600 && r <= 0x27bf) ||
-                  [0xfe0f, 0xfe0e, 0x200d, 32].contains(r),
-            );
+        if (showReceipt)
+          Align(
+            alignment: Alignment.centerRight,
+            child: InkWell(
+              onTap: () => messageInfo(c, m, thread),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 2, 10, 5),
+                child: Text(
+                  gone ? 'Messaggio scaduto' : _messageStatus(s, m),
+                  style: TextStyle(fontSize: 10, color: secondaryText(c)),
+                ),
+              ),
+            ),
+          ),
+        SizedBox(
+          height: joinBelow
+              ? 2
+              : reactionSpace == 0
+              ? 11
+              : 7,
+        ),
+      ],
+    );
+  }
+
+  Widget _messageBody(
+    BuildContext c,
+    GpixStore s,
+    J m, {
+    required bool own,
+    required bool gone,
+    required ChatColors colors,
+    required ChatFont messageFont,
+    required bool joinAbove,
+    required bool joinBelow,
+    required Color textColor,
+  }) {
+    final kind = m.str('kind');
+    if (gone) {
+      return ChatBubble(
+        colors: colors,
+        expired: true,
+        child: const Text(
+          'Messaggio scaduto',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+      );
+    }
+    if (m.flag('viewOnce')) return _onceBubble(c, s, m, colors, own);
+    if (kind == 'sticker' ||
+        kind == 'text' && _standaloneEmoji(m.str('text'))) {
+      return Text(
+        m.str('text'),
+        style: const TextStyle(fontSize: 48, height: 1.23),
+      );
+    }
+
     final story = m.obj('story');
-    final gone = s.expired(m), once = m.flag('viewOnce');
-    final isPhoto =
-        !gone && !once && const ['image', 'gif'].contains(m.str('kind'));
     final sharedId = m.str('post', story.str('postId'));
     final shared = s.post(sharedId);
     final sharedPhoto = shared.str('kind') == 'reel'
         ? shared.obj('style').str('cover')
         : s.media(shared).firstOrNull ?? '';
-    final showTime =
-        reverseIndex == all.length - 1 ||
-        ((m.number('created') -
-                    all[all.length - 2 - reverseIndex].number('created'))
-                .abs() >
-            900);
-    return Column(
-      children: [
-        if (showTime)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 18),
-            child: Text(
-              '${relative(m['created'])} · ${clock(m['created'])}',
-              style: const TextStyle(color: muted, fontSize: 10),
-            ),
-          ),
-        Padding(
-          padding: EdgeInsets.only(
-            left: own ? 48 : 0,
-            right: own ? 0 : 48,
-            bottom: reactions.isEmpty ? 9 : 22,
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisAlignment: own
-                ? MainAxisAlignment.end
-                : MainAxisAlignment.start,
-            children: [
-              if (!own) ...[
-                Avatar(m.str('author'), size: 25),
-                const SizedBox(width: 7),
-              ],
-              Flexible(
-                child: SectionSwipe(
-                  animateDrag: true,
-                  onStep: (_) {
-                    setState(() {
-                      replyId = m.str('id');
-                      editId = '';
-                    });
-                    focus.requestFocus();
-                  },
-                  child: GestureDetector(
-                    onDoubleTap: () => perform(
-                      c,
-                      () => s.act('react', {
-                        'id': m['id'],
-                        'emoji': reactions.str(s.myId) == '❤️' ? '' : '❤️',
-                      }),
-                    ),
-                    onLongPress: () => options(c, m),
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Column(
-                          crossAxisAlignment: own
-                              ? CrossAxisAlignment.end
-                              : CrossAxisAlignment.start,
-                          children: [
-                            if (group && !own)
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                  left: 10,
-                                  bottom: 4,
-                                ),
-                                child: Text(
-                                  s.user(m.str('author')).str('username'),
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: muted,
-                                  ),
-                                ),
-                              ),
-                            if (quote.isNotEmpty)
-                              Container(
-                                margin: const EdgeInsets.only(bottom: 5),
-                                padding: const EdgeInsets.fromLTRB(
-                                  10,
-                                  7,
-                                  10,
-                                  7,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: subdued(c),
-                                  borderRadius: BorderRadius.circular(9),
-                                  border: const Border(
-                                    left: BorderSide(color: auraBlue, width: 2),
-                                  ),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      s
-                                          .user(quote.str('author'))
-                                          .str('username'),
-                                      style: const TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w700,
-                                        color: muted,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      preview(quote),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: muted,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            if (sharedId.isNotEmpty)
-                              InkWell(
-                                onTap: shared.isEmpty
-                                    ? null
-                                    : () => open(c, PostPage(id: sharedId)),
-                                child: Container(
-                                  width: 195,
-                                  margin: const EdgeInsets.only(bottom: 5),
-                                  decoration: BoxDecoration(
-                                    color: subdued(c),
-                                    borderRadius: BorderRadius.circular(13),
-                                  ),
-                                  clipBehavior: Clip.antiAlias,
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      if (shared.isNotEmpty) ...[
-                                        MediaView(
-                                          sharedPhoto,
-                                          width: 195,
-                                          height: 177,
-                                          fit: BoxFit.contain,
-                                          thumbnail: true,
-                                        ),
-                                        Padding(
-                                          padding: const EdgeInsets.all(10),
-                                          child: Text(
-                                            '${s.user(shared.str('author')).str('username')} · ${shared.str('text')}',
-                                            maxLines: 3,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              height: 1.4,
-                                            ),
-                                          ),
-                                        ),
-                                      ] else
-                                        const Padding(
-                                          padding: EdgeInsets.all(18),
-                                          child: Text(
-                                            'Questo post non è disponibile.',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: muted,
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            if (story.isNotEmpty && sharedId.isEmpty)
-                              Container(
-                                width: 135,
-                                height: 185,
-                                margin: const EdgeInsets.only(bottom: 5),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(13),
-                                  child: Stack(
-                                    fit: StackFit.expand,
-                                    children: [
-                                      StoryCanvas(story: story),
-                                      const Positioned(
-                                        top: 10,
-                                        left: 10,
-                                        right: 10,
-                                        child: Text(
-                                          'Risposta alla storia',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: isPhoto ? 2 : 14,
-                                vertical: isPhoto ? 2 : 11,
-                              ),
-                              decoration: BoxDecoration(
-                                color:
-                                    gone &&
-                                        Theme.of(c).brightness ==
-                                            Brightness.light
-                                    ? (own ? auraBlue : const Color(0xff525a67))
-                                    : isPhoto ||
-                                          m.str('kind') == 'sticker' ||
-                                          emojiOnly
-                                    ? Colors.transparent
-                                    : own
-                                    ? auraBlue
-                                    : subdued(c),
-                                borderRadius: BorderRadius.only(
-                                  topLeft: const Radius.circular(18),
-                                  topRight: const Radius.circular(18),
-                                  bottomLeft: Radius.circular(own ? 18 : 5),
-                                  bottomRight: Radius.circular(own ? 5 : 18),
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (gone)
-                                    Text(
-                                      'Messaggio scaduto',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color:
-                                            Theme.of(c).brightness ==
-                                                Brightness.light
-                                            ? Colors.white
-                                            : muted,
-                                        fontStyle: FontStyle.italic,
-                                      ),
-                                    )
-                                  else if (once)
-                                    InkWell(
-                                      onTap:
-                                          own ||
-                                              m.ids('openedBy').contains(s.myId)
-                                          ? null
-                                          : () => open(
-                                              c,
-                                              OncePhoto(id: m.str('id')),
-                                            ),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 14,
-                                          vertical: 13,
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            GIcon(
-                                              (own
-                                                      ? m
-                                                            .ids('openedBy')
-                                                            .isNotEmpty
-                                                      : m
-                                                            .ids('openedBy')
-                                                            .contains(s.myId))
-                                                  ? CupertinoIcons
-                                                        .check_mark_circled
-                                                  : CupertinoIcons.timer,
-                                              color: own
-                                                  ? Colors.white
-                                                  : foreground(c),
-                                              size: 24,
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Flexible(
-                                              child: Text(
-                                                (own
-                                                        ? m
-                                                              .ids('openedBy')
-                                                              .isNotEmpty
-                                                        : m
-                                                              .ids('openedBy')
-                                                              .contains(s.myId))
-                                                    ? 'Foto aperta'
-                                                    : m.number('maxOpens', 1) ==
-                                                          2
-                                                    ? (m
-                                                                  .obj(
-                                                                    'openCounts',
-                                                                  )
-                                                                  .number(
-                                                                    s.myId,
-                                                                  ) >
-                                                              0
-                                                          ? 'Riproduci di nuovo'
-                                                          : 'Foto · consenti replay')
-                                                    : own
-                                                    ? 'Foto · una visualizzazione'
-                                                    : 'Tocca per aprire · una volta',
-                                                style: TextStyle(
-                                                  color: own
-                                                      ? Colors.white
-                                                      : foreground(c),
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    )
-                                  else if (m.str('kind') == 'sticker' ||
-                                      emojiOnly)
-                                    Text(
-                                      m.str('text'),
-                                      style: const TextStyle(
-                                        fontSize: 55,
-                                        height: 1.2,
-                                      ),
-                                    )
-                                  else if (isPhoto)
-                                    ProtectedChatImage(
-                                      key: ValueKey('protected-${m.str('id')}'),
-                                      protected:
-                                          !own &&
-                                          s.preferences.flag('imageProtection'),
-                                      reference: m.str('media'),
-                                      expiresAt: m.number('readExpiresAt'),
-                                      child: _ChatPhoto(
-                                        reference: m.str('media'),
-                                      ),
-                                    )
-                                  else if (m.str('kind') == 'audio')
-                                    AudioBubble(
-                                      key: ValueKey(m.str('id')),
-                                      reference: m.str('media'),
-                                      own: own,
-                                    )
-                                  else
-                                    Text(
-                                      m.str('text'),
-                                      style: TextStyle(
-                                        color: own
-                                            ? Colors.white
-                                            : foreground(c),
-                                        fontSize: 14,
-                                        height: 1.4,
-                                      ),
-                                    ),
-                                  if (m.flag('edited'))
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 4),
-                                      child: Text(
-                                        'modificato',
-                                        style: TextStyle(
-                                          fontSize: 9,
-                                          color: own ? Colors.white70 : muted,
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (reactions.isNotEmpty)
-                          Positioned(
-                            bottom: -13,
-                            right: own ? 7 : null,
-                            left: own ? null : 7,
-                            child: GestureDetector(
-                              onTap: () => sheet(
-                                c,
-                                Column(
-                                  children: [
-                                    const Text(
-                                      'Reazioni',
-                                      style: TextStyle(
-                                        fontSize: 17,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    for (final e in reactions.entries)
-                                      PersonTile(
-                                        e.key,
-                                        trailing: Text(
-                                          '${e.value}',
-                                          style: const TextStyle(fontSize: 23),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 7,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: subdued(c),
-                                  borderRadius: BorderRadius.circular(18),
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 2,
-                                  ),
-                                ),
-                                child: Text(
-                                  reactions.values.join(' '),
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+    final content = switch (kind) {
+      'image' || 'gif' => ProtectedChatImage(
+        key: ValueKey('protected-${m.str('id')}'),
+        protected: !own && s.preferences.flag('imageProtection'),
+        reference: m.str('media'),
+        expiresAt: m.number('readExpiresAt'),
+        child: _ChatPhoto(reference: m.str('media')),
+      ),
+      'audio' => ChatBubble(
+        own: own,
+        colors: colors,
+        child: AudioBubble(
+          key: ValueKey(m.str('id')),
+          reference: m.str('media'),
+          own: own,
         ),
-        if (own &&
-            (reverseIndex == 0 ||
-                all.lastWhere((x) => x.str('author') == s.myId).str('id') ==
-                    m.str('id')))
-          Padding(
-            padding: const EdgeInsets.only(right: 7, top: 2, bottom: 10),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: InkWell(
-                onTap: () => messageInfo(c, m, s.thread(widget.id)),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text(
-                    !s.readReceipts
-                        ? 'Conferme disattivate'
-                        : (own
-                              ? m.ids('openedBy').isNotEmpty
-                              : m.ids('openedBy').contains(s.myId))
-                        ? 'Foto aperta'
-                        : m.ids('readBy').any((id) => id != s.myId)
-                        ? 'Visualizzato'
-                        : 'Inviato',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: m.ids('readBy').any((id) => id != s.myId)
-                          ? auraBlue
-                          : muted,
-                    ),
+      ),
+      'post' => const SizedBox.shrink(),
+      _ => ChatBubble(
+        own: own,
+        colors: colors,
+        joinAbove: joinAbove,
+        joinBelow: joinBelow,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              m.str('text'),
+              style: TextStyle(
+                color: textColor,
+                fontSize: 15,
+                height: 1.24,
+                fontFamily: messageFont.family,
+                fontWeight: messageFont.weight,
+              ),
+            ),
+            if (m.flag('edited'))
+              Padding(
+                padding: const EdgeInsets.only(top: 3),
+                child: Text(
+                  'modificato',
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: own ? Colors.white70 : secondaryText(c),
                   ),
                 ),
               ),
+          ],
+        ),
+      ),
+    };
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: own
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
+      children: [
+        if (sharedId.isNotEmpty)
+          InkWell(
+            borderRadius: BorderRadius.circular(17),
+            onTap: shared.isEmpty
+                ? null
+                : () => open(c, PostPage(id: sharedId)),
+            child: Container(
+              width: 195,
+              margin: const EdgeInsets.only(bottom: 4),
+              decoration: BoxDecoration(
+                color: chatReplyColor(c),
+                borderRadius: BorderRadius.circular(17),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (sharedPhoto.isNotEmpty)
+                    MediaView(
+                      sharedPhoto,
+                      width: 195,
+                      height: 177,
+                      fit: BoxFit.cover,
+                      thumbnail: true,
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Text(
+                      shared.isEmpty
+                          ? 'Questo post non è disponibile.'
+                          : '${s.user(shared.str('author')).str('username')} · ${shared.str('text')}',
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
+        if (story.isNotEmpty && sharedId.isEmpty)
+          Container(
+            width: 135,
+            height: 185,
+            margin: const EdgeInsets.only(bottom: 4),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  StoryCanvas(story: story),
+                  const Positioned(
+                    top: 9,
+                    left: 9,
+                    right: 9,
+                    child: Text(
+                      'Risposta alla storia',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        content,
       ],
     );
   }
 
-  Future<void> options(BuildContext c, J m) => sheet(
-    c,
-    Column(
+  Widget _onceBubble(
+    BuildContext c,
+    GpixStore s,
+    J m,
+    ChatColors colors,
+    bool own,
+  ) {
+    final opened = own
+        ? m.ids('openedBy').isNotEmpty
+        : m.ids('openedBy').contains(s.myId);
+    final replay = m.number('maxOpens', 1) == 2;
+    final replaying = m.obj('openCounts').number(s.myId) > 0;
+    final label = opened
+        ? 'Foto aperta'
+        : replaying
+        ? 'Riproduci di nuovo'
+        : own
+        ? (replay ? 'Foto · Consenti replay' : 'Foto · Una visualizzazione')
+        : 'Foto';
+    final color = own ? Colors.white : secondaryText(c);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(18, 2, 18, 13),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              for (final emoji in ['❤️', '🔥', '😂', '😍', '👏', '🌈'])
-                GestureDetector(
-                  onTap: () {
-                    Navigator.pop(c);
-                    perform(
-                      c,
-                      () => store!.act('react', {
-                        'id': m['id'],
-                        'emoji': m.obj('reactions').str(store!.myId) == emoji
-                            ? ''
-                            : emoji,
-                      }),
-                    );
-                  },
-                  child: Text(emoji, style: const TextStyle(fontSize: 28)),
-                ),
-            ],
+        Flexible(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(22),
+            onTap: own || opened
+                ? null
+                : () => open(c, OncePhoto(id: m.str('id'))),
+            child: ChatBubble(
+              colors: colors,
+              own: own,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GIcon(
+                    opened
+                        ? CupertinoIcons.check_mark_circled
+                        : CupertinoIcons.timer,
+                    color: color,
+                    size: 21,
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
-        const Divider(height: 1),
-        ActionRow(CupertinoIcons.info, 'Informazioni', () {
-          Navigator.pop(c);
-          messageInfo(c, m, store!.thread(widget.id));
-        }),
-        ActionRow(CupertinoIcons.reply, 'Rispondi', () {
-          Navigator.pop(c);
-          setState(() {
-            replyId = m.str('id');
-            editId = '';
-          });
-          focus.requestFocus();
-        }),
-        ActionRow(CupertinoIcons.arrowshape_turn_up_right, 'Inoltra', () {
-          Navigator.pop(c);
-          if (m.flag('viewOnce') ||
-              m.number('expires') > 0 ||
-              m.flag('afterRead')) {
-            notice(c, 'Questo contenuto non può essere inoltrato.');
-            return;
-          }
-          sheet(
-            c,
-            Column(
-              children: [
-                const Text(
-                  'Inoltra a',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                ),
-                for (final u in store!.users.where(
-                  (u) =>
-                      u.str('id') != store!.myId &&
-                      !store!.blocked(u.str('id')),
-                ))
-                  PersonTile(
-                    u.str('id'),
-                    onTap: () => perform(c, () async {
-                      await store!.act('forward', {
-                        'id': m['id'],
-                        'user': u['id'],
-                      });
-                      if (c.mounted) {
-                        Navigator.pop(c);
-                        notice(c, 'Messaggio inoltrato');
-                      }
-                    }),
-                  ),
-              ],
+        if (!own) ...[
+          const SizedBox(width: 7),
+          Material(
+            color: chatReplyColor(c),
+            shape: const CircleBorder(),
+            child: IconButton(
+              tooltip: 'Rispondi con la fotocamera',
+              onPressed: () => photo(camera: true, replyingTo: m.str('id')),
+              icon: GIcon(
+                CupertinoIcons.camera,
+                size: 19,
+                color: foreground(c),
+              ),
+              constraints: const BoxConstraints.tightFor(width: 35, height: 35),
+              padding: EdgeInsets.zero,
             ),
-          );
-        }),
-        if (m.str('author') == store!.myId) ...[
-          if (m.str('kind') == 'text')
-            ActionRow(CupertinoIcons.pencil, 'Modifica', () {
-              Navigator.pop(c);
-              setState(() {
-                editId = m.str('id');
-                replyId = '';
-                input.text = m.str('text');
-              });
-              focus.requestFocus();
-            }),
-          ActionRow(CupertinoIcons.trash, 'Annulla invio', () async {
-            Navigator.pop(c);
-            if (await gpixAlert(
-                  c,
-                  'Annullare l’invio?',
-                  'Il messaggio verrà rimosso dalla conversazione.',
-                  confirm: 'Annulla invio',
-                  destructive: true,
-                  cancel: true,
-                ) &&
-                c.mounted)
-              perform(c, () => store!.act('deleteMessage', {'id': m['id']}));
-          }, destructive: true),
+          ),
         ],
-        const SizedBox(height: 17),
       ],
+    );
+  }
+
+  Widget _messageReactions(BuildContext c, J reactions) {
+    final summary = reactions.values.toSet().take(3).join(' ');
+    return GestureDetector(
+      onTap: () => sheet(
+        c,
+        Column(
+          children: [
+            const Text(
+              'Reazioni',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+            ),
+            for (final item in reactions.entries)
+              PersonTile(
+                item.key,
+                trailing: Text(
+                  '${item.value}',
+                  style: const TextStyle(fontSize: 23),
+                ),
+              ),
+          ],
+        ),
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: chatReplyColor(c),
+          borderRadius: BorderRadius.circular(17),
+          border: Border.all(color: surface(c), width: 1.5),
+        ),
+        child: Text(summary, style: const TextStyle(fontSize: 12)),
+      ),
+    );
+  }
+
+  Widget _messageStickers(BuildContext c, J stickers) => Transform.rotate(
+    angle: -.12,
+    child: Text(
+      stickers.values.take(3).join(''),
+      style: TextStyle(
+        fontSize: 24,
+        shadows: [Shadow(color: surface(c), blurRadius: 4)],
+      ),
     ),
   );
+
+  bool _temporary(J m) =>
+      m.flag('viewOnce') || m.flag('afterRead') || m.number('expires') > 0;
+
+  Future<void> _reactTo(J m, String emoji) async {
+    final s = store!;
+    if (s.expired(m)) return;
+    if (!s.supportsChatTools &&
+        !const {'❤️', '😂', '😍', '🔥', '😢', '👏', '🌈'}.contains(emoji)) {
+      await _chatTool(context, s, () {});
+      return;
+    }
+    await perform(
+      context,
+      () => s.act('react', {
+        'id': m.str('id'),
+        'emoji': m.obj('reactions').str(s.myId) == emoji ? '' : emoji,
+      }),
+    );
+  }
+
+  void pickSticker({J? attachTo}) {
+    final s = store!;
+    final draftReply = replyId;
+    focus.unfocus();
+    _pickChatEmoji(
+      context,
+      title: attachTo == null ? 'Invia uno sticker' : 'Aggiungi adesivo',
+      onSelected: (emoji) => perform(context, () async {
+        if (attachTo != null) {
+          await s.act('messageSticker', {
+            'id': attachTo.str('id'),
+            'emoji': emoji,
+          });
+          return;
+        }
+        await s.send(
+          widget.id,
+          emoji,
+          kind: 'sticker',
+          reply: draftReply,
+          expiresIn: expiresIn,
+        );
+        if (mounted && replyId == draftReply) setState(() => replyId = '');
+      }),
+    );
+  }
+
+  Future<void> options(BuildContext anchor, J m, ChatColors colors) async {
+    final s = store!;
+    final id = m.str('id');
+    final own = m.str('author') == s.myId;
+    final gone = s.expired(m);
+    final temporary = _temporary(m);
+    final supportsTools = s.supportsChatTools;
+    final pinned =
+        s.thread(widget.id).obj('chatStyle').str('pinnedMessage') == id;
+    final selected = anchor.findRenderObject();
+    if (selected is! RenderBox || !selected.hasSize) return;
+    final area = selected.localToGlobal(Offset.zero) & selected.size;
+    final c = context;
+    focus.unfocus();
+    final choice = await showChatMessageMenu(
+      c,
+      anchor: area,
+      own: own,
+      time: clock(m['created']),
+      selection: _messagePreview(s, m),
+      colors: colors,
+      reactionsAvailable: !gone,
+      currentReaction: m.obj('reactions').str(s.myId),
+      actions: [
+        if (!gone)
+          const ChatMenuAction('reply', CupertinoIcons.reply, 'Rispondi'),
+        if (!gone && !temporary && supportsTools)
+          const ChatMenuAction(
+            'sticker',
+            CupertinoIcons.smiley,
+            'Aggiungi adesivo',
+          ),
+        if (!gone && !temporary)
+          const ChatMenuAction('forward', CupertinoIcons.paperplane, 'Inoltra'),
+        if (supportsTools)
+          const ChatMenuAction('hide', CupertinoIcons.trash, 'Elimina per te'),
+        if (!own)
+          const ChatMenuAction(
+            'report',
+            CupertinoIcons.exclamationmark_bubble,
+            'Segnala',
+            dangerous: true,
+          ),
+        if (own && !gone)
+          const ChatMenuAction(
+            'unsend',
+            CupertinoIcons.arrow_uturn_left,
+            'Annulla invio',
+            dangerous: true,
+          ),
+      ],
+      moreActions: [
+        if (!gone && !temporary && m.str('kind') == 'text')
+          const ChatMenuAction('copy', CupertinoIcons.doc_on_doc, 'Copia'),
+        if (!gone &&
+            !temporary &&
+            m.str('kind') == 'text' &&
+            m.str('text').trim().isNotEmpty)
+          const ChatMenuAction('translate', CupertinoIcons.globe, 'Traduci'),
+        if (!gone && own && m.str('kind') == 'text')
+          const ChatMenuAction('edit', CupertinoIcons.pencil, 'Modifica'),
+        if (!gone && !temporary && supportsTools)
+          ChatMenuAction(
+            'pin',
+            CupertinoIcons.pin,
+            pinned ? 'Rimuovi fissaggio' : 'Fissa',
+          ),
+        if (!gone && !temporary && m.obj('stickers').str(s.myId).isNotEmpty)
+          const ChatMenuAction(
+            'remove-sticker',
+            CupertinoIcons.xmark,
+            'Rimuovi adesivo',
+          ),
+        const ChatMenuAction(
+          'info',
+          CupertinoIcons.info_circle,
+          'Informazioni',
+        ),
+      ],
+    );
+    if (choice == null || !mounted) return;
+    final live = s.message(id);
+    if (live.isEmpty) return;
+    if (choice.startsWith('reaction:')) {
+      await _reactTo(live, choice.substring('reaction:'.length));
+      return;
+    }
+    switch (choice) {
+      case 'reaction-picker':
+        _pickChatEmoji(
+          c,
+          title: 'Reagisci con un’emoji',
+          onSelected: (emoji) => _reactTo(live, emoji),
+        );
+      case 'reply':
+        _replyTo(live);
+      case 'sticker':
+        pickSticker(attachTo: live);
+      case 'remove-sticker':
+        await perform(
+          c,
+          () => s.act('messageSticker', {'id': id, 'emoji': ''}),
+        );
+      case 'forward':
+        if (!s.expired(live)) _forwardMessage(c, s, live);
+      case 'copy':
+        if (!s.expired(live)) {
+          await Clipboard.setData(ClipboardData(text: live.str('text')));
+          if (mounted) notice(c, 'Messaggio copiato');
+        }
+      case 'translate':
+        if (!s.expired(live) &&
+            !_temporary(live) &&
+            live.str('kind') == 'text') {
+          await translateChatText(c, live.str('text'));
+        }
+      case 'edit':
+        if (!s.expired(live)) _editMessage(live);
+      case 'pin':
+        await perform(
+          c,
+          () => s.act('pinMessage', {'id': id, 'enabled': !pinned}),
+        );
+      case 'info':
+        await messageInfo(c, live, s.thread(widget.id));
+      case 'report':
+        await _reportChat(c, s, id, type: 'message');
+      case 'hide':
+        if (await gpixAlert(
+              c,
+              'Eliminare per te?',
+              'Il messaggio verrà rimosso dalla tua visualizzazione della chat.',
+              confirm: 'Elimina per te',
+              destructive: true,
+              cancel: true,
+            ) &&
+            mounted) {
+          await perform(c, () async {
+            await s.act('hideMessage', {'id': id});
+            _forgetSelection(id);
+          });
+        }
+      case 'unsend':
+        if (await gpixAlert(
+              c,
+              'Annullare l’invio?',
+              'Il messaggio verrà rimosso dalla conversazione.',
+              confirm: 'Annulla invio',
+              destructive: true,
+              cancel: true,
+            ) &&
+            mounted) {
+          await perform(c, () async {
+            await s.act('deleteMessage', {'id': id});
+            _forgetSelection(id);
+          });
+        }
+    }
+  }
+
+  void _forgetSelection(String id) {
+    if (!mounted || (id != editId && id != replyId)) return;
+    setState(() {
+      if (id == editId) _restoreDraft();
+      editId = '';
+      replyId = '';
+    });
+  }
+
+  Future<void> _showPinned(BuildContext c, J message, ChatColors colors) =>
+      sheet(
+        c,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 2, 16, 14),
+              child: Text(
+                'Messaggio fissato',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: ChatBubble(
+                colors: colors,
+                child: Text(
+                  _messagePreview(store!, message),
+                  style: const TextStyle(fontSize: 15),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (store!.message(message.str('id')).isNotEmpty)
+              ActionRow(
+                CupertinoIcons.arrow_turn_down_right,
+                'Vai al messaggio',
+                () {
+                  Navigator.pop(c);
+                  _goToMessage(message.str('id'));
+                },
+              ),
+            ActionRow(CupertinoIcons.xmark, 'Rimuovi fissaggio', () {
+              Navigator.pop(c);
+              perform(
+                c,
+                () => store!.act('pinMessage', {
+                  'id': message.str('id'),
+                  'enabled': false,
+                }),
+              );
+            }),
+          ],
+        ),
+      );
+}
+
+String _participantName(GpixStore s, J thread, String user) {
+  return thread
+      .obj('chatStyle')
+      .obj('nicknames')
+      .str(user, s.user(user).str('name', s.user(user).str('username')));
+}
+
+String _messagePreview(GpixStore s, J m) {
+  if (s.expired(m)) return 'Messaggio scaduto';
+  if (m.flag('viewOnce')) return 'Foto a visualizzazione limitata';
+  if (m.flag('afterRead') || m.number('expires') > 0)
+    return 'Messaggio temporaneo';
+  return m.str('kind') == 'gif' ? 'GIF' : preview(m);
+}
+
+bool _standaloneEmoji(String text) {
+  final value = text.trim();
+  return value.isNotEmpty &&
+      value.characters.length <= 6 &&
+      value.runes.every(
+        (r) =>
+            (r >= 0x1f000 && r <= 0x1faff) ||
+            (r >= 0x2600 && r <= 0x27bf) ||
+            r == 0xfe0f ||
+            r == 0xfe0e ||
+            r == 0x200d ||
+            r == 32,
+      );
+}
+
+Future<void> _pickChatEmoji(
+  BuildContext c, {
+  required String title,
+  required ValueChanged<String> onSelected,
+}) => sheet(
+  c,
+  EmojiPicker(
+    title: title,
+    onSelected: (emoji) {
+      Navigator.pop(c);
+      onSelected(emoji);
+    },
+  ),
+  scroll: false,
+);
+
+Future<void> _forwardMessage(BuildContext c, GpixStore s, J message) async {
+  final user = await open<String>(c, const _ForwardRecipient());
+  if (user == null || !c.mounted) return;
+  await perform(c, () async {
+    await s.act('forward', {'id': message.str('id'), 'user': user});
+    if (c.mounted) notice(c, 'Messaggio inoltrato');
+  });
+}
+
+Future<void> _reportChat(
+  BuildContext c,
+  GpixStore s,
+  String ref, {
+  required String type,
+}) async {
+  final reason = await textDialog(
+    c,
+    type == 'message' ? 'Segnala il messaggio' : 'Qualcosa non funziona',
+    '',
+  );
+  if (reason == null || reason.trim().isEmpty || !c.mounted) return;
+  await perform(c, () async {
+    await s.act('report', {'id': ref, 'reason': reason.trim(), 'type': type});
+    if (c.mounted) notice(c, 'Segnalazione inviata');
+  });
 }
 
 class ImagePage extends StatefulWidget {
@@ -2403,51 +3104,250 @@ class _AudioBubbleState extends State<AudioBubble> {
 class ThreadInfo extends StatelessWidget {
   final String id;
   const ThreadInfo({super.key, required this.id});
+
   @override
   Widget build(BuildContext c) {
-    final s = GpixScope.of(c),
-        t = s.thread(id),
-        group = t.str('owner').isNotEmpty,
-        admin = t.str('owner') == s.myId;
+    final s = GpixScope.of(c);
+    final t = s.thread(id);
+    final group = t.str('owner').isNotEmpty;
+    final admin = t.str('owner') == s.myId;
+    final other = s.other(t);
+    final mutedChat = t.obj('chatSettings').flag('muted');
+    final colors = ChatColors.fromName(t.obj('chatStyle').str('theme'));
+    final expiry = t.number('messageTTL').toInt();
+    final name = group ? s.threadName(t) : _participantName(s, t, other);
     return Scaffold(
-      appBar: AppBar(title: pageTitle('Dettagli chat')),
-      body: ListView(
+      backgroundColor: surface(c),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.only(top: 6, bottom: 22),
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 16, bottom: 12),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: ChatGlassButton(
+                  icon: CupertinoIcons.chevron_back,
+                  label: 'Indietro',
+                  onTap: () => Navigator.maybePop(c),
+                ),
+              ),
+            ),
+            if (t.isNotEmpty) ...[
+              Center(
+                child: group
+                    ? SizedBox.square(
+                        dimension: 96,
+                        child: FittedBox(child: groupAvatar()),
+                      )
+                    : Avatar(other, size: 96),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 19, 20, 16),
+                child: Text(
+                  name,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 19,
+                    height: 1.2,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 25),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _ChatShortcut(
+                      icon: group
+                          ? CupertinoIcons.person_2
+                          : CupertinoIcons.person,
+                      label: group ? 'Persone' : 'Profilo',
+                      onTap: () => group
+                          ? _showMembers(c, s, t, admin)
+                          : open(c, Profile(user: other)),
+                    ),
+                    _ChatShortcut(
+                      icon: CupertinoIcons.search,
+                      label: 'Cerca',
+                      onTap: () async {
+                        final message = await showSearchMessages(c, id);
+                        if (message != null && c.mounted)
+                          Navigator.pop(c, message);
+                      },
+                    ),
+                    _ChatShortcut(
+                      icon: mutedChat
+                          ? CupertinoIcons.bell_slash
+                          : CupertinoIcons.bell,
+                      label: mutedChat ? 'Riattiva' : 'Silenzia',
+                      onTap: () => perform(
+                        c,
+                        () => s.act('chatSettings', {
+                          'id': id,
+                          'field': 'muted',
+                          'enabled': !mutedChat,
+                        }),
+                      ),
+                    ),
+                    _ChatShortcut(
+                      icon: CupertinoIcons.ellipsis,
+                      label: 'Opzioni',
+                      onTap: () => _threadOptions(c, s, t, group, admin),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 29),
+              _ThreadInfoRow(
+                icon: CupertinoIcons.paintbrush,
+                leading: Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: colors.gradient,
+                  ),
+                ),
+                label: 'Personalizza',
+                subtitle: 'Tema e carattere',
+                onTap: () =>
+                    _chatTool(c, s, () => open(c, _ChatAppearance(id: id))),
+              ),
+              _ThreadInfoRow(
+                icon: CupertinoIcons.person_crop_circle,
+                label: 'Soprannomi',
+                onTap: () =>
+                    _chatTool(c, s, () => open(c, _ChatNicknames(id: id))),
+              ),
+              _ThreadInfoRow(
+                icon: CupertinoIcons.timer,
+                label: 'Messaggi temporanei',
+                subtitle: expiry == 0
+                    ? 'No'
+                    : (expiry == -1 ? 'Dopo la lettura' : expiryLabel(expiry)),
+                onTap: () => _editExpiry(c, s, id),
+              ),
+              _ThreadInfoRow(
+                icon: CupertinoIcons.lock,
+                label: 'Privacy e sicurezza',
+                onTap: () => open(c, _ChatPrivacy(id: id)),
+              ),
+              if (!group)
+                _ThreadInfoRow(
+                  icon: CupertinoIcons.person_2,
+                  label: 'Crea una chat di gruppo',
+                  onTap: () => newConversation(
+                    c,
+                    startGroup: true,
+                    initialMember: other,
+                  ),
+                ),
+              _ThreadInfoRow(
+                icon: CupertinoIcons.exclamationmark_bubble,
+                label: 'Qualcosa non funziona',
+                onTap: () => _reportChat(c, s, id, type: 'thread'),
+              ),
+            ] else
+              const EmptyState(
+                CupertinoIcons.chat_bubble,
+                'Conversazione non disponibile',
+                '',
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _threadOptions(
+    BuildContext c,
+    GpixStore s,
+    J t,
+    bool group,
+    bool admin,
+  ) {
+    sheet(
+      c,
+      Column(
         children: [
-          ListTile(
-            leading: const GIcon(CupertinoIcons.photo),
-            title: const Text('Contenuti condivisi'),
-            onTap: () => open(c, SharedMedia(thread: id)),
+          const Text(
+            'Opzioni',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
           ),
-          const SizedBox(height: 25),
-          Center(child: group ? groupAvatar() : Avatar(s.other(t), size: 80)),
-          const SizedBox(height: 15),
-          Text(
-            s.threadName(t),
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 25),
+          const SizedBox(height: 7),
+          ActionRow(CupertinoIcons.photo, 'Contenuti condivisi', () {
+            Navigator.pop(c);
+            open(c, SharedMedia(thread: id));
+          }),
           if (group && admin)
             ActionRow(CupertinoIcons.pencil, 'Cambia nome', () async {
-              final text = await textDialog(
+              Navigator.pop(c);
+              final value = await textDialog(
                 c,
                 'Nome del gruppo',
                 t.str('title'),
               );
-              if (text != null && text.isNotEmpty && c.mounted)
-                perform(
-                  c,
-                  () => s.act('renameGroup', {'id': id, 'title': text}),
-                );
+              if (value == null || value.trim().isEmpty || !c.mounted) return;
+              await perform(
+                c,
+                () => s.act('renameGroup', {'id': id, 'title': value.trim()}),
+              );
             }),
-          if (group && admin)
+          if (group)
             ActionRow(
-              CupertinoIcons.person_add,
-              'Aggiungi partecipanti',
-              () => sheet(
+              CupertinoIcons.square_arrow_left,
+              'Abbandona gruppo',
+              () async {
+                Navigator.pop(c);
+                if (await gpixAlert(
+                      c,
+                      'Abbandonare il gruppo?',
+                      'Non riceverai più i messaggi di questo gruppo.',
+                      confirm: 'Abbandona',
+                      cancel: true,
+                      destructive: true,
+                    ) &&
+                    c.mounted) {
+                  await perform(c, () async {
+                    await s.act('leaveGroup', {'id': id});
+                    if (c.mounted) Navigator.popUntil(c, (r) => r.isFirst);
+                  });
+                }
+              },
+              destructive: true,
+            ),
+          const SizedBox(height: 10),
+        ],
+      ),
+    );
+  }
+
+  void _showMembers(BuildContext c, GpixStore s, J t, bool admin) {
+    sheet(
+      c,
+      Column(
+        children: [
+          const Text(
+            'Partecipanti',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          if (admin)
+            ActionRow(CupertinoIcons.person_add, 'Aggiungi partecipanti', () {
+              Navigator.pop(c);
+              sheet(
                 c,
                 Column(
                   children: [
+                    const Text(
+                      'Aggiungi partecipanti',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                     for (final u in s.users.where(
                       (u) =>
                           !t.ids('members').contains(u.str('id')) &&
@@ -2460,18 +3360,10 @@ class ThreadInfo extends StatelessWidget {
                           if (c.mounted) Navigator.pop(c);
                         }),
                       ),
-                    const SizedBox(height: 15),
                   ],
                 ),
-              ),
-            ),
-          const Padding(
-            padding: EdgeInsets.all(18),
-            child: Text(
-              'Partecipanti',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-            ),
-          ),
+              );
+            }),
           for (final uid in t.ids('members'))
             PersonTile(
               uid,
@@ -2488,12 +3380,14 @@ class ThreadInfo extends StatelessWidget {
                               confirm: 'Rimuovi',
                               cancel: true,
                             ) &&
-                            c.mounted)
-                          perform(
+                            c.mounted) {
+                          await perform(
                             c,
                             () =>
                                 s.act('removeMember', {'id': id, 'user': uid}),
                           );
+                          if (c.mounted) Navigator.pop(c);
+                        }
                       },
                       icon: const GIcon(
                         CupertinoIcons.minus_circled,
@@ -2503,27 +3397,388 @@ class ThreadInfo extends StatelessWidget {
                     )
                   : null,
             ),
-          if (group)
-            ActionRow(
-              CupertinoIcons.square_arrow_left,
-              'Abbandona gruppo',
-              () async {
+        ],
+      ),
+    );
+  }
+}
+
+class _ChatShortcut extends StatelessWidget {
+  const _ChatShortcut({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext c) => Expanded(
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+        child: Column(
+          children: [
+            GIcon(icon, size: 25, color: foreground(c)),
+            const SizedBox(height: 14),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _ThreadInfoRow extends StatelessWidget {
+  const _ThreadInfoRow({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.subtitle,
+    this.leading,
+    this.destructive = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final String? subtitle;
+  final Widget? leading;
+  final bool destructive;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext c) {
+    final color = destructive ? danger : foreground(c);
+    return InkWell(
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: subtitle == null ? 48 : 55),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              SizedBox.square(
+                dimension: 24,
+                child: leading ?? GIcon(icon, size: 24, color: color),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 15,
+                        height: 1.19,
+                        color: color,
+                      ),
+                    ),
+                    if (subtitle != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          subtitle!,
+                          style: TextStyle(
+                            fontSize: 13,
+                            height: 1.12,
+                            color: secondaryText(c),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              GIcon(
+                CupertinoIcons.chevron_right,
+                size: 16,
+                color: secondaryText(c),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _chatTool(BuildContext c, GpixStore s, VoidCallback run) async {
+  if (!s.supportsChatTools) {
+    await gpixAlert(
+      c,
+      'Aggiorna il backend GPIX',
+      'Questa opzione richiede la versione 2.24.15.',
+    );
+    return;
+  }
+  run();
+}
+
+Future<void> _editExpiry(BuildContext c, GpixStore s, String id) async {
+  final choice = await open<int>(
+    c,
+    MessageExpiry(seconds: s.thread(id).number('messageTTL').toInt()),
+  );
+  if (choice == null || !c.mounted) return;
+  await perform(c, () => s.act('messageExpiry', {'id': id, 'seconds': choice}));
+}
+
+class _ChatAppearance extends StatefulWidget {
+  const _ChatAppearance({required this.id});
+  final String id;
+
+  @override
+  State<_ChatAppearance> createState() => _ChatAppearanceState();
+}
+
+class _ChatAppearanceState extends State<_ChatAppearance> {
+  ChatColors? selectedTheme;
+  ChatFont? selectedFont;
+  bool saving = false;
+
+  @override
+  Widget build(BuildContext c) {
+    final s = GpixScope.of(c);
+    final style = s.thread(widget.id).obj('chatStyle');
+    final colors = selectedTheme ?? ChatColors.fromName(style.str('theme'));
+    final font = selectedFont ?? ChatFont.fromName(style.str('font'));
+    return Scaffold(
+      appBar: AppBar(title: pageTitle('Personalizza')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 25),
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 15),
+            decoration: BoxDecoration(
+              color: chatComposerColor(c),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: ChatBubble(
+                    colors: colors,
+                    child: Text(
+                      'Ciao!',
+                      style: TextStyle(
+                        fontFamily: font.family,
+                        fontWeight: font.weight,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ChatBubble(
+                    colors: colors,
+                    own: true,
+                    child: Text(
+                      'Come va?',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontFamily: font.family,
+                        fontWeight: font.weight,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 22),
+          const Text(
+            'Tema',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 9),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              for (final choice in ChatColors.values)
+                ChoiceChip(
+                  avatar: DecoratedBox(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: choice.gradient,
+                    ),
+                    child: const SizedBox.square(dimension: 16),
+                  ),
+                  label: Text(choice.label),
+                  selected: colors == choice,
+                  onSelected: (_) => setState(() => selectedTheme = choice),
+                ),
+            ],
+          ),
+          const SizedBox(height: 22),
+          const Text(
+            'Carattere',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 9),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              for (final choice in ChatFont.values)
+                ChoiceChip(
+                  label: Text(
+                    choice.label,
+                    style: TextStyle(
+                      fontFamily: choice.family,
+                      fontWeight: choice.weight,
+                    ),
+                  ),
+                  selected: font == choice,
+                  onSelected: (_) => setState(() => selectedFont = choice),
+                ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          FilledButton(
+            onPressed: saving || selectedTheme == null && selectedFont == null
+                ? null
+                : () async {
+                    setState(() => saving = true);
+                    await perform(c, () async {
+                      await s.act('chatAppearance', {
+                        'id': widget.id,
+                        if (selectedTheme != null) 'theme': colors.name,
+                        if (selectedFont != null) 'font': font.name,
+                      });
+                      if (c.mounted) Navigator.pop(c);
+                    });
+                    if (mounted) setState(() => saving = false);
+                  },
+            child: const Text('Applica'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChatNicknames extends StatelessWidget {
+  const _ChatNicknames({required this.id});
+  final String id;
+
+  @override
+  Widget build(BuildContext c) {
+    final s = GpixScope.of(c);
+    final t = s.thread(id);
+    final nicknames = t.obj('chatStyle').obj('nicknames');
+    return Scaffold(
+      appBar: AppBar(title: pageTitle('Soprannomi')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(5, 6, 5, 20),
+        children: [
+          for (final uid in t.ids('members'))
+            PersonTile(
+              uid,
+              subtitle: nicknames.str(uid, 'Imposta soprannome'),
+              trailing: const GIcon(CupertinoIcons.pencil, size: 19),
+              onTap: () async {
+                final name = await textDialog(
+                  c,
+                  'Soprannome',
+                  nicknames.str(uid),
+                );
+                if (name == null || !c.mounted) return;
+                await perform(
+                  c,
+                  () => s.act('chatNickname', {
+                    'id': id,
+                    'user': uid,
+                    'text': name.trim(),
+                  }),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChatPrivacy extends StatelessWidget {
+  const _ChatPrivacy({required this.id});
+  final String id;
+
+  @override
+  Widget build(BuildContext c) {
+    final s = GpixScope.of(c);
+    final t = s.thread(id);
+    final group = t.str('owner').isNotEmpty;
+    final other = s.other(t);
+    final restrictions = s.preferences.ids('restricted');
+    final restricted = restrictions.contains(other);
+    return Scaffold(
+      appBar: AppBar(title: pageTitle('Privacy e sicurezza')),
+      body: ListView(
+        children: [
+          _ThreadInfoRow(
+            icon: CupertinoIcons.check_mark_circled,
+            label: 'Conferme di lettura',
+            subtitle: 'Impostazione dell’account',
+            onTap: () =>
+                open(c, const MessageToggleSetting(setting: 'readReceipts')),
+          ),
+          _ThreadInfoRow(
+            icon: CupertinoIcons.photo,
+            label: 'Protezione delle immagini',
+            subtitle: 'Impostazione dell’account',
+            onTap: () =>
+                open(c, const MessageToggleSetting(setting: 'imageProtection')),
+          ),
+          if (t.isNotEmpty && !group) ...[
+            _ThreadInfoRow(
+              icon: CupertinoIcons.person_crop_circle,
+              label: restricted ? 'Rimuovi restrizioni' : 'Limita account',
+              onTap: () => perform(
+                c,
+                () => s.act('preferences', {
+                  'key': 'restricted',
+                  'value': restricted
+                      ? (restrictions..remove(other))
+                      : [...restrictions, other],
+                }),
+              ),
+            ),
+            _ThreadInfoRow(
+              icon: CupertinoIcons.nosign,
+              label: 'Blocca',
+              destructive: true,
+              onTap: () async {
                 if (await gpixAlert(
                       c,
-                      'Abbandonare il gruppo?',
-                      'Non riceverai più i messaggi di questo gruppo.',
-                      confirm: 'Abbandona',
-                      cancel: true,
+                      'Bloccare ${s.user(other).str('username')}?',
+                      'L’account non potrà più contattarti su GPIX.',
+                      confirm: 'Blocca',
                       destructive: true,
+                      cancel: true,
                     ) &&
-                    c.mounted)
-                  perform(c, () async {
-                    await s.act('leaveGroup', {'id': id});
+                    c.mounted) {
+                  await perform(c, () async {
+                    await s.act('block', {'user': other, 'enabled': true});
                     if (c.mounted) Navigator.popUntil(c, (r) => r.isFirst);
                   });
+                }
               },
-              destructive: true,
             ),
+          ],
         ],
       ),
     );
@@ -2608,74 +3863,160 @@ class _MessageExpiryState extends State<MessageExpiry> {
   );
 }
 
-Future<void> showSearchMessages(BuildContext c, String thread) => sheet(
-  c,
-  StatefulBuilder(
-    builder: (menu, update) {
-      return _ChatSearch(thread: thread);
-    },
-  ),
-);
+Future<String?> showSearchMessages(BuildContext c, String thread) =>
+    open<String>(c, _ChatSearch(thread: thread));
 
 class _ChatSearch extends StatefulWidget {
-  final String thread;
   const _ChatSearch({required this.thread});
+
+  final String thread;
+
   @override
   State<_ChatSearch> createState() => _ChatSearchState();
 }
 
 class _ChatSearchState extends State<_ChatSearch> {
+  final search = TextEditingController();
   String query = '';
+
+  @override
+  void dispose() {
+    search.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext c) {
     final s = GpixScope.of(c);
-    final messages = s
-        .thread(widget.thread)
+    final t = s.thread(widget.thread);
+    final term = directSearchTerm(query);
+    final messages = t
         .rows('messages')
+        .reversed
+        .where((m) => matchesDirectMessage(s, m, term))
+        .toList();
+    return Scaffold(
+      appBar: AppBar(
+        centerTitle: true,
+        title: const Text(
+          'Cerca nella chat',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+        ),
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 7),
+            child: DirectSearchField(
+              key: const ValueKey('thread-search'),
+              controller: search,
+              hint: 'Cerca nei messaggi',
+              autofocus: true,
+              onChanged: (value) => setState(() => query = value),
+            ),
+          ),
+          Expanded(
+            child: term.isEmpty
+                ? const SizedBox.shrink()
+                : messages.isEmpty
+                ? const Center(child: Text('Nessun risultato'))
+                : ListView.builder(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    itemCount: messages.length,
+                    itemBuilder: (c, index) {
+                      final m = messages[index];
+                      final author = m.str('author');
+                      return DirectThreadRow(
+                        key: ValueKey('thread-result-${m.str('id')}'),
+                        portrait: Avatar(author, size: 46),
+                        name: author == s.myId
+                            ? 'Tu'
+                            : _participantName(s, t, author),
+                        preview: Text(m.str('text')),
+                        time: directTimeAgo(m.number('created'), compact: true),
+                        onTap: () {
+                          FocusScope.of(c).unfocus();
+                          Navigator.pop(c, m.str('id'));
+                        },
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ForwardRecipient extends StatefulWidget {
+  const _ForwardRecipient();
+
+  @override
+  State<_ForwardRecipient> createState() => _ForwardRecipientState();
+}
+
+class _ForwardRecipientState extends State<_ForwardRecipient> {
+  final search = TextEditingController();
+  String query = '';
+
+  @override
+  void dispose() {
+    search.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext c) {
+    final s = GpixScope.of(c);
+    final term = directSearchTerm(query);
+    final users = s.users
         .where(
-          (m) =>
-              !m.flag('viewOnce') &&
-              !m.flag('afterRead') &&
-              (m.number('expires') == 0 ||
-                  m.number('expires') >
-                      DateTime.now().millisecondsSinceEpoch / 1000) &&
-              query.trim().isNotEmpty &&
-              m.str('text').toLowerCase().contains(query.toLowerCase()),
+          (u) =>
+              u.str('id') != s.myId &&
+              !s.blocked(u.str('id')) &&
+              directSearchTerm(
+                '${u.str('name')} ${u.str('username')}',
+              ).contains(term),
         )
         .toList();
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        18,
-        0,
-        18,
-        MediaQuery.viewInsetsOf(c).bottom + 20,
+    return Scaffold(
+      appBar: AppBar(
+        centerTitle: true,
+        title: const Text(
+          'Inoltra a',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+        ),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      body: Column(
         children: [
-          TextField(
-            autofocus: true,
-            decoration: const InputDecoration(
-              hintText: 'Cerca nei messaggi',
-              prefixIcon: Icon(CupertinoIcons.search),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 7),
+            child: DirectSearchField(
+              controller: search,
+              onChanged: (value) => setState(() => query = value),
+              hint: 'Cerca persone',
             ),
-            onChanged: (v) => setState(() => query = v),
           ),
-          SizedBox(
-            height: 300,
-            child: ListView(
-              children: [
-                if (query.isNotEmpty && messages.isEmpty)
-                  const ListTile(title: Text('Nessun risultato')),
-                for (final m in messages)
-                  ListTile(
-                    title: Text(m.str('text')),
-                    subtitle: Text(
-                      '${s.user(m.str('author')).str('username')} · ${relative(m['created'])}',
-                    ),
+          Expanded(
+            child: users.isEmpty
+                ? const Center(child: Text('Nessun risultato'))
+                : ListView.builder(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    itemCount: users.length,
+                    itemBuilder: (c, i) {
+                      final u = users[i];
+                      return PersonTile(
+                        u.str('id'),
+                        subtitle: '@${u.str('username')}',
+                        trailing: TextButton(
+                          onPressed: () => Navigator.pop(c, u.str('id')),
+                          child: const Text('Invia'),
+                        ),
+                      );
+                    },
                   ),
-              ],
-            ),
           ),
         ],
       ),
@@ -2773,21 +4114,23 @@ class _ProtectedChatImageState extends State<ProtectedChatImage> {
 
 String activityLabel(GpixStore s, String id) {
   if (!s.activityVisible) return '';
-  if (s.online(id)) return 'Online';
+  if (s.online(id)) return 'Attivo/a ora';
   final seconds = s.user(id).number('lastActive');
   if (seconds <= 0) return '';
-  final date = DateTime.fromMillisecondsSinceEpoch(
-        (seconds * 1000).toInt(),
-      ).toLocal(),
-      today = DateTime.now();
-  String two(int n) => n.toString().padLeft(2, '0');
-  final clock = '${two(date.hour)}:${two(date.minute)}';
-  final day = DateTime(date.year, date.month, date.day),
-      current = DateTime(today.year, today.month, today.day);
-  if (day == current) return 'Ultimo accesso oggi alle $clock';
-  if (day == current.subtract(const Duration(days: 1)))
-    return 'Ultimo accesso ieri alle $clock';
-  return 'Ultimo accesso ${two(date.day)}/${two(date.month)}/${date.year} alle $clock';
+  final date = DateTime.fromMillisecondsSinceEpoch((seconds * 1000).round());
+  final today = DateTime.now();
+  final elapsed = today.difference(date);
+  if (elapsed.inMinutes < 1) return 'Ultimo accesso poco fa';
+  if (elapsed.inHours < 12) return 'Ultimo accesso ${directTimeAgo(seconds)}';
+  final day = DateTime(date.year, date.month, date.day);
+  final current = DateTime(today.year, today.month, today.day);
+  final yesterday = DateTime(today.year, today.month, today.day - 1);
+  final hour = clock(seconds);
+  if (day == current) return 'Ultimo accesso oggi alle $hour';
+  if (day == yesterday) return 'Ultimo accesso ieri alle $hour';
+  final month =
+      '${date.day}/${date.month}${date.year == today.year ? '' : '/${date.year}'}';
+  return 'Ultimo accesso $month alle $hour';
 }
 
 class ChatPresenceAvatar extends StatelessWidget {
@@ -2803,29 +4146,38 @@ class ChatPresenceAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext c) {
     final s = GpixScope.of(c);
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Avatar(user, size: size, ring: ring),
-        if (s.online(user))
-          Positioned(
-            right: 0,
-            bottom: 0,
-            child: Semantics(
-              label: 'Online',
-              child: Container(
-                key: ValueKey('online-$user'),
-                width: size < 45 ? 11 : 16,
-                height: size < 45 ? 11 : 16,
-                decoration: BoxDecoration(
-                  color: const Color(0xff32cf69),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: surface(c), width: 2.3),
+    return SizedBox.square(
+      dimension: size,
+      child: Stack(
+        fit: StackFit.expand,
+        clipBehavior: Clip.none,
+        children: [
+          Avatar(
+            user,
+            size: size,
+            ring: ring,
+            viewed: ring && !s.hasUnseenStories(user),
+          ),
+          if (s.online(user))
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: Semantics(
+                label: 'Attivo/a ora',
+                child: Container(
+                  key: ValueKey('online-$user'),
+                  width: size < 45 ? 11 : 16,
+                  height: size < 45 ? 11 : 16,
+                  decoration: BoxDecoration(
+                    color: const Color(0xff32cf69),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: surface(c), width: 2.3),
+                  ),
                 ),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }

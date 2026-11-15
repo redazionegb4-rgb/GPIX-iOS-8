@@ -24,6 +24,7 @@ import 'giphy.dart';
 import 'music_picker.dart';
 import 'story_stickers.dart';
 import 'story_camera.dart';
+import 'reel_editor.dart';
 import 'post_composer.dart';
 
 const storyColors = [
@@ -62,6 +63,10 @@ class StoryCanvas extends StatelessWidget {
     final x = style.number('x', .5).clamp(.12, .88),
         y = style.number('y', .68).clamp(.1, .85);
     final color = storyColors[style.number('color').toInt().clamp(0, 4)];
+    final stickers = style.rows('stickers');
+    final shared = stickers.indexWhere(
+      (item) => item.str('type') == 'sharedPost',
+    );
     return LayoutBuilder(
       builder: (c, box) => ClipRect(
         child: Stack(
@@ -89,6 +94,12 @@ class StoryCanvas extends StatelessWidget {
                         fit: BoxFit.cover,
                       )
                     : MediaView(story.str('media'), fit: BoxFit.contain),
+              ),
+            if (shared >= 0)
+              _SharedStoryPost(
+                id: stickers[shared].str('postId'),
+                playing: playing && (ModalRoute.of(c)?.isCurrent ?? true),
+                onDuration: onVideoDuration,
               ),
             Positioned.fill(
               child: IgnorePointer(
@@ -161,8 +172,37 @@ class StoryCanvas extends StatelessWidget {
                   ),
                 ),
               ),
-            for (final (index, sticker) in style.rows('stickers').indexed)
-              _canvasSticker(box, story, sticker, index),
+            for (final (index, sticker) in stickers.indexed)
+              if (sticker.str('type') != 'sharedPost')
+                _canvasSticker(box, story, sticker, index),
+            if (shared >= 0)
+              Positioned(
+                left: 14,
+                bottom: style.str('caption').isEmpty ? 78 : 106,
+                child: TextButton.icon(
+                  style: TextButton.styleFrom(
+                    backgroundColor: Colors.black54,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: editing
+                      ? () => onStickerTap?.call(shared)
+                      : () => onStickerAction?.call({
+                          ...stickers[shared],
+                          'position': shared,
+                        }),
+                  icon: const GIcon(CupertinoIcons.arrow_up_right, size: 15),
+                  label: Text(
+                    editing
+                        ? 'Contenuto condiviso'
+                        : GpixScope.of(c)
+                                  .post(stickers[shared].str('postId'))
+                                  .str('kind') ==
+                              'reel'
+                        ? 'Apri reel'
+                        : 'Apri post',
+                  ),
+                ),
+              ),
             if (style.str('caption').isNotEmpty)
               Positioned(
                 bottom: 16,
@@ -259,6 +299,78 @@ class StoryCanvas extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SharedStoryPost extends StatelessWidget {
+  const _SharedStoryPost({
+    required this.id,
+    required this.playing,
+    this.onDuration,
+  });
+
+  final String id;
+  final bool playing;
+  final ValueChanged<Duration>? onDuration;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = GpixScope.of(context);
+    final post = store.post(id);
+    if (!store.canViewSharedPost(post)) {
+      return const ColoredBox(
+        color: Colors.black,
+        child: Center(
+          child: Text(
+            'Contenuto non disponibile',
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
+      );
+    }
+    final media = post.str('media', store.media(post).firstOrNull ?? '');
+    final video = store.isVideoPost(post);
+    final cover = video ? store.reelCover(post) : '';
+    final fallback = Center(
+      child: Padding(
+        padding: const EdgeInsets.all(30),
+        child: Text(
+          post.str('text'),
+          textAlign: TextAlign.center,
+          maxLines: 12,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 25,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const ColoredBox(color: Colors.black),
+        if (media.isEmpty)
+          fallback
+        else if (video)
+          IgnorePointer(
+            child: ClipPlayer(
+              key: ValueKey(('shared-story-video', id)),
+              reference: media,
+              fit: BoxFit.cover,
+              suspended: !playing,
+              loop: false,
+              onDuration: onDuration,
+              placeholder: cover.isEmpty
+                  ? null
+                  : MediaView(cover, fit: BoxFit.cover),
+            ),
+          )
+        else
+          MediaView(media, fit: BoxFit.cover, fallback: fallback),
+      ],
     );
   }
 }
@@ -643,6 +755,13 @@ class _StoryViewerState extends State<StoryViewer>
                 },
               ),
             );
+          }
+        case 'sharedPost':
+          final id = sticker.str('postId');
+          if (store.canViewSharedPost(store.post(id))) {
+            await open(context, PostPage(id: id));
+          } else {
+            notice(context, 'Contenuto non disponibile');
           }
         case 'mention':
           final username = label.replaceFirst('@', '').toLowerCase();
@@ -1230,12 +1349,14 @@ class Composer extends StatefulWidget {
   final String kind;
   final bool editStory;
   final J? initialDraft;
+  final String? initialMedia;
   final Widget? modePicker;
   const Composer({
     super.key,
     required this.kind,
     this.editStory = false,
     this.initialDraft,
+    this.initialMedia,
     this.modePicker,
   });
   @override
@@ -1251,11 +1372,12 @@ class _ComposerState extends State<Composer> {
   Timer? draftTimer;
   bool savingDraft = false;
   String lastDraft = '';
-  Future<void> saveDraft({bool feedback = false}) async {
-    if (kind != 'reel') return;
-    if (files.isEmpty) {
+  Future<void> saveDraft({bool feedback = false, bool close = false}) async {
+    if (kind != 'reel' && !(kind == 'story' && feedback)) return;
+    if (files.isEmpty &&
+        (kind != 'story' || text.text.trim().isEmpty && stickers.isEmpty)) {
       if (feedback)
-        notice(context, 'Aggiungi un video prima di salvare la bozza.');
+        notice(context, 'Aggiungi un contenuto prima di salvare la bozza.');
       return;
     }
     if (savingDraft) {
@@ -1284,7 +1406,10 @@ class _ComposerState extends State<Composer> {
       final s = GpixScope.of(context, listen: false);
       await Drafts.save('${s.server}|${s.myId}', data);
       lastDraft = encoded;
-      if (feedback && mounted) notice(context, 'Bozza salvata');
+      if (feedback && mounted) {
+        notice(context, 'Bozza salvata');
+        if (close) Navigator.pop(context);
+      }
     } catch (e) {
       if (feedback && mounted) notice(context, 'Bozza non salvata: $e');
     } finally {
@@ -1335,7 +1460,12 @@ class _ComposerState extends State<Composer> {
     draftTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (mounted) saveDraft();
     });
-    cameraStage = kind == 'story' && !widget.editStory;
+    if (widget.initialMedia case final path?) files = [path];
+    cameraStage =
+        kind == 'story' &&
+        !widget.editStory &&
+        widget.initialDraft == null &&
+        files.isEmpty;
   }
 
   @override
@@ -1395,7 +1525,8 @@ class _ComposerState extends State<Composer> {
     });
   }
 
-  Future<void> publish({String? audience}) async {
+  Future<void> publish({String? audience, bool showSharing = false}) async {
+    if (busy) return;
     final selectedAudience =
         audience ?? (kind == 'reel' ? reelAudience : 'all');
     await saveDraft();
@@ -1449,6 +1580,10 @@ class _ComposerState extends State<Composer> {
       final overlayMedia = <String>[];
       final publishedStickers = <J>[];
       for (final sticker in stickers) {
+        if (sticker.str('type') == 'sharedPost' &&
+            !s.canSharePostOutsideChat(s.post(sticker.str('postId')))) {
+          throw Exception('Il contenuto condiviso non è più disponibile.');
+        }
         final mediaIds = <String>[];
         for (final reference in sticker.ids('files')) {
           final mime = reference.toLowerCase().endsWith('.gif')
@@ -1488,7 +1623,7 @@ class _ComposerState extends State<Composer> {
       }
       final stickerOnly =
           kind == 'story' && text.text.trim().isEmpty && stickers.isNotEmpty;
-      final previous = highlightAfterPublish
+      final previous = kind == 'story'
           ? s
                 .stories(s.myId, archive: true)
                 .map((story) => story.str('id'))
@@ -1509,12 +1644,19 @@ class _ComposerState extends State<Composer> {
         },
         'audience': selectedAudience,
       });
-      if (mounted && highlightAfterPublish) {
+      if (mounted && kind == 'story') {
         final created = s
             .stories(s.myId)
             .where((story) => !previous.contains(story.str('id')))
             .firstOrNull;
-        if (created != null) await addStoryHighlight(context, created);
+        if (created != null && highlightAfterPublish) {
+          await addStoryHighlight(context, created);
+        }
+        if (mounted &&
+            created != null &&
+            (showSharing || created.obj('style').flag('video'))) {
+          await storyPublished(created);
+        }
       }
       if (mounted) {
         unawaited(Drafts.delete('${s.server}|${s.myId}', draftId));
@@ -1531,6 +1673,9 @@ class _ComposerState extends State<Composer> {
   @override
   Widget build(BuildContext c) {
     if (kind == 'post') return PostComposer(initialFiles: files);
+    if (kind == 'reel' && Platform.isAndroid) {
+      return ReelEditor(draft: widget.initialDraft);
+    }
     final story = kind == 'story';
     if (story && cameraStage)
       return StoryCamera(
@@ -2030,6 +2175,155 @@ class _ComposerState extends State<Composer> {
     );
   }
 
+  bool get hasStory =>
+      files.isNotEmpty || text.text.trim().isNotEmpty || stickers.isNotEmpty;
+
+  Future<void> closeStory() async {
+    if (!hasStory) {
+      Navigator.pop(context);
+      return;
+    }
+    final action = await showCupertinoModalPopup<String>(
+      context: context,
+      builder: (menu) => CupertinoActionSheet(
+        title: const Text('Vuoi eliminare i contenuti multimediali?'),
+        actions: [
+          CupertinoActionSheetAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(menu, 'delete'),
+            child: const Text('Elimina'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(menu, 'draft'),
+            child: const Text('Salva bozza'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(menu),
+          child: const Text('Continua a modificare'),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (action == 'draft') await saveDraft(feedback: true, close: true);
+    if (action == 'delete') {
+      final store = GpixScope.of(context, listen: false);
+      await Drafts.delete('${store.server}|${store.myId}', draftId);
+      if (mounted) Navigator.pop(context);
+    }
+  }
+
+  Future<void> storyAudienceSheet() async {
+    final store = GpixScope.of(context, listen: false);
+    final choice = await sheet<String>(
+      context,
+      Builder(
+        builder: (menu) {
+          var audience = 'all';
+          return StatefulBuilder(
+            builder: (c, update) => Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Text(
+                    'Condividi',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+                  ),
+                ),
+                for (final option in ['all', 'close'])
+                  ListTile(
+                    leading: option == 'all'
+                        ? Avatar(store.myId, size: 38)
+                        : const CircleAvatar(
+                            backgroundColor: Color(0xff20bd59),
+                            child: Icon(
+                              CupertinoIcons.star_fill,
+                              color: Colors.white,
+                              size: 19,
+                            ),
+                          ),
+                    title: Text(
+                      option == 'all' ? 'La tua storia' : 'Amici più stretti',
+                    ),
+                    trailing: Icon(
+                      audience == option
+                          ? CupertinoIcons.largecircle_fill_circle
+                          : CupertinoIcons.circle,
+                    ),
+                    onTap: () => update(() => audience = option),
+                  ),
+                ListTile(
+                  leading: const Icon(CupertinoIcons.heart_circle),
+                  title: const Text('Aggiungi alle storie in evidenza'),
+                  trailing: Icon(
+                    highlightAfterPublish
+                        ? CupertinoIcons.check_mark_circled_solid
+                        : CupertinoIcons.circle,
+                  ),
+                  onTap: () => update(
+                    () => highlightAfterPublish = !highlightAfterPublish,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: PrimaryButton(
+                    'Condividi',
+                    onTap: () => Navigator.pop(menu, audience),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+    if (choice == null || !mounted) return;
+    if (choice == 'close' && store.state.ids('closeFriends').isEmpty) {
+      await friends();
+      if (!mounted || store.state.ids('closeFriends').isEmpty) return;
+    }
+    await publish(audience: choice, showSharing: true);
+  }
+
+  Future<void> storyPublished(J story) async {
+    await sheet(
+      context,
+      Builder(
+        builder: (menu) => Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: Text(
+                'Condividi anche su…',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(CupertinoIcons.paperplane),
+              title: const Text('Invia per messaggio'),
+              onTap: () => sharePost(menu, story),
+            ),
+            ListTile(
+              leading: const Icon(CupertinoIcons.heart_circle),
+              title: const Text('Aggiungi alle storie in evidenza'),
+              onTap: () => addStoryHighlight(menu, story),
+            ),
+            if (Platform.isAndroid && story.obj('style').flag('video'))
+              ListTile(
+                leading: const Icon(CupertinoIcons.play_rectangle),
+                title: const Text('Condividi come reel'),
+                onTap: () => open(menu, ReelEditor(story: story)),
+              ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: PrimaryButton('Fine', onTap: () => Navigator.pop(menu)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget storyEditor(BuildContext c) => Stack(
     fit: StackFit.expand,
     children: [
@@ -2043,6 +2337,7 @@ class _ComposerState extends State<Composer> {
             'style': style,
           },
           editing: true,
+          playing: ModalRoute.of(c)?.isCurrent ?? true,
           onStickerTap: (i) => setState(() => selectedSticker = i),
           onStickerMove: (i, d) => setState(() {
             stickers[i]['x'] = (stickers[i].number('x') + d.dx).clamp(0, 1);
@@ -2097,16 +2392,7 @@ class _ComposerState extends State<Composer> {
         top: MediaQuery.paddingOf(c).top + 10,
         left: 12,
         child: tool(CupertinoIcons.xmark, 'Annulla', () async {
-          if (await gpixAlert(
-                c,
-                'Scartare la storia?',
-                'Il contenuto non verrà pubblicato.',
-                confirm: 'Scarta',
-                cancel: true,
-                destructive: true,
-              ) &&
-              mounted)
-            Navigator.pop(c);
+          await closeStory();
         }),
       ),
       if (audio.isNotEmpty)
@@ -2278,28 +2564,31 @@ class _ComposerState extends State<Composer> {
                         size: 20,
                       ),
                     ),
-                    Expanded(
-                      child: Slider(
-                        value: stickers[selectedSticker].number('size', 52),
-                        min: 24,
-                        max: 100,
-                        onChanged: (v) => setState(
-                          () => stickers[selectedSticker]['size'] = v,
+                    if (stickers[selectedSticker].str('type') !=
+                        'sharedPost') ...[
+                      Expanded(
+                        child: Slider(
+                          value: stickers[selectedSticker].number('size', 52),
+                          min: 24,
+                          max: 100,
+                          onChanged: (v) => setState(
+                            () => stickers[selectedSticker]['size'] = v,
+                          ),
                         ),
                       ),
-                    ),
-                    IconButton(
-                      tooltip: 'Ruota sticker',
-                      onPressed: () => setState(
-                        () => stickers[selectedSticker]['angle'] =
-                            stickers[selectedSticker].number('angle') + .2,
+                      IconButton(
+                        tooltip: 'Ruota sticker',
+                        onPressed: () => setState(
+                          () => stickers[selectedSticker]['angle'] =
+                              stickers[selectedSticker].number('angle') + .2,
+                        ),
+                        icon: GIcon(
+                          CupertinoIcons.rotate_right,
+                          color: foreground(c),
+                          size: 20,
+                        ),
                       ),
-                      icon: GIcon(
-                        CupertinoIcons.rotate_right,
-                        color: foreground(c),
-                        size: 20,
-                      ),
-                    ),
+                    ],
                   ],
                 ),
               if (text.text.isNotEmpty) ...[
@@ -2422,12 +2711,12 @@ class _ComposerState extends State<Composer> {
                     const SizedBox(width: 8),
                     IconButton(
                       tooltip: 'Condividi',
-                      onPressed: busy ? null : () => publish(),
+                      onPressed: busy || !hasStory ? null : storyAudienceSheet,
                       style: IconButton.styleFrom(
                         backgroundColor: auraBlue,
                         padding: const EdgeInsets.all(16),
                       ),
-                      icon: busy
+                      icon: busy && (ModalRoute.of(c)?.isCurrent ?? true)
                           ? const SizedBox(
                               width: 20,
                               height: 20,

@@ -50,32 +50,48 @@ Future<void> openProfileLink(BuildContext c, J link) async {
 
 class ProfileLinkChips extends StatelessWidget {
   final List<J> links;
-  final bool own;
-  const ProfileLinkChips({super.key, required this.links, required this.own});
+  final bool own, compact;
+  const ProfileLinkChips({
+    super.key,
+    required this.links,
+    required this.own,
+    this.compact = false,
+  });
   @override
   Widget build(BuildContext c) {
     final visibleLinks = links.map(resolveSocialLink).toList();
-    Widget chip(Widget icon, String text, VoidCallback tap) => ActionChip(
+    Widget chip(
+      Widget icon,
+      String text,
+      VoidCallback tap, {
+      bool add = false,
+    }) => ActionChip(
       label: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(width: 18, height: 18, child: Center(child: icon)),
-          const SizedBox(width: 6),
+          SizedBox.square(
+            dimension: compact ? 14 : 18,
+            child: Center(child: icon),
+          ),
+          SizedBox(width: compact ? 4 : 6),
           Flexible(
             child: Text(
               text,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: foreground(c),
+                color: compact && add ? secondaryText(c) : foreground(c),
                 fontWeight: FontWeight.w600,
-                fontSize: 13,
+                fontSize: compact ? 11 : 13,
               ),
             ),
           ),
         ],
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 7 : 10,
+        vertical: compact ? 0 : 6,
+      ),
       labelPadding: EdgeInsets.zero,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       visualDensity: VisualDensity.compact,
@@ -96,7 +112,7 @@ class ProfileLinkChips extends StatelessWidget {
             child: chip(
               FaIcon(
                 socialIcon(link.str('type')),
-                size: 16,
+                size: compact ? 13 : 16,
                 color: foreground(c),
               ),
               link.str('title', link.str('value', link.str('url'))),
@@ -105,9 +121,14 @@ class ProfileLinkChips extends StatelessWidget {
           ),
         if (own && links.length < 5)
           chip(
-            const GIcon(CupertinoIcons.plus, size: 18),
+            GIcon(
+              CupertinoIcons.plus,
+              size: compact ? 15 : 18,
+              color: compact ? secondaryText(c) : foreground(c),
+            ),
             'Aggiungi',
             () => open(c, const ProfileLinks()),
+            add: true,
           ),
       ],
     );

@@ -31,7 +31,7 @@ class CreationStudio extends StatefulWidget {
 class _CreationStudioState extends State<CreationStudio> {
   late CreationMode mode = widget.initial;
   late final visited = {widget.initial};
-  bool publishingPost = false;
+  bool editingPost = false;
   bool hasInstantPhoto = false;
 
   void select(CreationMode next) {
@@ -49,7 +49,7 @@ class _CreationStudioState extends State<CreationStudio> {
     final showRail =
         MediaQuery.viewInsetsOf(context).bottom == 0 &&
         switch (mode) {
-          CreationMode.post => !publishingPost,
+          CreationMode.post => !editingPost,
           CreationMode.reel => true,
           CreationMode.instant => !hasInstantPhoto,
           _ => false,
@@ -65,8 +65,8 @@ class _CreationStudioState extends State<CreationStudio> {
               key: const ValueKey(CreationMode.post),
               active: mode == CreationMode.post,
               child: PostComposer(
-                onPublishStepChanged: (value) {
-                  setState(() => publishingPost = value);
+                onEditingChanged: (value) {
+                  setState(() => editingPost = value);
                 },
               ),
             ),
@@ -90,13 +90,21 @@ class _CreationStudioState extends State<CreationStudio> {
       bottomNavigationBar: showRail
           ? SafeArea(
               top: false,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  border: Border(
-                    top: BorderSide(color: Theme.of(context).dividerColor),
+              child: Theme(
+                data: mode == CreationMode.post
+                    ? gpixTheme(Brightness.dark)
+                    : Theme.of(context),
+                child: Builder(
+                  builder: (context) => DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: surface(context),
+                      border: Border(
+                        top: BorderSide(color: Theme.of(context).dividerColor),
+                      ),
+                    ),
+                    child: rail,
                   ),
                 ),
-                child: rail,
               ),
             )
           : null,

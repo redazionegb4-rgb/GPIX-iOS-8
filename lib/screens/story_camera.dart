@@ -9,6 +9,9 @@ import 'package:image/image.dart' as im;
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import '../ui/kit.dart';
+import '../core/store.dart';
+import 'social.dart';
+import 'community.dart';
 import '../ui/creation.dart';
 
 Future<String> storyComposite(
@@ -93,13 +96,26 @@ class _StoryCameraState extends State<StoryCamera> with WidgetsBindingObserver {
       audio = true,
       hold = false,
       recording = false,
-      moreTools = false;
+      moreTools = true;
+  bool frontDefault = false, toolsOnRight = false;
+  bool settingsLoaded = false;
+  bool applyPreferredLens = true;
   Timer? timer;
   final captures = <String>[];
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (settingsLoaded) return;
+    settingsLoaded = true;
+    final prefs = GpixScope.of(context, listen: false).prefs;
+    frontDefault = prefs?.getBool('gpix.camera.frontDefault') ?? false;
+    toolsOnRight = prefs?.getBool('gpix.camera.toolsOnRight') ?? false;
     initialize();
   }
 
@@ -108,7 +124,19 @@ class _StoryCameraState extends State<StoryCamera> with WidgetsBindingObserver {
     try {
       cameras = await availableCameras();
       if (cameras.isEmpty) throw Exception('Nessuna fotocamera disponibile.');
+      if (!mounted || request != generation) return;
+      if (applyPreferredLens) {
+        final preferred = frontDefault
+            ? CameraLensDirection.front
+            : CameraLensDirection.back;
+        final index = cameras.indexWhere(
+          (camera) => camera.lensDirection == preferred,
+        );
+        lens = index < 0 ? 0 : index;
+        applyPreferredLens = false;
+      }
       await controller?.dispose();
+      if (!mounted || request != generation) return;
       final next = CameraController(
         cameras[lens % cameras.length],
         ResolutionPreset.high,
@@ -367,40 +395,9 @@ class _StoryCameraState extends State<StoryCamera> with WidgetsBindingObserver {
                           ),
                           MediaToolButton(
                             label: 'Impostazioni fotocamera',
-                            onPressed: () => sheet(
-                              c,
-                              StatefulBuilder(
-                                builder: (c, update) => Column(
-                                  children: [
-                                    const Text(
-                                      'Fotocamera',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 18,
-                                      ),
-                                    ),
-                                    SwitchListTile(
-                                      title: const Text('Griglia'),
-                                      value: grid,
-                                      onChanged: (v) {
-                                        setState(() => grid = v);
-                                        update(() {});
-                                      },
-                                    ),
-                                    SwitchListTile(
-                                      title: const Text('Audio nei video'),
-                                      value: audio,
-                                      onChanged: (v) {
-                                        setState(() => audio = v);
-                                        update(() {});
-                                        initialize();
-                                      },
-                                    ),
-                                    const SizedBox(height: 20),
-                                  ],
-                                ),
-                              ),
-                            ),
+                            onPressed: busy || recording
+                                ? null
+                                : cameraSettings,
                             icon: CupertinoIcons.gear_alt,
                           ),
                         ],
@@ -408,7 +405,8 @@ class _StoryCameraState extends State<StoryCamera> with WidgetsBindingObserver {
                     ),
                     if (controller?.value.isInitialized == true)
                       Positioned(
-                        left: 16,
+                        left: toolsOnRight ? null : 16,
+                        right: toolsOnRight ? 16 : null,
                         top: MediaQuery.sizeOf(c).height * .26,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -648,6 +646,99 @@ class _StoryCameraState extends State<StoryCamera> with WidgetsBindingObserver {
       ),
     ),
   );
+  Future<void> cameraSettings() async {
+    final prefs = GpixScope.of(context, listen: false).prefs;
+    await sheet(
+      context,
+      StatefulBuilder(
+        builder: (c, update) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ListTile(
+              title: const Text(
+                'Impostazioni della fotocamera',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              trailing: IconButton(
+                onPressed: () => Navigator.pop(c),
+                tooltip: 'Fine',
+                icon: const Icon(
+                  CupertinoIcons.check_mark_circled_solid,
+                  color: auraBlue,
+                  size: 30,
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(CupertinoIcons.camera),
+              title: const Text('Storia'),
+              trailing: const Icon(CupertinoIcons.chevron_right),
+              onTap: () => sheet(
+                c,
+                Column(
+                  children: [
+                    const MessageAudienceSetting(story: true),
+                    ListTile(
+                      leading: const Icon(CupertinoIcons.star_circle),
+                      title: const Text('Amici più stretti'),
+                      trailing: const Icon(CupertinoIcons.chevron_right),
+                      onTap: () => open(c, const CloseFriends()),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const Divider(),
+            SwitchListTile(
+              title: const Text(
+                'Imposta la fotocamera anteriore come predefinita',
+              ),
+              value: frontDefault,
+              onChanged: (value) {
+                setState(() => frontDefault = value);
+                update(() {});
+                prefs?.setBool('gpix.camera.frontDefault', value);
+              },
+            ),
+            ListTile(
+              title: const Text('Posizione degli strumenti'),
+              trailing: SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: false, label: Text('A sinistra')),
+                  ButtonSegment(value: true, label: Text('A destra')),
+                ],
+                selected: {toolsOnRight},
+                showSelectedIcon: false,
+                onSelectionChanged: (values) {
+                  setState(() => toolsOnRight = values.single);
+                  update(() {});
+                  prefs?.setBool('gpix.camera.toolsOnRight', toolsOnRight);
+                },
+              ),
+            ),
+            SwitchListTile(
+              title: const Text('Griglia'),
+              value: grid,
+              onChanged: (value) {
+                setState(() => grid = value);
+                update(() {});
+              },
+            ),
+            SwitchListTile(
+              title: const Text('Audio nei video'),
+              value: audio,
+              onChanged: (value) {
+                setState(() => audio = value);
+                update(() {});
+                initialize();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget tool(IconData icon, String label, VoidCallback tap) => InkWell(
     onTap: tap,
     child: Padding(

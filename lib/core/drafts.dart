@@ -38,18 +38,23 @@ class Drafts {
     final dir = Directory('${(await root(account)).path}/${value.str('id')}');
     await dir.create(recursive: true);
     final files = <String>[];
-    for (var i = 0; i < value.ids('files').length; i++) {
-      final src = File(value.ids('files')[i]);
+    final photoFields = {
+      for (final key in ['photoCrops', 'photoTags'])
+        if (value.containsKey(key)) key: value.obj(key),
+    };
+    final sources = <String, String>{};
+    for (final (i, path) in value.ids('files').indexed) {
+      final src = File(path);
       if (!await src.exists()) continue;
-      if (src.path.startsWith('${dir.path}/')) {
-        files.add(src.path);
-        continue;
+      var target = path;
+      if (!path.startsWith('${dir.path}/')) {
+        final ext = path.split('.').last.toLowerCase();
+        target =
+            '${dir.path}/media-$i-${path.hashCode}.${RegExp(r'^[a-z0-9]{1,6}$').hasMatch(ext) ? ext : 'bin'}';
+        if (!await File(target).exists()) await src.copy(target);
       }
-      final ext = src.path.split('.').last.toLowerCase();
-      final target =
-          '${dir.path}/media-$i-${src.path.hashCode}.${RegExp(r'^[a-z0-9]{1,6}$').hasMatch(ext) ? ext : 'bin'}';
-      if (!await File(target).exists()) await src.copy(target);
       files.add(target);
+      sources[target] = path;
     }
     var assetIndex = 0;
     Future<dynamic> preserve(dynamic node) async {
@@ -73,6 +78,12 @@ class Drafts {
     final next = <String, dynamic>{
       ...Map<String, dynamic>.from(metadata),
       'files': files,
+      for (final field in photoFields.entries)
+        field.key: {
+          for (final entry in sources.entries)
+            if (field.value.containsKey(entry.value))
+              entry.key: field.value[entry.value],
+        },
       'updated': DateTime.now().millisecondsSinceEpoch,
     };
     final temp = File('${dir.path}/draft.tmp');

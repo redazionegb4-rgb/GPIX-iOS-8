@@ -54,5 +54,6 @@ flutter {
 }
 
 dependencies { implementation("androidx.exifinterface:exifinterface:1.4.2") }
+dependencies { implementation("androidx.media3:media3-transformer:1.9.2") }
 
 if (file("google-services.json").exists()) { apply(plugin = "com.google.gms.google-services") }

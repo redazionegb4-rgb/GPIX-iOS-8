@@ -9,7 +9,8 @@ import 'social.dart' show people;
 
 class PostExtras extends StatelessWidget {
   final J post;
-  const PostExtras({super.key, required this.post});
+  final bool showAudio;
+  const PostExtras({super.key, required this.post, this.showAudio = true});
   @override
   Widget build(BuildContext c) {
     final style = post.obj('style'),
@@ -45,7 +46,7 @@ class PostExtras extends StatelessWidget {
                 ),
               ),
             ),
-          if (style.str('audio').isNotEmpty)
+          if (showAudio && style.str('audio').isNotEmpty)
             PostAudio(
               reference: style.str('audio'),
               title: style.str('audioName', 'Audio originale'),
@@ -147,12 +148,14 @@ class PostExtras extends StatelessWidget {
 class PostAudio extends StatefulWidget {
   final String reference, title;
   final double start, duration;
+  final bool compact;
   const PostAudio({
     super.key,
     required this.reference,
     required this.title,
     this.start = 0,
     this.duration = 0,
+    this.compact = false,
   });
   @override
   State<PostAudio> createState() => _PostAudioState();
@@ -220,26 +223,47 @@ class _PostAudioState extends State<PostAudio> with WidgetsBindingObserver {
   }
 
   @override
-  Widget build(BuildContext c) => ListTile(
-    dense: true,
-    contentPadding: EdgeInsets.zero,
-    leading: IconButton(
-      tooltip: playing ? 'Pausa audio' : 'Ascolta audio',
-      onPressed: toggle,
-      icon: GIcon(
-        playing ? CupertinoIcons.pause_fill : CupertinoIcons.play_fill,
-        size: 18,
-      ),
-    ),
-    title: Text(
-      widget.title,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-    ),
-    subtitle: const Text(
-      'Audio del post',
-      style: TextStyle(color: muted, fontSize: 10),
-    ),
-  );
+  Widget build(BuildContext c) => widget.compact
+      ? InkWell(
+          onTap: toggle,
+          child: Row(
+            children: [
+              GIcon(
+                playing ? CupertinoIcons.pause_fill : CupertinoIcons.music_note,
+                size: 13,
+              ),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  widget.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11),
+                ),
+              ),
+            ],
+          ),
+        )
+      : ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          leading: IconButton(
+            tooltip: playing ? 'Pausa audio' : 'Ascolta audio',
+            onPressed: toggle,
+            icon: GIcon(
+              playing ? CupertinoIcons.pause_fill : CupertinoIcons.play_fill,
+              size: 18,
+            ),
+          ),
+          title: Text(
+            widget.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+          subtitle: const Text(
+            'Audio del post',
+            style: TextStyle(color: muted, fontSize: 10),
+          ),
+        );
 }
