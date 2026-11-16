@@ -10,10 +10,8 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:path_provider/path_provider.dart';
 import '../core/data.dart';
-import '../core/avatar_style.dart';
 import '../core/store.dart';
 import '../ui/kit.dart';
-import '../ui/avatar_preview.dart';
 import 'stories.dart';
 import 'reel_editor.dart';
 import 'features13.dart';
@@ -24,11 +22,9 @@ import 'video.dart';
 import 'live.dart';
 import 'community.dart';
 import 'notes.dart';
-import 'creation_studio.dart';
 import 'giphy.dart';
 import '../rebuild/surfaces.dart' show DiscoverHome, ProfileHome, TimelinePost;
 import 'moments.dart';
-import 'profile_avatar.dart';
 
 class StoryTray extends StatefulWidget {
   const StoryTray({super.key});
@@ -2766,70 +2762,29 @@ class _EditProfileState extends State<EditProfile> {
     }
   });
 
-  Future<void> changePhoto(GpixStore store, {bool avatarTab = false}) async {
+  Future<void> changePhoto(GpixStore store) async {
     FocusManager.instance.primaryFocus?.unfocus();
-    final model = store.avatarModel;
     final choice = await sheet<_ProfileImageAction>(
       context,
-      _ProfileImageSheet(
-        user: store.myId,
-        photo: previewPhoto(store),
-        model: model,
-        avatarTab: avatarTab,
-      ),
-      scroll: false,
+      _ProfileImageSheet(user: store.myId, photo: previewPhoto(store)),
     );
     if (choice == null || !mounted) return;
-    switch (choice) {
-      case _ProfileImageAction.editAvatar:
-        await open<bool>(context, const ProfileAvatarEditor());
-      case _ProfileImageAction.removeAvatar:
-        if (await gpixAlert(
-              context,
-              'Rimuovere l’avatar?',
-              'Potrai crearne uno nuovo da Modifica profilo.',
-              confirm: 'Rimuovi',
-              cancel: true,
-              destructive: true,
-            ) &&
-            mounted) {
-          await perform(context, () => store.saveAvatarModel(const {}));
-        }
-      case _ProfileImageAction.removePhoto:
-        setState(() => avatar = '');
-      case _ProfileImageAction.useAvatar:
-        await changeImage(store, () async {
-          final directory = await (await getTemporaryDirectory()).createTemp(
-            'gpix-avatar-',
-          );
-          try {
-            final photo = File('${directory.path}/avatar.png');
-            final image = await AvatarPreview.profilePhoto(
-              AvatarStyle.fromJson(model),
-            );
-            await photo.writeAsBytes(image);
-            return await store.upload(photo.path, 'image/png');
-          } finally {
-            await directory.delete(recursive: true);
-          }
-        });
-      case _ProfileImageAction.gallery:
-      case _ProfileImageAction.camera:
-        await changeImage(store, () async {
-          final file = await ImagePicker().pickImage(
-            source: choice == _ProfileImageAction.camera
-                ? ImageSource.camera
-                : ImageSource.gallery,
-            maxWidth: 800,
-            imageQuality: 85,
-          );
-          if (!mounted || file == null) return null;
-          final type = file.path.toLowerCase().endsWith('.png')
-              ? 'png'
-              : 'jpeg';
-          return store.upload(file.path, 'image/$type');
-        });
+    if (choice == _ProfileImageAction.removePhoto) {
+      setState(() => avatar = '');
+      return;
     }
+    await changeImage(store, () async {
+      final file = await ImagePicker().pickImage(
+        source: choice == _ProfileImageAction.camera
+            ? ImageSource.camera
+            : ImageSource.gallery,
+        maxWidth: 800,
+        imageQuality: 85,
+      );
+      if (!mounted || file == null) return null;
+      final type = file.path.toLowerCase().endsWith('.png') ? 'png' : 'jpeg';
+      return store.upload(file.path, 'image/$type');
+    });
   }
 
   Future<void> changeImage(
@@ -2870,7 +2825,6 @@ class _EditProfileState extends State<EditProfile> {
   @override
   Widget build(BuildContext c) {
     final s = GpixScope.of(c);
-    final model = s.avatarModel;
     final links = s.me.rows('links');
     return Scaffold(
       appBar: AppBar(
@@ -2892,24 +2846,12 @@ class _EditProfileState extends State<EditProfile> {
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         children: [
           const SizedBox(height: 17),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              InkWell(
-                onTap: busy ? null : () => changePhoto(s),
-                customBorder: const CircleBorder(),
-                child: Avatar(s.myId, size: 80, image: previewPhoto(s)),
-              ),
-              const SizedBox(width: 17),
-              Tooltip(
-                message: model.isEmpty ? 'Crea avatar' : 'Modifica avatar',
-                child: InkWell(
-                  onTap: busy ? null : () => changePhoto(s, avatarTab: true),
-                  customBorder: const CircleBorder(),
-                  child: _ProfileAvatarPortrait(model: model, size: 80),
-                ),
-              ),
-            ],
+          Center(
+            child: InkWell(
+              onTap: busy ? null : () => changePhoto(s),
+              customBorder: const CircleBorder(),
+              child: Avatar(s.myId, size: 80, image: previewPhoto(s)),
+            ),
           ),
           Center(
             child: TextButton(
@@ -2923,7 +2865,7 @@ class _EditProfileState extends State<EditProfile> {
                 ),
               ),
               onPressed: busy ? null : () => changePhoto(s),
-              child: const Text('Modifica immagine o avatar'),
+              child: const Text('Modifica immagine del profilo'),
             ),
           ),
           const Divider(height: 1),
@@ -3075,161 +3017,46 @@ class _EditProfileState extends State<EditProfile> {
   }
 }
 
-enum _ProfileImageAction {
-  gallery,
-  camera,
-  removePhoto,
-  editAvatar,
-  useAvatar,
-  removeAvatar,
-}
-
-class _ProfileAvatarPortrait extends StatelessWidget {
-  const _ProfileAvatarPortrait({required this.model, required this.size});
-
-  final J model;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: size,
-    height: size,
-    decoration: BoxDecoration(
-      shape: BoxShape.circle,
-      border: Border.all(color: Theme.of(context).dividerColor),
-    ),
-    child: model.isEmpty
-        ? const Center(
-            child: GIcon(CupertinoIcons.person_crop_circle, size: 25),
-          )
-        : ClipOval(
-            child: AvatarPreview(
-              style: AvatarStyle.fromJson(model),
-              detail: false,
-            ),
-          ),
-  );
-}
+enum _ProfileImageAction { gallery, camera, removePhoto }
 
 class _ProfileImageSheet extends StatelessWidget {
-  const _ProfileImageSheet({
-    required this.user,
-    required this.photo,
-    required this.model,
-    required this.avatarTab,
-  });
+  const _ProfileImageSheet({required this.user, required this.photo});
 
   final String user, photo;
-  final J model;
-  final bool avatarTab;
 
   @override
   Widget build(BuildContext context) {
     void choose(_ProfileImageAction action) => Navigator.pop(context, action);
-    return DefaultTabController(
-      length: 2,
-      initialIndex: avatarTab ? 1 : 0,
-      child: SizedBox(
-        height: 315,
-        child: Column(
-          children: [
-            TabBar(
-              labelColor: foreground(context),
-              indicatorColor: foreground(context),
-              indicatorSize: TabBarIndicatorSize.label,
-              tabs: [
-                Tooltip(
-                  message: 'Foto del profilo',
-                  child: SizedBox(
-                    height: 50,
-                    width: 76,
-                    child: Center(child: Avatar(user, size: 42, image: photo)),
-                  ),
-                ),
-                Tooltip(
-                  message: 'Avatar',
-                  child: SizedBox(
-                    height: 50,
-                    width: 76,
-                    child: Center(
-                      child: _ProfileAvatarPortrait(model: model, size: 42),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            Expanded(
-              child: TabBarView(
-                children: [
-                  ListView(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    children: [
-                      ActionRow(
-                        CupertinoIcons.photo,
-                        'Scegli dalla libreria',
-                        () => choose(_ProfileImageAction.gallery),
-                      ),
-                      ActionRow(
-                        CupertinoIcons.camera,
-                        'Scatta foto',
-                        () => choose(_ProfileImageAction.camera),
-                      ),
-                      if (photo.isNotEmpty)
-                        ActionRow(
-                          CupertinoIcons.trash,
-                          'Rimuovi immagine attuale',
-                          () => choose(_ProfileImageAction.removePhoto),
-                          destructive: true,
-                        ),
-                    ],
-                  ),
-                  ListView(
-                    padding: const EdgeInsets.fromLTRB(0, 12, 0, 12),
-                    children: [
-                      if (model.isNotEmpty) ...[
-                        ActionRow(
-                          CupertinoIcons.pencil,
-                          'Modifica avatar',
-                          () => choose(_ProfileImageAction.editAvatar),
-                        ),
-                        ActionRow(
-                          CupertinoIcons.photo,
-                          'Usa come immagine del profilo',
-                          () => choose(_ProfileImageAction.useAvatar),
-                        ),
-                        ActionRow(
-                          CupertinoIcons.trash,
-                          'Rimuovi avatar',
-                          () => choose(_ProfileImageAction.removeAvatar),
-                          destructive: true,
-                        ),
-                      ] else ...[
-                        const SizedBox(height: 15),
-                        const Center(
-                          child: _ProfileAvatarPortrait(model: {}, size: 60),
-                        ),
-                        const SizedBox(height: 13),
-                        const Text(
-                          'Crea il tuo avatar',
-                          textAlign: TextAlign.center,
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
-                          child: FilledButton(
-                            onPressed: () =>
-                                choose(_ProfileImageAction.editAvatar),
-                            child: const Text('Crea avatar'),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Center(child: Avatar(user, size: 54, image: photo)),
+        const SizedBox(height: 9),
+        const Center(
+          child: Text(
+            'Immagine del profilo',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+          ),
         ),
-      ),
+        const SizedBox(height: 9),
+        ActionRow(
+          CupertinoIcons.photo,
+          'Scegli dalla libreria',
+          () => choose(_ProfileImageAction.gallery),
+        ),
+        ActionRow(
+          CupertinoIcons.camera,
+          'Scatta foto',
+          () => choose(_ProfileImageAction.camera),
+        ),
+        if (photo.isNotEmpty)
+          ActionRow(
+            CupertinoIcons.trash,
+            'Rimuovi immagine attuale',
+            () => choose(_ProfileImageAction.removePhoto),
+            destructive: true,
+          ),
+      ],
     );
   }
 }
@@ -5893,73 +5720,6 @@ class _AccountSettings extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-Future<void> createMenu(BuildContext c) async {
-  final selected = await sheet<String>(
-    c,
-    Builder(
-      builder: (menu) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: Column(
-            children: [
-              Text('Crea', style: Theme.of(menu).textTheme.titleLarge),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                alignment: WrapAlignment.center,
-                children: [
-                  for (final mode in CreationMode.values)
-                    TextButton.icon(
-                      style: TextButton.styleFrom(
-                        backgroundColor: subdued(menu),
-                        foregroundColor: foreground(menu),
-                      ),
-                      icon: GIcon(mode.icon, size: 21),
-                      label: Text(mode.label),
-                      onPressed: () => Navigator.pop(menu, mode.name),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              const Divider(height: 1),
-              ActionRow(
-                CupertinoIcons.person_2,
-                'Momento',
-                () => Navigator.pop(menu, 'moment'),
-              ),
-              ActionRow(
-                CupertinoIcons.person_3,
-                'Gruppo',
-                () => Navigator.pop(menu, 'group'),
-              ),
-              ActionRow(
-                CupertinoIcons.doc_text,
-                'Bozze',
-                () => Navigator.pop(menu, 'drafts'),
-              ),
-            ],
-          ),
-        );
-      },
-    ),
-  );
-  if (selected == null || !c.mounted) return;
-  switch (selected) {
-    case 'drafts':
-      await open(c, const DraftList());
-    case 'group':
-      await composeCommunity(c, 'communityGroup');
-    case 'moment':
-      await composeCommunity(c, 'communityMoment');
-    default:
-      await open(
-        c,
-        CreationStudio(initial: CreationMode.values.byName(selected)),
-      );
   }
 }
 

@@ -107,7 +107,11 @@ class _SocialShellState extends State<SocialShell> {
     final compactDock = _compact;
     final profile = _selected == 4;
     final covered = reel && _reelCoverAccount == store.myId;
-    final dockBottom = reel ? reelDockBottom(inset) : inset + 8;
+    final dockBottom = reel
+        ? reelDockBottom(inset)
+        : profile
+        ? (inset > 28 ? inset - 12 : (inset + 3).clamp(12.0, 28.0))
+        : inset + 8;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
       child: AccountSheetBackdrop(
@@ -202,10 +206,25 @@ class _SocialShellState extends State<SocialShell> {
                             : profile
                             ? (compactDock ? 50 : 59)
                             : (compactDock ? 45 : 57),
+                        decoration: profile && !dark
+                            ? BoxDecoration(
+                                borderRadius: BorderRadius.circular(40),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Color(0x24262633),
+                                    blurRadius: 21,
+                                    offset: Offset(0, 7),
+                                  ),
+                                ],
+                              )
+                            : null,
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(40),
                           child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                            filter: ImageFilter.blur(
+                              sigmaX: profile ? 15 : 20,
+                              sigmaY: profile ? 15 : 20,
+                            ),
                             child: DecoratedBox(
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(40),
@@ -213,83 +232,127 @@ class _SocialShellState extends State<SocialShell> {
                                     ? const Color(0xad202024)
                                     : dark
                                     ? const Color(0xc9232327)
+                                    : profile
+                                    ? const Color(0xc9ffffff)
                                     : const Color(0xe9ffffff),
                                 border: Border.all(
-                                  color: ink.withValues(
-                                    alpha: reel ? .25 : .12,
-                                  ),
+                                  color: profile && !dark
+                                      ? const Color(0xeaffffff)
+                                      : ink.withValues(alpha: reel ? .25 : .12),
                                 ),
                               ),
                               child: Material(
                                 color: Colors.transparent,
-                                child: Row(
-                                  children: [
-                                    for (
-                                      var index = 0;
-                                      index < _labels.length;
-                                      index++
-                                    )
-                                      Expanded(
-                                        child: Semantics(
-                                          selected: _selected == index,
-                                          button: true,
-                                          child: Tooltip(
-                                            message: _labels[index],
-                                            child: InkWell(
-                                              customBorder:
-                                                  const StadiumBorder(),
-                                              onTap: () => _openTab(index),
-                                              child: AnimatedContainer(
-                                                duration: duration,
-                                                curve: Curves.easeOutCubic,
-                                                margin: const EdgeInsets.all(4),
-                                                alignment: Alignment.center,
-                                                decoration: BoxDecoration(
-                                                  color: ink.withValues(
-                                                    alpha: _selected == index
-                                                        ? (reel ? .16 : .09)
-                                                        : 0,
-                                                  ),
-                                                  borderRadius:
-                                                      BorderRadius.circular(40),
-                                                ),
-                                                child: AnimatedScale(
-                                                  scale: _selected == index
-                                                      ? 1.12
-                                                      : 1,
+                                child: Padding(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: profile ? 10 : 0,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      for (
+                                        var index = 0;
+                                        index < _labels.length;
+                                        index++
+                                      )
+                                        Expanded(
+                                          child: Semantics(
+                                            selected: _selected == index,
+                                            button: true,
+                                            child: Tooltip(
+                                              message: _labels[index],
+                                              child: InkWell(
+                                                customBorder:
+                                                    const StadiumBorder(),
+                                                onTap: () => _openTab(index),
+                                                child: AnimatedContainer(
                                                   duration: duration,
-                                                  child: Badge(
-                                                    backgroundColor:
-                                                        const Color(0xffff0035),
-                                                    alignment:
-                                                        Alignment.bottomRight,
-                                                    offset: const Offset(2, 2),
-                                                    isLabelVisible:
-                                                        index == 2 &&
-                                                        store.inboxThreads.any(
-                                                          store.chatHasUnread,
+                                                  curve: Curves.easeOutCubic,
+                                                  margin: profile
+                                                      ? const EdgeInsets.symmetric(
+                                                          vertical: 5,
+                                                        )
+                                                      : const EdgeInsets.all(4),
+                                                  alignment: Alignment.center,
+                                                  decoration: BoxDecoration(
+                                                    color: ink.withValues(
+                                                      alpha: _selected == index
+                                                          ? (reel ? .16 : .09)
+                                                          : 0,
+                                                    ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          40,
                                                         ),
-                                                    child: index == 4
-                                                        ? Avatar(
-                                                            store.myId,
-                                                            size: 24,
-                                                          )
-                                                        : GIcon(
-                                                            _selected == index
-                                                                ? _selectedIcons[index]
-                                                                : _icons[index],
-                                                            color: ink,
-                                                            size: 25,
-                                                            dock: true,
+                                                  ),
+                                                  child: AnimatedScale(
+                                                    scale:
+                                                        _selected == index &&
+                                                            !profile
+                                                        ? 1.12
+                                                        : 1,
+                                                    duration: duration,
+                                                    child: Badge(
+                                                      backgroundColor:
+                                                          const Color(
+                                                            0xffff0035,
                                                           ),
+                                                      alignment:
+                                                          Alignment.bottomRight,
+                                                      offset: const Offset(
+                                                        2,
+                                                        2,
+                                                      ),
+                                                      isLabelVisible:
+                                                          index == 2 &&
+                                                          store.inboxThreads.any(
+                                                            store.chatHasUnread,
+                                                          ),
+                                                      child: index == 4
+                                                          ? profile
+                                                                ? Container(
+                                                                    width: 25,
+                                                                    height: 25,
+                                                                    padding:
+                                                                        const EdgeInsets.all(
+                                                                          1,
+                                                                        ),
+                                                                    decoration: BoxDecoration(
+                                                                      shape: BoxShape
+                                                                          .circle,
+                                                                      border: Border.all(
+                                                                        color:
+                                                                            ink,
+                                                                        width:
+                                                                            1,
+                                                                      ),
+                                                                    ),
+                                                                    child: Avatar(
+                                                                      store
+                                                                          .myId,
+                                                                      size: 22,
+                                                                    ),
+                                                                  )
+                                                                : Avatar(
+                                                                    store.myId,
+                                                                    size: 24,
+                                                                  )
+                                                          : GIcon(
+                                                              _selected == index
+                                                                  ? _selectedIcons[index]
+                                                                  : _icons[index],
+                                                              color: ink,
+                                                              size: 25,
+                                                              dock: true,
+                                                            ),
+                                                    ),
                                                   ),
                                                 ),
                                               ),
                                             ),
                                           ),
                                         ),
-                                      ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),

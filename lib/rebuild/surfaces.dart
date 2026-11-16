@@ -2,11 +2,13 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../core/data.dart';
 import '../core/store.dart';
 import '../screens/community.dart';
+import '../screens/creation_studio.dart';
 import '../screens/notes.dart';
 import '../screens/instants.dart';
 import '../screens/inbox_widgets.dart';
@@ -274,7 +276,7 @@ class _HomeActivityAnchorState extends State<_HomeActivityAnchor> {
         showWhenUnlinked: false,
         targetAnchor: Alignment.bottomCenter,
         followerAnchor: Alignment.topCenter,
-        offset: const Offset(0, -3),
+        offset: const Offset(0, 2),
         child: _HomeActivityBadge(
           key: const ValueKey('activity-bubble'),
           count: widget.count,
@@ -2337,7 +2339,7 @@ class _ProfileHomeState extends State<ProfileHome>
       99.0,
     );
     final noteOffset = hasNote
-        ? 16.0 +
+        ? 12.0 +
               (MediaQuery.textScalerOf(context).scale(12) - 12).clamp(
                     0.0,
                     40.0,
@@ -2348,62 +2350,54 @@ class _ProfileHomeState extends State<ProfileHome>
     final website = person.str('website');
     final page = Scaffold(
       backgroundColor: surface(context),
-      appBar: AppBar(
-        backgroundColor: surface(context),
-        foregroundColor: _profileInk(context),
-        centerTitle: true,
-        toolbarHeight: 55,
-        leadingWidth: 72,
-        title: own
-            ? _AccountTitle(
-                store: store,
-                locked: person.flag('private'),
-                profile: true,
-              )
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (person.flag('private')) ...[
-                    const GIcon(CupertinoIcons.lock, size: 14),
-                    const SizedBox(width: 5),
-                  ],
-                  Flexible(
-                    child: Text(
-                      person.str('username'),
-                      overflow: TextOverflow.ellipsis,
+      appBar: own && !widget.detail
+          ? _OwnProfileToolbar(store: store, person: person)
+          : AppBar(
+              backgroundColor: surface(context),
+              foregroundColor: _profileInk(context),
+              centerTitle: true,
+              toolbarHeight: 60,
+              title: own
+                  ? _AccountTitle(
+                      store: store,
+                      locked: person.flag('private'),
+                      profile: true,
+                    )
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (person.flag('private')) ...[
+                          const _ProfileGlyph(_ProfileSymbol.lock, size: 15),
+                          const SizedBox(width: 5),
+                        ],
+                        Flexible(
+                          child: Text(
+                            person.str('username'),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
+              actions: [
+                if (own)
+                  IconButton(
+                    tooltip: 'Impostazioni e attività',
+                    icon: const _ProfileGlyph(_ProfileSymbol.menu),
+                    onPressed: () => open(context, const Settings()),
+                  )
+                else
+                  IconButton(
+                    tooltip: 'Opzioni profilo',
+                    icon: const GIcon(CupertinoIcons.ellipsis),
+                    onPressed: () => profileOptions(store, person),
                   ),
-                ],
-              ),
-        leading: own && !widget.detail
-            ? IconButton(
-                tooltip: 'Crea',
-                icon: const GIcon(CupertinoIcons.plus, size: 26),
-                onPressed: () => createMenu(context),
-              )
-            : null,
-        actions: [
-          if (own) ...[
-            IconButton(
-              tooltip: 'Impostazioni e attività',
-              icon: const GIcon(CupertinoIcons.line_horizontal_3, size: 27),
-              onPressed: () => open(context, const Settings()),
+              ],
             ),
-            const SizedBox(width: 14),
-          ],
-          if (!own)
-            IconButton(
-              tooltip: 'Opzioni profilo',
-              icon: const Icon(CupertinoIcons.ellipsis),
-              onPressed: () => profileOptions(store, person),
-            ),
-        ],
-      ),
       body: NestedScrollView(
         key: PageStorageKey('rebuilt-profile-${widget.user}'),
         headerSliverBuilder: (context, _) => [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 2, 16, 0),
+            padding: const EdgeInsets.fromLTRB(16, 1, 16, 0),
             sliver: SliverToBoxAdapter(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2419,7 +2413,7 @@ class _ProfileHomeState extends State<ProfileHome>
                           alignment: Alignment.bottomCenter,
                           children: [
                             Positioned(
-                              left: -5,
+                              left: -7,
                               bottom: 0,
                               child: InkWell(
                                 customBorder: const CircleBorder(),
@@ -2437,6 +2431,17 @@ class _ProfileHomeState extends State<ProfileHome>
                                   size:
                                       portraitSize - (activeStories ? 10.2 : 0),
                                   ring: activeStories,
+                                  ringGradient: const SweepGradient(
+                                    colors: [
+                                      Color(0xfffd2894),
+                                      Color(0xfff9461b),
+                                      Color(0xffffc300),
+                                      Color(0xfff76b18),
+                                      Color(0xffe9008a),
+                                      Color(0xfffd2894),
+                                    ],
+                                    stops: [0, .14, .34, .56, .79, 1],
+                                  ),
                                   viewed:
                                       !own &&
                                       !store.hasUnseenStories(widget.user),
@@ -2447,7 +2452,7 @@ class _ProfileHomeState extends State<ProfileHome>
                               Positioned(
                                 top: 0,
                                 left: 1,
-                                right: 11,
+                                right: 19,
                                 child: Tooltip(
                                   message: own
                                       ? 'La tua nota'
@@ -2469,8 +2474,8 @@ class _ProfileHomeState extends State<ProfileHome>
                               ),
                             if (own)
                               Positioned(
-                                right: -1,
-                                bottom: 4,
+                                right: 10,
+                                bottom: 7,
                                 child: Tooltip(
                                   message: 'Aggiungi alla storia',
                                   child: InkWell(
@@ -2480,19 +2485,19 @@ class _ProfileHomeState extends State<ProfileHome>
                                     ),
                                     customBorder: const CircleBorder(),
                                     child: Container(
-                                      width: 29,
-                                      height: 29,
+                                      width: 27,
+                                      height: 27,
                                       decoration: BoxDecoration(
                                         color: foreground(context),
                                         shape: BoxShape.circle,
                                         border: Border.all(
                                           color: surface(context),
-                                          width: 2.6,
+                                          width: 2.5,
                                         ),
                                       ),
-                                      child: GIcon(
-                                        CupertinoIcons.plus,
-                                        size: 17,
+                                      child: _ProfileGlyph(
+                                        _ProfileSymbol.plus,
+                                        size: 15,
                                         color: surface(context),
                                       ),
                                     ),
@@ -2502,10 +2507,10 @@ class _ProfileHomeState extends State<ProfileHome>
                           ],
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 9),
                       Expanded(
                         child: Padding(
-                          padding: const EdgeInsets.only(bottom: 31),
+                          padding: const EdgeInsets.only(bottom: 29),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2515,8 +2520,8 @@ class _ProfileHomeState extends State<ProfileHome>
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
-                                  fontSize: 13,
-                                  height: 1.23,
+                                  fontSize: 12.4,
+                                  height: 1.22,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
@@ -2529,25 +2534,28 @@ class _ProfileHomeState extends State<ProfileHome>
                                       '${personal.where((p) => p.str('kind') != 'story').length}',
                                     ),
                                     'post',
+                                    flex: 31,
                                   ),
                                   _stat(
                                     person.str('followers', '0'),
                                     'follower',
-                                    () => open(
+                                    onTap: () => open(
                                       context,
                                       Connections(user: widget.user),
                                     ),
+                                    flex: 38,
                                   ),
                                   _stat(
                                     person.str('following', '0'),
                                     'seguiti',
-                                    () => open(
+                                    onTap: () => open(
                                       context,
                                       Connections(
                                         user: widget.user,
                                         initial: 1,
                                       ),
                                     ),
+                                    flex: 31,
                                   ),
                                 ],
                               ),
@@ -2559,7 +2567,7 @@ class _ProfileHomeState extends State<ProfileHome>
                   ),
                   if (person.str('pronouns').isNotEmpty ||
                       person.str('bio').isNotEmpty)
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                   if (person.str('pronouns').isNotEmpty) ...[
                     Text(
                       person.str('pronouns'),
@@ -2574,7 +2582,7 @@ class _ProfileHomeState extends State<ProfileHome>
                       const SizedBox(height: 4),
                     Text(
                       person.str('bio').replaceAll(r'\n', '\n'),
-                      style: const TextStyle(fontSize: 12.5, height: 1.35),
+                      style: const TextStyle(fontSize: 12.2, height: 1.30),
                     ),
                   ],
                   if (website.startsWith('https://')) ...[
@@ -2595,14 +2603,14 @@ class _ProfileHomeState extends State<ProfileHome>
                     ),
                   ],
                   if (person.rows('links').isNotEmpty || own) ...[
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 9),
                     ProfileLinkChips(
                       links: connections,
                       own: own,
                       compact: true,
                     ),
                   ],
-                  const SizedBox(height: 9),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(
@@ -2663,11 +2671,15 @@ class _ProfileHomeState extends State<ProfileHome>
                                   if (context.mounted)
                                     open(context, Chat(id: thread));
                                 }),
-                          child: Text(own ? 'Condividi profilo' : 'Messaggio'),
+                          child: Text(
+                            own ? 'Condividi profilo' : 'Messaggio',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ),
                       if (own) ...[
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 5),
                         IconButton(
                           tooltip: 'Persone suggerite',
                           isSelected: showSuggestions,
@@ -2676,16 +2688,16 @@ class _ProfileHomeState extends State<ProfileHome>
                           ),
                           style: IconButton.styleFrom(
                             backgroundColor: _profileControl(context),
-                            minimumSize: const Size.square(32),
+                            minimumSize: const Size.square(31),
                             padding: EdgeInsets.zero,
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(7),
+                              borderRadius: BorderRadius.circular(8),
                             ),
                           ),
-                          icon: const Icon(
-                            Icons.person_add_alt_1_rounded,
-                            size: 20,
+                          icon: const _ProfileGlyph(
+                            _ProfileSymbol.personPlus,
+                            size: 18,
                           ),
                         ),
                       ],
@@ -2800,20 +2812,24 @@ class _ProfileHomeState extends State<ProfileHome>
 
   Color _profileControl(BuildContext context) =>
       Theme.of(context).brightness == Brightness.light
-      ? const Color(0xffeff0f4)
+      ? const Color(0xffeef0f3)
       : subdued(context);
 
   ButtonStyle _profileButton(BuildContext context, {bool primary = false}) =>
       FilledButton.styleFrom(
         backgroundColor: primary
-            ? const Color(0xff4555f5)
+            ? const Color(0xff4454f6)
             : _profileControl(context),
-        foregroundColor: primary ? Colors.white : foreground(context),
+        foregroundColor: primary ? Colors.white : _profileInk(context),
         padding: const EdgeInsets.symmetric(horizontal: 7),
-        minimumSize: const Size(0, 32),
+        minimumSize: const Size(0, 31),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          fontSize: 12.7,
+          fontWeight: FontWeight.w600,
+          height: 1.12,
+        ),
       );
 
   Widget _highlights(
@@ -2824,14 +2840,14 @@ class _ProfileHomeState extends State<ProfileHome>
   }) {
     final textSize = MediaQuery.textScalerOf(context).scale(11);
     return Padding(
-      padding: const EdgeInsets.only(top: 19, bottom: 10),
+      padding: const EdgeInsets.only(top: 19, bottom: 12),
       child: SizedBox(
-        height: 72 + textSize * 1.45,
+        height: 68 + textSize * 1.38,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 15),
+          padding: const EdgeInsets.symmetric(horizontal: 13),
           itemCount: highlights.length + (own ? 1 : 0),
-          separatorBuilder: (_, _) => const SizedBox(width: 18),
+          separatorBuilder: (_, _) => const SizedBox(width: 17),
           itemBuilder: (context, index) {
             final add = own && index == 0;
             final highlight = add
@@ -2842,7 +2858,7 @@ class _ProfileHomeState extends State<ProfileHome>
                 .where((id) => store.post(id).isNotEmpty)
                 .toList();
             return SizedBox(
-              width: 65,
+              width: 63,
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
                 onTap: add
@@ -2876,24 +2892,24 @@ class _ProfileHomeState extends State<ProfileHome>
                 child: Column(
                   children: [
                     Container(
-                      width: 64,
-                      height: 64,
+                      width: 63,
+                      height: 63,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
                           color:
                               Theme.of(context).brightness == Brightness.light
-                              ? Color(add ? 0xffe7e8ed : 0xffdadde2)
+                              ? Color(add ? 0xffe5e7ec : 0xffd8dce2)
                               : Theme.of(context).dividerColor,
-                          width: add ? 2.0 : 2.7,
+                          width: add ? 2.0 : 3.1,
                         ),
                       ),
                       child: add
-                          ? const GIcon(CupertinoIcons.plus, size: 30)
+                          ? const _ProfileGlyph(_ProfileSymbol.plus, size: 24.5)
                           : Avatar(
                               widget.user,
-                              size: 54,
+                              size: 51,
                               image: highlight.str(
                                 'cover',
                                 ids.isEmpty
@@ -2902,7 +2918,7 @@ class _ProfileHomeState extends State<ProfileHome>
                               ),
                             ),
                     ),
-                    const SizedBox(height: 5),
+                    const SizedBox(height: 4),
                     Text(
                       add ? 'Nuova' : highlight.str('title'),
                       maxLines: 1,
@@ -2921,19 +2937,17 @@ class _ProfileHomeState extends State<ProfileHome>
 
   Widget _suggestions(BuildContext context, GpixStore store) {
     final followingIds = store.state.ids('following').toSet();
-    final people = store.users
-        .where((person) {
-          final id = person.str('id');
-          return id != store.myId &&
-              !store.follows(id) &&
-              !store.blocked(id) &&
-              !dismissedSuggestions.contains(id);
-        })
-        .take(12)
-        .toList();
+    final suggested = store.users.where((person) {
+      final id = person.str('id');
+      return id != store.myId &&
+          !store.follows(id) &&
+          !store.blocked(id) &&
+          !dismissedSuggestions.contains(id);
+    }).toList();
+    final people = suggested.take(12).toList();
     if (people.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.only(top: 14),
+      padding: const EdgeInsets.only(top: 17),
       child: Column(
         children: [
           Padding(
@@ -2947,16 +2961,23 @@ class _ProfileHomeState extends State<ProfileHome>
                   ),
                 ),
                 TextButton(
-                  onPressed: () => open(context, const Explore()),
+                  onPressed: () => open(
+                    context,
+                    PeopleDirectory(
+                      title: 'Persone suggerite',
+                      ids: suggested.map((person) => person.str('id')).toList(),
+                      allowFollow: true,
+                    ),
+                  ),
                   style: TextButton.styleFrom(
                     foregroundColor:
                         Theme.of(context).brightness == Brightness.light
-                        ? const Color(0xff4555f5)
+                        ? const Color(0xff4454f6)
                         : accent(context),
                     padding: EdgeInsets.zero,
-                    minimumSize: const Size(0, 35),
+                    minimumSize: const Size(0, 34),
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    textStyle: const TextStyle(
+                    textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
@@ -2968,7 +2989,7 @@ class _ProfileHomeState extends State<ProfileHome>
           ),
           SizedBox(
             height:
-                188 +
+                185 +
                 (MediaQuery.textScalerOf(context).scale(13) - 13).clamp(
                       0.0,
                       45.0,
@@ -2994,13 +3015,21 @@ class _ProfileHomeState extends State<ProfileHome>
                   ),
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(15),
-                      border: Border.all(color: Theme.of(context).dividerColor),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Theme.of(context).dividerColor,
+                        width: .75,
+                      ),
                     ),
                     child: Stack(
                       children: [
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(11, 11, 11, 11),
+                          padding: const EdgeInsets.fromLTRB(
+                            11.5,
+                            12,
+                            11.5,
+                            11.5,
+                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
@@ -3010,10 +3039,10 @@ class _ProfileHomeState extends State<ProfileHome>
                                     context,
                                     ProfileHome(user: id, detail: true),
                                   ),
-                                  child: Avatar(id, size: 87),
+                                  child: Avatar(id, size: 85),
                                 ),
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 8.5),
                               Text(
                                 person.str('name'),
                                 maxLines: 1,
@@ -3026,7 +3055,7 @@ class _ProfileHomeState extends State<ProfileHome>
                               ),
                               Text(
                                 inCommon == 0
-                                    ? 'Suggerimento per te'
+                                    ? 'Suggerito per te'
                                     : '$inCommon in comune',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -3058,14 +3087,14 @@ class _ProfileHomeState extends State<ProfileHome>
                           ),
                         ),
                         Positioned(
-                          right: 2,
-                          top: 2,
+                          right: 4,
+                          top: 4,
                           child: IconButton(
                             tooltip: 'Nascondi suggerimento',
                             visualDensity: VisualDensity.compact,
                             onPressed: () =>
                                 setState(() => dismissedSuggestions.add(id)),
-                            icon: const GIcon(CupertinoIcons.xmark, size: 13),
+                            icon: const GIcon(CupertinoIcons.xmark, size: 12),
                           ),
                         ),
                       ],
@@ -3080,7 +3109,13 @@ class _ProfileHomeState extends State<ProfileHome>
     );
   }
 
-  Widget _stat(String count, String label, [VoidCallback? onTap]) => Expanded(
+  Widget _stat(
+    String count,
+    String label, {
+    required int flex,
+    VoidCallback? onTap,
+  }) => Expanded(
+    flex: flex,
     child: InkWell(
       onTap: onTap,
       child: Column(
@@ -3091,9 +3126,9 @@ class _ProfileHomeState extends State<ProfileHome>
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              fontSize: 15,
+              fontSize: 14.3,
               height: 1.12,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w600,
             ),
           ),
           Text(
@@ -3106,6 +3141,165 @@ class _ProfileHomeState extends State<ProfileHome>
       ),
     ),
   );
+}
+
+class _OwnProfileToolbar extends StatelessWidget
+    implements PreferredSizeWidget {
+  const _OwnProfileToolbar({required this.store, required this.person});
+
+  final GpixStore store;
+  final J person;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(60);
+
+  @override
+  Widget build(BuildContext context) {
+    final threads = person
+        .rows('links')
+        .where((link) => link.str('type') == 'threads')
+        .firstOrNull;
+    return Material(
+      color: surface(context),
+      child: SafeArea(
+        bottom: false,
+        child: SizedBox(
+          height: preferredSize.height,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: threads == null ? 63 : 110,
+                ),
+                child: _AccountTitle(
+                  store: store,
+                  locked: person.flag('private'),
+                  profile: true,
+                ),
+              ),
+              PositionedDirectional(
+                start: 13,
+                child: IconButton(
+                  tooltip: 'Crea',
+                  style: IconButton.styleFrom(fixedSize: const Size.square(48)),
+                  icon: const _ProfileGlyph(_ProfileSymbol.plus),
+                  onPressed: () => open(
+                    context,
+                    const CreationStudio(initial: CreationMode.post),
+                  ),
+                ),
+              ),
+              if (threads != null)
+                PositionedDirectional(
+                  end: 67,
+                  child: IconButton(
+                    tooltip: 'Apri Threads',
+                    onPressed: () => openProfileLink(context, threads),
+                    icon: FaIcon(
+                      FontAwesomeIcons.threads,
+                      size: 21,
+                      color: _profileInk(context),
+                    ),
+                  ),
+                ),
+              PositionedDirectional(
+                end: 13,
+                child: IconButton(
+                  tooltip: 'Impostazioni e attività',
+                  style: IconButton.styleFrom(fixedSize: const Size.square(48)),
+                  icon: const _ProfileGlyph(_ProfileSymbol.menu),
+                  onPressed: () => open(context, const Settings()),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+enum _ProfileSymbol { plus, menu, lock, personPlus }
+
+class _ProfileGlyph extends StatelessWidget {
+  const _ProfileGlyph(this.symbol, {this.size = 23.5, this.color});
+
+  final _ProfileSymbol symbol;
+  final double size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    size: Size.square(size),
+    painter: _ProfileGlyphPainter(symbol, color ?? _profileInk(context)),
+  );
+}
+
+class _ProfileGlyphPainter extends CustomPainter {
+  const _ProfileGlyphPainter(this.symbol, this.color);
+
+  final _ProfileSymbol symbol;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.scale(size.width / 24, size.height / 24);
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    switch (symbol) {
+      case _ProfileSymbol.plus:
+        canvas.drawLine(const Offset(3, 12), const Offset(21, 12), stroke);
+        canvas.drawLine(const Offset(12, 3), const Offset(12, 21), stroke);
+      case _ProfileSymbol.menu:
+        for (final y in [5.1, 12.0, 18.9]) {
+          canvas.drawLine(Offset(3, y), Offset(21, y), stroke);
+        }
+      case _ProfileSymbol.lock:
+        final path = Path()
+          ..moveTo(7.4, 10)
+          ..lineTo(7.4, 6.8)
+          ..cubicTo(7.4, .8, 16.6, .8, 16.6, 6.8)
+          ..lineTo(16.6, 10);
+        canvas.drawPath(path, stroke..strokeWidth = 2);
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            const Rect.fromLTWH(4.7, 9.5, 14.6, 12.5),
+            const Radius.circular(2.4),
+          ),
+          stroke,
+        );
+      case _ProfileSymbol.personPlus:
+        final fill = Paint()..color = color;
+        canvas.drawCircle(const Offset(14.9, 7.2), 3.8, fill);
+        canvas.drawPath(
+          Path()
+            ..moveTo(8, 18.8)
+            ..cubicTo(8, 11.7, 22.7, 11.7, 22.7, 18.8)
+            ..cubicTo(22.7, 21.5, 8, 21.5, 8, 18.8)
+            ..close(),
+          fill,
+        );
+        canvas.drawLine(
+          const Offset(1.6, 11.9),
+          const Offset(7.8, 11.9),
+          stroke,
+        );
+        canvas.drawLine(
+          const Offset(4.7, 8.7),
+          const Offset(4.7, 15.1),
+          stroke,
+        );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ProfileGlyphPainter old) =>
+      old.symbol != symbol || old.color != color;
 }
 
 Color _profileInk(BuildContext context) =>
@@ -3131,7 +3325,7 @@ class _ProfileTabStrip extends SliverPersistentHeaderDelegate {
   final TabController controller;
 
   @override
-  double get minExtent => 48;
+  double get minExtent => 46;
 
   @override
   double get maxExtent => minExtent;
@@ -3165,7 +3359,7 @@ class _ProfileTabStrip extends SliverPersistentHeaderDelegate {
               Tooltip(
                 message: section.label,
                 child: SizedBox(
-                  width: 64,
+                  width: 62,
                   height: minExtent,
                   child: Center(
                     child: _ProfileTabIcon(
@@ -3194,7 +3388,7 @@ class _ProfileTabIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => CustomPaint(
-    size: const Size.square(26),
+    size: const Size.square(25),
     painter: _ProfileTabGlyph(
       section,
       color: IconTheme.of(context).color ?? _profileInk(context),
@@ -3233,7 +3427,7 @@ class _ProfileTabGlyph extends CustomPainter {
           for (var column = 0; column < 3; column++) {
             canvas.drawRRect(
               RRect.fromRectAndRadius(
-                Rect.fromLTWH(4 + column * 6.2, 2 + row * 5.8, 4.6, 4.3),
+                Rect.fromLTWH(4.3 + column * 6.2, 2 + row * 5.65, 4.75, 4.65),
                 const Radius.circular(.95),
               ),
               fill,
@@ -3244,8 +3438,8 @@ class _ProfileTabGlyph extends CustomPainter {
         final frame = RRect.fromRectAndRadius(
           selected
               ? const Rect.fromLTWH(2, 2, 22, 22)
-              : const Rect.fromLTWH(1.3, 4, 23.4, 18),
-          Radius.circular(selected ? 6.3 : 2.1),
+              : const Rect.fromLTWH(3, 3, 20, 20),
+          Radius.circular(selected ? 6.3 : 4.7),
         );
         canvas.drawRRect(frame, selected ? fill : stroke);
         final play = Path()
@@ -3256,7 +3450,12 @@ class _ProfileTabGlyph extends CustomPainter {
           ..lineTo(11.1, 17.5)
           ..quadraticBezierTo(9.5, 18.4, 9.5, 16.6)
           ..close();
-        canvas.drawPath(play, Paint()..color = selected ? background : color);
+        canvas.drawPath(
+          play,
+          selected
+              ? (Paint()..color = background)
+              : (stroke..strokeWidth = 1.7),
+        );
       case _ProfileSection.reposts:
         final arrows = Path()
           ..moveTo(3, 13)
@@ -3273,7 +3472,7 @@ class _ProfileTabGlyph extends CustomPainter {
           ..moveTo(9.3, 14.6)
           ..lineTo(5.8, 18.2)
           ..lineTo(9.3, 21.8);
-        canvas.drawPath(arrows, stroke..strokeWidth = 2.15);
+        canvas.drawPath(arrows, stroke..strokeWidth = 2.0);
       case _ProfileSection.tagged:
         final frame = Path()
           ..moveTo(3, 22.5)
@@ -3532,7 +3731,10 @@ class _AccountTitle extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (locked) ...[
-              GIcon(CupertinoIcons.lock, size: profile ? 16 : 14),
+              if (profile)
+                const _ProfileGlyph(_ProfileSymbol.lock, size: 15)
+              else
+                const GIcon(CupertinoIcons.lock, size: 14),
               const SizedBox(width: 5),
             ],
             Flexible(
@@ -3543,7 +3745,7 @@ class _AccountTitle extends StatelessWidget {
                 style: profile || direct
                     ? const TextStyle(
                         fontSize: 22,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                         letterSpacing: -.5,
                       )
                     : null,

@@ -3,7 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gpix/core/data.dart';
 import 'package:gpix/core/store.dart';
 import 'package:gpix/rebuild/shell.dart';
-import 'package:gpix/screens/profile_avatar.dart';
+import 'package:gpix/screens/creation_studio.dart';
+import 'package:gpix/rebuild/surfaces.dart';
 import 'package:gpix/screens/social.dart';
 
 import 'release_flows_test.dart' show mount;
@@ -27,7 +28,7 @@ void main() {
     final bubble = find.byKey(const ValueKey('activity-bubble'));
     final popup = tester.getRect(bubble);
     expect(popup.center.dx, closeTo(heart.center.dx, .5));
-    expect(popup.top, closeTo(heart.bottom - 3, .5));
+    expect(popup.top, closeTo(heart.bottom + 2, .5));
     await tester.tap(bubble);
     await tester.pumpAndSettle();
     expect(find.byType(Activity), findsOneWidget);
@@ -88,32 +89,29 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Avatar options persist in Modifica profilo', (tester) async {
+  testWidgets('Profile plus opens the post studio directly', (tester) async {
     final store = GpixStore()..startTestDemo();
+    await mount(tester, store, ProfileHome(user: store.myId));
+    await tester.tap(find.byTooltip('Crea'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    final studio = tester.widget<CreationStudio>(find.byType(CreationStudio));
+    expect(studio.initial, CreationMode.post);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('Modifica profilo presents only profile photo actions', (
+    tester,
+  ) async {
+    final store = GpixStore()..startTestDemo();
+    store.me['avatarModel'] = {'skin': 3};
     await mount(tester, store, const EditProfile());
-    await tester.tap(find.byTooltip('Crea avatar'));
+    await tester.tap(find.text('Modifica immagine del profilo'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Crea avatar'));
-    await tester.pumpAndSettle();
-    expect(find.byType(ProfileAvatarEditor), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, 'Crea il tuo avatar'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey(('avatar-swatch', 'skin', 3))));
-    await tester.tap(find.widgetWithText(FilledButton, 'Avanti'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Ricci'));
-    for (var step = 0; step < 3; step++) {
-      await tester.tap(find.widgetWithText(FilledButton, 'Avanti'));
-      await tester.pumpAndSettle();
-    }
-    await tester.tap(find.widgetWithText(FilledButton, 'Salva avatar'));
-    await tester.pumpAndSettle();
-    expect(store.avatarModel['skin'], 3);
-    expect(store.avatarModel['hair'], 3);
-    expect(find.byType(EditProfile), findsOneWidget);
-    await tester.tap(find.byTooltip('Modifica avatar'));
-    await tester.pumpAndSettle();
-    expect(find.text('Usa come immagine del profilo'), findsOneWidget);
+    expect(find.text('Scegli dalla libreria'), findsOneWidget);
+    expect(find.text('Scatta foto'), findsOneWidget);
+    expect(find.textContaining('avatar', findRichText: true), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }
