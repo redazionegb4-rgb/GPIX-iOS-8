@@ -38,6 +38,45 @@ Future<void> mount(
 }
 
 void main() {
+  testWidgets('Feed actions stay grouped at the left and hide zero counters', (
+    tester,
+  ) async {
+    final store = GpixStore()..startTestDemo();
+    final post = Map<String, dynamic>.of(store.posts.first)
+      ..['author'] = store.myId
+      ..['kind'] = 'post'
+      ..['audience'] = 'all'
+      ..['likes'] = [store.myId]
+      ..['comments'] = <J>[]
+      ..['shareCount'] = 0
+      ..['style'] = <String, dynamic>{};
+    await mount(
+      tester,
+      store,
+      Scaffold(
+        body: ListView(children: [TimelinePost(post: post)]),
+      ),
+    );
+    final like = find.byTooltip('Rimuovi Mi piace');
+    final comments = find.byTooltip('Commenti');
+    final share = find.byTooltip('Condividi');
+    final save = find.byTooltip('Salva');
+    expect(
+      tester.getTopLeft(comments).dx - tester.getTopRight(like).dx,
+      closeTo(14, .5),
+    );
+    expect(
+      tester.getTopLeft(save).dx - tester.getTopRight(share).dx,
+      greaterThan(55),
+    );
+    expect(
+      find.descendant(of: comments, matching: find.text('0')),
+      findsNothing,
+    );
+    expect(find.descendant(of: share, matching: find.text('0')), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets(
     'Home activity counts comments and likes, then expires and clears on open',
     (tester) async {
@@ -780,7 +819,7 @@ void main() {
         await tester.pumpAndSettle();
       }
       await tester.enterText(find.byType(TextField).last, 'Guarda qui');
-      await tester.tap(find.text('Invia a 2 persone'));
+      await tester.tap(find.text('Invia separatamente'));
       await tester.pumpAndSettle();
       for (final user in recipients) {
         final messages = store.threads
@@ -794,6 +833,48 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('Share can send once to a newly created group', (tester) async {
+    final store = GpixStore()..startTestDemo();
+    final post = store.posts.first;
+    final recipients = store.users
+        .where((user) => user.str('id') != store.myId)
+        .take(2)
+        .toList();
+    final existing = store.threads.map((thread) => thread.str('id')).toSet();
+    await mount(
+      tester,
+      store,
+      Scaffold(
+        body: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => sharePost(context, post),
+            child: const Text('Condividi'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Condividi'));
+    await tester.pumpAndSettle();
+    final search = find.byType(TextField).first;
+    for (final user in recipients) {
+      await tester.enterText(search, user.str('username'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(user.str('name')));
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(find.text('Invia a nuova chat di gruppo (2)'));
+    await tester.pumpAndSettle();
+    final group = store.threads.singleWhere(
+      (thread) => !existing.contains(thread.str('id')),
+    );
+    expect(group.ids('members').toSet(), {
+      store.myId,
+      ...recipients.map((user) => user.str('id')),
+    });
+    expect(group.rows('messages').single.str('post'), post.str('id'));
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets(
     'Share opens the story editor with a reference to the public post',
@@ -947,7 +1028,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Aggiungi alla storia'), findsOneWidget);
       await tester.runAsync(() async {
-        await tester.tap(find.text('Condividi in un’altra app'));
+        await tester.tap(find.text('Condividi in…'));
         for (var attempt = 0; attempt < 40 && exported == null; attempt++) {
           await Future<void>.delayed(const Duration(milliseconds: 25));
         }

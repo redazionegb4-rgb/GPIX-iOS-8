@@ -9,13 +9,26 @@ import 'social.dart' show people;
 
 class PostExtras extends StatelessWidget {
   final J post;
-  final bool showAudio;
-  const PostExtras({super.key, required this.post, this.showAudio = true});
+  final bool showAudio, showTaggedUsers;
+  const PostExtras({
+    super.key,
+    required this.post,
+    this.showAudio = true,
+    this.showTaggedUsers = true,
+  });
   @override
   Widget build(BuildContext c) {
     final style = post.obj('style'),
         poll = style.obj('poll'),
         options = poll.ids('options');
+    final positioned = style
+        .rows('photoTags')
+        .map((tag) => tag.str('user'))
+        .toSet();
+    final tagged = style
+        .ids('taggedUsers')
+        .where((id) => showTaggedUsers || !positioned.contains(id))
+        .toList();
     final counts =
         (poll['counts'] as List?)?.map((v) => (v as num).toInt()).toList() ??
         List<int>.filled(options.length, 0);
@@ -53,13 +66,14 @@ class PostExtras extends StatelessWidget {
               start: style.obj('music').number('start'),
               duration: style.obj('music').number('clipDuration'),
             ),
-          if (style.ids('taggedUsers').isNotEmpty)
+          if (tagged.isNotEmpty)
             TextButton.icon(
-              onPressed: () =>
-                  people(c, style.ids('taggedUsers'), 'Persone taggate'),
+              onPressed: () => people(c, tagged, 'Persone taggate'),
               icon: const GIcon(CupertinoIcons.person_crop_rectangle, size: 17),
               label: Text(
-                '${style.ids('taggedUsers').length} persone taggate',
+                tagged.length == 1
+                    ? '1 persona taggata'
+                    : '${tagged.length} persone taggate',
                 style: const TextStyle(fontSize: 12),
               ),
             ),

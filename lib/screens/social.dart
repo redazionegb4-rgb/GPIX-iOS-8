@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show setEquals;
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:flutter/services.dart'
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:path_provider/path_provider.dart';
 import '../core/data.dart';
 import '../core/store.dart';
@@ -226,7 +228,7 @@ class PostAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final value = count;
+    final value = feed && count == 0 ? null : count;
     final display = value != null && value >= 10000
         ? '${(value / 1000).toStringAsFixed(1).replaceFirst(RegExp(r'\.0$'), '').replaceAll('.', ',')} mila'
         : value?.toString();
@@ -242,42 +244,44 @@ class PostAction extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(12),
           child: Container(
-            alignment: Alignment.centerLeft,
             constraints: const BoxConstraints(minWidth: 0, minHeight: 44),
             padding: EdgeInsets.symmetric(horizontal: feed ? 0 : 4),
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  AnimatedSwitcher(
-                    duration: MediaQuery.disableAnimationsOf(context)
-                        ? Duration.zero
-                        : const Duration(milliseconds: 180),
-                    transitionBuilder: (child, animation) => ScaleTransition(
-                      scale: animation.drive(Tween(begin: .78, end: 1.0)),
-                      child: FadeTransition(opacity: animation, child: child),
-                    ),
-                    child: GIcon(
-                      icon,
-                      key: ValueKey(icon),
-                      color: color ?? foreground(context),
-                      size: feed ? 25 : 23,
-                      postAction: feed,
-                    ),
-                  ),
-                  if (display != null) ...[
-                    const SizedBox(width: 5),
-                    Text(
-                      display,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
+            child: Center(
+              widthFactor: 1,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AnimatedSwitcher(
+                      duration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : const Duration(milliseconds: 180),
+                      transitionBuilder: (child, animation) => ScaleTransition(
+                        scale: animation.drive(Tween(begin: .78, end: 1.0)),
+                        child: FadeTransition(opacity: animation, child: child),
+                      ),
+                      child: GIcon(
+                        icon,
+                        key: ValueKey(icon),
+                        color: color ?? foreground(context),
+                        size: feed ? 25 : 23,
+                        postAction: feed,
                       ),
                     ),
+                    if (display != null) ...[
+                      const SizedBox(width: 5),
+                      Text(
+                        display,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),
@@ -981,6 +985,63 @@ class _SharePanelState extends State<SharePanel> {
   final search = TextEditingController();
   final message = TextEditingController();
   bool busy = false;
+  String? groupThread;
+  bool groupShared = false;
+  Set<String>? groupMembers;
+
+  Future<void> sendGroup(GpixStore store) async {
+    if (busy || selected.length < 2 || sentShares.isNotEmpty) return;
+    final members = Set<String>.of(selected);
+    if (groupMembers != null && !setEquals(groupMembers, members)) return;
+    final identity = (store.server, store.myId, store.token);
+    bool active() =>
+        mounted && identity == (store.server, store.myId, store.token);
+    final note = message.text.trim();
+    FocusScope.of(context).unfocus();
+    setState(() => busy = true);
+    await perform(context, () async {
+      if (groupThread == null) {
+        final titles = members
+            .map((id) => store.user(id).str('username'))
+            .join(', ');
+        final name = titles.characters.take(60).toString();
+        final existing = store.threads
+            .map((thread) => thread.str('id'))
+            .toSet();
+        await store.act('group', {'users': members.toList(), 'title': name});
+        if (!active()) return;
+        final created = store.threads
+            .where(
+              (thread) =>
+                  thread.str('owner') == store.myId &&
+                  !existing.contains(thread.str('id')) &&
+                  setEquals(thread.ids('members').toSet(), {
+                    ...members,
+                    store.myId,
+                  }),
+            )
+            .firstOrNull;
+        if (created == null)
+          throw Exception('La chat di gruppo non è disponibile');
+        groupThread = created.str('id');
+        groupMembers = members;
+      }
+      final thread = groupThread!;
+      if (!groupShared) {
+        await store.act('sharePost', {
+          'id': thread,
+          'post': widget.post.str('id'),
+        });
+        groupShared = true;
+      }
+      if (!active()) return;
+      if (note.isNotEmpty) await store.send(thread, note);
+      if (!active()) return;
+      notice(context, 'Inviato alla nuova chat di gruppo');
+      widget.onDone();
+    });
+    if (mounted) setState(() => busy = false);
+  }
 
   @override
   void dispose() {
@@ -1001,7 +1062,10 @@ class _SharePanelState extends State<SharePanel> {
     await perform(context, () async {
       for (final user in selected.toList()) {
         if (!active()) return;
-        final thread = await store.openThread(user);
+        final direct = !user.startsWith('thread:');
+        final thread = direct
+            ? await store.openThread(user)
+            : user.substring(7);
         if (!active()) return;
         if (!sentShares.contains(user)) {
           await store.act('sharePost', {'id': thread, 'post': source});
@@ -1085,6 +1149,12 @@ class _SharePanelState extends State<SharePanel> {
     final id = widget.post.str('id');
     final post = store.post(id);
     final canShareOutside = store.canSharePostOutsideChat(post);
+    final link =
+        store.state.flag('publicShareLinks') && store.canSharePublicPost(post)
+        ? Uri.parse(
+            store.server,
+          ).resolve('/p/${Uri.encodeComponent(id)}').toString()
+        : null;
     final caption = [
       store.user(post.str('author')).str('username'),
       post.str('text').trim(),
@@ -1112,6 +1182,24 @@ class _SharePanelState extends State<SharePanel> {
                 ? rank
                 : a.str('username').compareTo(b.str('username'));
           });
+    final recipients = [
+      for (final user in users)
+        (
+          key: user.str('id'),
+          label: user.str('name', user.str('username')),
+          avatar: user.str('id'),
+        ),
+      for (final thread in store.inboxThreads)
+        if (thread.str('owner').isNotEmpty &&
+            directSearchTerm(store.threadName(thread)).contains(query))
+          (
+            key: 'thread:${thread.str('id')}',
+            label: store.threadName(thread),
+            avatar: thread
+                .ids('members')
+                .firstWhere((id) => id != store.myId, orElse: () => store.myId),
+          ),
+    ];
     return Column(
       children: [
         Padding(
@@ -1123,7 +1211,7 @@ class _SharePanelState extends State<SharePanel> {
           ),
         ),
         Expanded(
-          child: users.isEmpty
+          child: recipients.isEmpty
               ? const Center(child: Text('Nessuna persona trovata'))
               : GridView.builder(
                   key: ValueKey(query),
@@ -1135,17 +1223,20 @@ class _SharePanelState extends State<SharePanel> {
                     crossAxisCount: MediaQuery.sizeOf(c).width < 580 ? 3 : 5,
                     mainAxisExtent: 103,
                   ),
-                  itemCount: users.length,
+                  itemCount: recipients.length,
                   itemBuilder: (c, index) {
-                    final user = users[index];
-                    final recipient = user.str('id');
+                    final entry = recipients[index];
+                    final recipient = entry.key;
                     final checked = selected.contains(recipient);
                     return Semantics(
                       selected: checked,
                       button: true,
                       child: InkWell(
                         borderRadius: BorderRadius.circular(14),
-                        onTap: busy || sentShares.contains(recipient)
+                        onTap:
+                            busy ||
+                                groupMembers != null ||
+                                sentShares.contains(recipient)
                             ? null
                             : () => setState(() {
                                 if (!selected.add(recipient))
@@ -1157,7 +1248,7 @@ class _SharePanelState extends State<SharePanel> {
                             Stack(
                               clipBehavior: Clip.none,
                               children: [
-                                Avatar(recipient, size: 64),
+                                Avatar(entry.avatar, size: 64),
                                 if (checked)
                                   Positioned(
                                     right: -1,
@@ -1183,15 +1274,20 @@ class _SharePanelState extends State<SharePanel> {
                               ],
                             ),
                             const SizedBox(height: 7),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 5,
-                              ),
-                              child: Text(
-                                user.str('name', user.str('username')),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 11),
+                            Flexible(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                ),
+                                child: Text(
+                                  entry.label,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    height: 1.12,
+                                  ),
+                                ),
                               ),
                             ),
                           ],
@@ -1225,15 +1321,28 @@ class _SharePanelState extends State<SharePanel> {
                   ),
                 ),
                 FilledButton(
-                  onPressed: busy ? null : () => send(store),
+                  onPressed: busy || groupMembers != null
+                      ? null
+                      : () => send(store),
                   child: Text(
                     busy
                         ? 'Invio…'
                         : selected.length == 1
                         ? 'Invia'
-                        : 'Invia a ${selected.length} persone',
+                        : 'Invia separatamente',
                   ),
                 ),
+                if (selected.length > 1 &&
+                    sentShares.isEmpty &&
+                    selected.every((id) => !id.startsWith('thread:')))
+                  FilledButton.tonal(
+                    onPressed: busy || selected.length > 30
+                        ? null
+                        : () => sendGroup(store),
+                    child: Text(
+                      'Invia a nuova chat di gruppo (${selected.length})',
+                    ),
+                  ),
               ],
             ),
           )
@@ -1250,13 +1359,38 @@ class _SharePanelState extends State<SharePanel> {
                     'Aggiungi alla storia',
                     widget.onStory!,
                   ),
+                if (link != null)
+                  action(
+                    c,
+                    CupertinoIcons.chat_bubble,
+                    'WhatsApp',
+                    () => perform(c, () async {
+                      final uri = Uri.https('wa.me', '/', {'text': link});
+                      if (!await launchUrl(
+                        uri,
+                        mode: LaunchMode.externalApplication,
+                      )) {
+                        throw Exception('Impossibile aprire WhatsApp');
+                      }
+                    }),
+                    background: const Color(0xff25d366),
+                    iconColor: Colors.white,
+                  ),
                 action(
                   c,
                   CupertinoIcons.share,
-                  'Condividi in un’altra app',
-                  () => shareExternally(caption, id),
+                  'Condividi in…',
+                  () => shareExternally(
+                    link == null ? caption : '$caption\n$link',
+                    id,
+                  ),
                 ),
-                if (post.str('text').trim().isNotEmpty)
+                if (link != null)
+                  action(c, CupertinoIcons.link, 'Copia link', () async {
+                    await Clipboard.setData(ClipboardData(text: link));
+                    if (c.mounted) notice(c, 'Link copiato');
+                  })
+                else if (post.str('text').trim().isNotEmpty)
                   action(c, CupertinoIcons.doc_on_doc, 'Copia testo', () async {
                     await Clipboard.setData(
                       ClipboardData(text: post.str('text')),
@@ -1274,9 +1408,11 @@ class _SharePanelState extends State<SharePanel> {
     BuildContext c,
     IconData icon,
     String label,
-    VoidCallback tap,
-  ) => SizedBox(
-    width: 88,
+    VoidCallback tap, {
+    Color? background,
+    Color? iconColor,
+  }) => SizedBox(
+    width: 78,
     child: InkWell(
       onTap: busy ? null : tap,
       borderRadius: BorderRadius.circular(13),
@@ -1284,8 +1420,8 @@ class _SharePanelState extends State<SharePanel> {
         children: [
           CircleAvatar(
             radius: 23,
-            backgroundColor: subdued(c),
-            child: GIcon(icon, color: foreground(c), size: 22),
+            backgroundColor: background ?? subdued(c),
+            child: GIcon(icon, color: iconColor ?? foreground(c), size: 22),
           ),
           const SizedBox(height: 5),
           Text(

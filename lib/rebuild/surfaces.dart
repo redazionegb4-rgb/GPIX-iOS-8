@@ -891,12 +891,12 @@ class _TimelinePostState extends State<TimelinePost> {
             current: slide.clamp(0, media.length - 1),
           ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(10, 4, 3, 3),
+          padding: const EdgeInsets.fromLTRB(11, 2, 3, 1),
           child: Row(
             children: [
               Expanded(
                 child: Row(
-                  spacing: 11,
+                  spacing: 14,
                   children: [
                     Flexible(
                       child: PostAction(
@@ -905,7 +905,7 @@ class _TimelinePostState extends State<TimelinePost> {
                         icon: liked
                             ? CupertinoIcons.heart_fill
                             : CupertinoIcons.heart,
-                        color: liked ? danger : null,
+                        color: liked ? const Color(0xffff0038) : null,
                         count: post.flag('hideLikes') ? null : likes.length,
                         onTap: () => like(),
                       ),
@@ -927,7 +927,7 @@ class _TimelinePostState extends State<TimelinePost> {
                               ? 'Annulla ripubblicazione'
                               : 'Ripubblica',
                           icon: CupertinoIcons.repeat,
-                          color: reposted ? accent(context) : null,
+                          color: foreground(context),
                           count: reposts.length,
                           onTap: () => perform(
                             context,
@@ -964,7 +964,7 @@ class _TimelinePostState extends State<TimelinePost> {
             ],
           ),
         ),
-        PostExtras(post: post, showAudio: false),
+        PostExtras(post: post, showAudio: false, showTaggedUsers: tags.isEmpty),
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
           child: Column(
