@@ -14,9 +14,6 @@ import 'social.dart';
 import 'stories.dart' show Composer;
 import 'video.dart' show ClipControls, ClipPlayer, ClipProgress;
 
-const reelDockHeight = 50.0;
-double reelDockBottom(double inset) => math.max(13, inset);
-
 enum _Drawer { comments, share }
 
 class Reels extends StatefulWidget {

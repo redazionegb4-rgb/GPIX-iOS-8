@@ -2,6 +2,7 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 
 import '../core/store.dart';
@@ -55,14 +56,17 @@ class _SocialShellState extends State<SocialShell> {
     if (index == _selected && index == 0 && _feed.hasClients) {
       if (_feed.offset <= _feed.position.minScrollExtent + 1) {
         _homeRefresh.currentState?.show();
-      } else if (reduced) {
-        _feed.jumpTo(0);
       } else {
-        _feed.animateTo(
-          0,
-          duration: const Duration(milliseconds: 240),
-          curve: Curves.easeOutCubic,
-        );
+        if (_compact) setState(() => _compact = false);
+        if (reduced) {
+          _feed.jumpTo(0);
+        } else {
+          _feed.animateTo(
+            0,
+            duration: const Duration(milliseconds: 240),
+            curve: Curves.easeOutCubic,
+          );
+        }
       }
     } else if (reduced || (index - _selected).abs() > 1) {
       _controller.jumpToPage(index);
@@ -80,14 +84,33 @@ class _SocialShellState extends State<SocialShell> {
   Widget _scrollAware(int index, Widget child) =>
       NotificationListener<ScrollUpdateNotification>(
         onNotification: (notification) {
-          if (_selected == index &&
-              notification.metrics.axis == Axis.vertical &&
-              (notification.scrollDelta ?? 0).abs() >= 1) {
-            final compact =
-                notification.metrics.pixels > 42 &&
-                (notification.scrollDelta ?? 0) > 0;
-            if (compact != _compact) setState(() => _compact = compact);
+          final delta = notification.scrollDelta ?? 0;
+          if (_selected != index ||
+              notification.metrics.axis != Axis.vertical ||
+              delta.abs() < 1 ||
+              (_controller.hasClients &&
+                  _controller.position.isScrollingNotifier.value)) {
+            return false;
           }
+          final origin = notification.context;
+          if (notification.dragDetails == null) {
+            final direction = origin == null
+                ? null
+                : Scrollable.maybeOf(
+                    origin,
+                    axis: Axis.vertical,
+                  )?.position.userScrollDirection;
+            final scrollDirection = delta > 0
+                ? ScrollDirection.reverse
+                : ScrollDirection.forward;
+            if (direction != scrollDirection) return false;
+          }
+          final compact =
+              delta > 0 &&
+              notification.metrics.pixels -
+                      notification.metrics.minScrollExtent >
+                  42;
+          if (compact != _compact) setState(() => _compact = compact);
           return false;
         },
         child: child,
@@ -96,22 +119,25 @@ class _SocialShellState extends State<SocialShell> {
   @override
   Widget build(BuildContext context) {
     final store = GpixScope.of(context);
-    final dark =
-        Theme.of(context).brightness == Brightness.dark || _selected == 1;
+    final theme = Theme.of(context);
+    final reel = _selected == 1;
+    final dark = theme.brightness == Brightness.dark || reel;
     final ink = dark ? Colors.white : const Color(0xff14151a);
     final duration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
         : const Duration(milliseconds: 210);
     final inset = MediaQuery.viewPaddingOf(context).bottom;
-    final reel = _selected == 1;
-    final compactDock = _compact;
-    final profile = _selected == 4;
     final covered = reel && _reelCoverAccount == store.myId;
-    final dockBottom = reel
-        ? reelDockBottom(inset)
-        : profile
+    final dockBottom = theme.platform == TargetPlatform.iOS
         ? (inset > 28 ? inset - 12 : (inset + 3).clamp(12.0, 28.0))
         : inset + 8;
+    final dockHeight = _compact ? 50.0 : 59.0;
+    final dockWidth =
+        (MediaQuery.sizeOf(context).width * (_compact ? .75 : .895)).clamp(
+          224.0,
+          430.0,
+        );
+    const dockRadius = BorderRadius.all(Radius.circular(40));
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
       child: AccountSheetBackdrop(
@@ -124,10 +150,7 @@ class _SocialShellState extends State<SocialShell> {
                 physics: covered || _selected == 4
                     ? const NeverScrollableScrollPhysics()
                     : null,
-                onPageChanged: (index) => setState(() {
-                  _selected = index;
-                  _compact = false;
-                }),
+                onPageChanged: (index) => setState(() => _selected = index),
                 children: [
                   _KeepPage(
                     key: ValueKey(('home', store.myId)),
@@ -150,7 +173,7 @@ class _SocialShellState extends State<SocialShell> {
                     key: ValueKey(('reel', store.myId)),
                     child: Reels(
                       active: reel,
-                      bottomOverlay: reelDockBottom(inset) + reelDockHeight,
+                      bottomOverlay: dockBottom + dockHeight,
                       onCoverDock: (cover) {
                         final account = cover ? store.myId : null;
                         if (_reelCoverAccount != account) {
@@ -189,27 +212,12 @@ class _SocialShellState extends State<SocialShell> {
                         key: const ValueKey('floating-dock'),
                         duration: duration,
                         curve: Curves.easeOutCubic,
-                        width: reel
-                            ? (MediaQuery.sizeOf(context).width * .755).clamp(
-                                224.0,
-                                355.0,
-                              )
-                            : profile
-                            ? (MediaQuery.sizeOf(context).width *
-                                      (compactDock ? .75 : .895))
-                                  .clamp(224.0, 430.0)
-                            : (MediaQuery.sizeOf(context).width -
-                                      (compactDock ? 100 : 38))
-                                  .clamp(224.0, 430.0),
-                        height: reel
-                            ? reelDockHeight
-                            : profile
-                            ? (compactDock ? 50 : 59)
-                            : (compactDock ? 45 : 57),
-                        decoration: profile && !dark
-                            ? BoxDecoration(
-                                borderRadius: BorderRadius.circular(40),
-                                boxShadow: const [
+                        width: dockWidth,
+                        height: dockHeight,
+                        decoration: !dark
+                            ? const BoxDecoration(
+                                borderRadius: dockRadius,
+                                boxShadow: [
                                   BoxShadow(
                                     color: Color(0x24262633),
                                     blurRadius: 21,
@@ -219,33 +227,26 @@ class _SocialShellState extends State<SocialShell> {
                               )
                             : null,
                         child: ClipRRect(
-                          borderRadius: BorderRadius.circular(40),
+                          borderRadius: dockRadius,
                           child: BackdropFilter(
-                            filter: ImageFilter.blur(
-                              sigmaX: profile ? 15 : 20,
-                              sigmaY: profile ? 15 : 20,
-                            ),
+                            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
                             child: DecoratedBox(
                               decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(40),
-                                color: reel
-                                    ? const Color(0xad202024)
-                                    : dark
+                                borderRadius: dockRadius,
+                                color: dark
                                     ? const Color(0xc9232327)
-                                    : profile
-                                    ? const Color(0xc9ffffff)
-                                    : const Color(0xe9ffffff),
+                                    : const Color(0xc9ffffff),
                                 border: Border.all(
-                                  color: profile && !dark
-                                      ? const Color(0xeaffffff)
-                                      : ink.withValues(alpha: reel ? .25 : .12),
+                                  color: dark
+                                      ? ink.withValues(alpha: .25)
+                                      : const Color(0xeaffffff),
                                 ),
                               ),
                               child: Material(
                                 color: Colors.transparent,
                                 child: Padding(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: profile ? 10 : 0,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
                                   ),
                                   child: Row(
                                     children: [
@@ -267,84 +268,61 @@ class _SocialShellState extends State<SocialShell> {
                                                 child: AnimatedContainer(
                                                   duration: duration,
                                                   curve: Curves.easeOutCubic,
-                                                  margin: profile
-                                                      ? const EdgeInsets.symmetric(
-                                                          vertical: 5,
-                                                        )
-                                                      : const EdgeInsets.all(4),
+                                                  margin:
+                                                      const EdgeInsets.symmetric(
+                                                        vertical: 5,
+                                                      ),
                                                   alignment: Alignment.center,
                                                   decoration: BoxDecoration(
                                                     color: ink.withValues(
                                                       alpha: _selected == index
-                                                          ? (reel ? .16 : .09)
+                                                          ? (dark ? .16 : .09)
                                                           : 0,
                                                     ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          40,
-                                                        ),
+                                                    borderRadius: dockRadius,
                                                   ),
-                                                  child: AnimatedScale(
-                                                    scale:
-                                                        _selected == index &&
-                                                            !profile
-                                                        ? 1.12
-                                                        : 1,
-                                                    duration: duration,
-                                                    child: Badge(
-                                                      backgroundColor:
-                                                          const Color(
-                                                            0xffff0035,
-                                                          ),
-                                                      alignment:
-                                                          Alignment.bottomRight,
-                                                      offset: const Offset(
-                                                        2,
-                                                        2,
-                                                      ),
-                                                      isLabelVisible:
-                                                          index == 2 &&
-                                                          store.inboxThreads.any(
-                                                            store.chatHasUnread,
-                                                          ),
-                                                      child: index == 4
-                                                          ? profile
-                                                                ? Container(
-                                                                    width: 25,
-                                                                    height: 25,
-                                                                    padding:
-                                                                        const EdgeInsets.all(
-                                                                          1,
-                                                                        ),
-                                                                    decoration: BoxDecoration(
-                                                                      shape: BoxShape
-                                                                          .circle,
-                                                                      border: Border.all(
+                                                  child: Badge(
+                                                    backgroundColor:
+                                                        const Color(0xffff0035),
+                                                    alignment:
+                                                        Alignment.bottomRight,
+                                                    offset: const Offset(2, 2),
+                                                    isLabelVisible:
+                                                        index == 2 &&
+                                                        store.inboxThreads.any(
+                                                          store.chatHasUnread,
+                                                        ),
+                                                    child: index == 4
+                                                        ? Container(
+                                                            width: 25,
+                                                            height: 25,
+                                                            padding:
+                                                                const EdgeInsets.all(
+                                                                  1,
+                                                                ),
+                                                            decoration:
+                                                                BoxDecoration(
+                                                                  shape: BoxShape
+                                                                      .circle,
+                                                                  border:
+                                                                      Border.all(
                                                                         color:
                                                                             ink,
-                                                                        width:
-                                                                            1,
                                                                       ),
-                                                                    ),
-                                                                    child: Avatar(
-                                                                      store
-                                                                          .myId,
-                                                                      size: 22,
-                                                                    ),
-                                                                  )
-                                                                : Avatar(
-                                                                    store.myId,
-                                                                    size: 24,
-                                                                  )
-                                                          : GIcon(
-                                                              _selected == index
-                                                                  ? _selectedIcons[index]
-                                                                  : _icons[index],
-                                                              color: ink,
-                                                              size: 25,
-                                                              dock: true,
+                                                                ),
+                                                            child: Avatar(
+                                                              store.myId,
+                                                              size: 22,
                                                             ),
-                                                    ),
+                                                          )
+                                                        : GIcon(
+                                                            _selected == index
+                                                                ? _selectedIcons[index]
+                                                                : _icons[index],
+                                                            color: ink,
+                                                            size: 25,
+                                                            dock: true,
+                                                          ),
                                                   ),
                                                 ),
                                               ),

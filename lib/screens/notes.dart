@@ -19,12 +19,14 @@ class NoteBubble extends StatelessWidget {
     this.placeholder = false,
     this.maxLines = 2,
     this.fitContents = false,
+    this.textStyle,
   });
 
   final String text;
   final J details;
   final bool placeholder, fitContents;
   final int maxLines;
+  final TextStyle? textStyle;
   static const _fontSize = 11.5;
 
   @override
@@ -41,7 +43,10 @@ class NoteBubble extends StatelessWidget {
       maxLines: maxLines,
       overflow: TextOverflow.ellipsis,
       textAlign: TextAlign.center,
-      style: TextStyle(fontSize: _fontSize, height: 1.06, color: color),
+      style: const TextStyle(
+        fontSize: _fontSize,
+        height: 1.06,
+      ).merge(textStyle).copyWith(color: color),
     );
     return _NoteCloud(
       details: details,

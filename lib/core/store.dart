@@ -368,6 +368,23 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
 
   bool get supportsPostTagManagement => demo || state.flag('postTagManagement');
 
+  bool get supportsTextPosts => demo || state.containsKey('textPosts');
+  bool get supportsPulseMedia => demo || state.flag('pulseMedia');
+
+  bool canRepostPulse(J post) {
+    final author = user(post.str('author'));
+    return supportsPulseMedia &&
+        post.str('kind') == 'text' &&
+        post.str('audience', 'all') == 'all' &&
+        author.str('id').isNotEmpty &&
+        !author.flag('private');
+  }
+
+  List<J> get textPosts => state
+      .rows('textPosts')
+      .where((p) => !p.flag('archived') && !blocked(p.str('author')))
+      .toList();
+
   bool taggedInPost(J post, String user) {
     final style = post.obj('style');
     return post.str('kind') == 'post' &&
@@ -505,8 +522,11 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
             'username': 'utente',
           },
         );
-  J post(String id) =>
-      allPosts.firstWhere((p) => p.str('id') == id, orElse: () => {});
+  J post(String id) => allPosts.firstWhere(
+    (p) => p.str('id') == id,
+    orElse: () =>
+        textPosts.firstWhere((p) => p.str('id') == id, orElse: () => {}),
+  );
   J thread(String id) =>
       threads.firstWhere((t) => t.str('id') == id, orElse: () => {});
   String other(J t) =>
@@ -941,6 +961,26 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> act(String action, [J payload = const {}]) async {
+    if ((action == 'post' || action == 'postForFollowers') &&
+        payload.flag('shareToPulse') &&
+        !supportsPulseMedia) {
+      throw Exception('Aggiorna il server GPIX per pubblicare anche su Pulse.');
+    }
+    if (action == 'post' && payload.str('kind') == 'text') {
+      final text = payload.str('text').trim();
+      final hasAttachment =
+          payload.str('media').isNotEmpty ||
+          payload.ids('mediaItems').isNotEmpty ||
+          payload.str('quotePostId').isNotEmpty;
+      if ((text.isEmpty && !hasAttachment) ||
+          text.characters.length > textPostLimit) {
+        throw Exception('Scrivi un testo da 1 a $textPostLimit caratteri.');
+      }
+      if (!supportsTextPosts || (hasAttachment && !supportsPulseMedia)) {
+        throw Exception('Aggiorna il server GPIX per pubblicare su Pulse.');
+      }
+      payload = {...payload, 'text': text};
+    }
     if (action == 'note' && !payload.flag('delete')) {
       final value = payload.str('text').trim();
       final details = payload.obj('details');
@@ -961,7 +1001,8 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
         );
       }
     }
-    final key = '$token:$action:${payload['id'] ?? payload['user'] ?? ''}';
+    final key =
+        '$token:$action:${payload['id'] ?? payload['user'] ?? payload['idempotencyKey'] ?? ''}';
     if (_pending.containsKey(key)) return _pending[key]!;
     final future = _perform(action, payload);
     _pending[key] = future;
@@ -1709,6 +1750,13 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
         final list = item.ids('reposts')..remove(myId);
         if (p['enabled'] != false) list.add(myId);
         item['reposts'] = list;
+        if (item.str('kind') == 'text') {
+          if (list.contains(myId)) {
+            item['recentRepost'] = {'user': myId, 'created': now};
+          } else if (item.obj('recentRepost').str('user') == myId) {
+            item.remove('recentRepost');
+          }
+        }
         break;
       case 'closeFriend':
         final ids = state.ids('closeFriends')..remove(uid);
@@ -1793,28 +1841,62 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
         poll['myVote'] = choice;
         break;
       case 'post':
-        state['posts'] = [
-          {
-            'id': newId(),
-            'author': myId,
-            'kind': p.str('kind'),
-            'text': p.str('text'),
-            'media': p.str('media'),
-            'mediaItems': p['mediaItems'] ?? [],
-            'location': p.str('location'),
-            'style': p['style'] ?? {},
-            if (p.ids('collaboratorInvites').isNotEmpty)
-              'pendingCollaborators': p.ids('collaboratorInvites'),
-            'audience': p.str('audience', 'all'),
-            'created': now,
-            'expires': p.str('kind') == 'story' ? now + 86400 : 0,
-            'likes': <String>[],
-            'comments': <J>[],
-            'saved': false,
-            'viewers': <String>[],
+        final pulse = p.str('kind') == 'text';
+        final collection = pulse ? 'textPosts' : 'posts';
+        final key = p.str('idempotencyKey');
+        if (key.isNotEmpty &&
+            state
+                .rows(collection)
+                .any(
+                  (post) =>
+                      post.str('author') == myId &&
+                      post.str('publishKey') == key,
+                ))
+          break;
+        final J published = {
+          'id': newId(),
+          'author': myId,
+          'kind': p.str('kind'),
+          'text': p.str('text'),
+          'media': p.str('media'),
+          'mediaItems': p['mediaItems'] ?? [],
+          'location': p.str('location'),
+          'style': {
+            ...p.obj('style'),
+            if (pulse && p.str('quotePostId').isNotEmpty)
+              'quotePostId': p.str('quotePostId'),
+            if (pulse && p.obj('videoCovers').isNotEmpty)
+              'videoCovers': p.obj('videoCovers'),
           },
-          ...items,
-        ];
+          if (p.ids('collaboratorInvites').isNotEmpty)
+            'pendingCollaborators': p.ids('collaboratorInvites'),
+          'audience': p.str('audience', 'all'),
+          'created': now,
+          'expires': p.str('kind') == 'story' ? now + 86400 : 0,
+          'likes': <String>[],
+          'comments': <J>[],
+          'saved': false,
+          'viewers': <String>[],
+          'publishKey': key,
+        };
+        state[collection] = [published, ...state.rows(collection)];
+        if (p.str('kind') == 'post' && p.flag('shareToPulse')) {
+          state['textPosts'] = [
+            {
+              ...published,
+              'id': newId(),
+              'kind': 'text',
+              'style': {
+                if (p.obj('style').flag('aiLabel')) 'aiLabel': true,
+                if (p.obj('style')['poll'] case final Map poll)
+                  'poll': Map<String, dynamic>.of(object(poll)),
+              },
+              'commentsOff': p.flag('commentsOff'),
+              'hideLikes': p.flag('hideLikes'),
+            }..remove('pendingCollaborators'),
+            ...state.rows('textPosts'),
+          ];
+        }
         break;
       case 'managePostTag':
         final hidden = item.ids('hiddenTagUsers')..remove(myId);
@@ -1856,7 +1938,11 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
             .toList();
         break;
       case 'deletePost':
-        state['posts'] = items.where((e) => e.str('id') != id).toList();
+        final collection = item.str('kind') == 'text' ? 'textPosts' : 'posts';
+        state[collection] = state
+            .rows(collection)
+            .where((e) => e.str('id') != id)
+            .toList();
         break;
       case 'editPost':
         item['text'] = p.str('text');
@@ -1894,7 +1980,7 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
       case 'likeComment':
       case 'hideComment':
       case 'deleteComment':
-        for (final post in items) {
+        for (final post in [...items, ...textPosts]) {
           final comments = post.rows('comments');
           final c = comments.firstWhere(
             (e) => e.str('id') == id,

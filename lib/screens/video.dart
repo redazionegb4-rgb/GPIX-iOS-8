@@ -9,7 +9,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import '../core/store.dart';
 import '../ui/kit.dart';
 
-export 'reels.dart' show Reels, reelDockBottom, reelDockHeight;
+export 'reels.dart' show Reels;
 
 typedef ClipProgress = ({Duration position, Duration duration});
 

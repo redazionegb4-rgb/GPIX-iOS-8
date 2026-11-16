@@ -23,6 +23,7 @@ extension Json on Map<String, dynamic> {
 }
 
 int _sequence = 0;
+const textPostLimit = 500;
 String newId() => '${DateTime.now().microsecondsSinceEpoch}-${_sequence++}';
 double get now => DateTime.now().millisecondsSinceEpoch / 1000;
 String relative(dynamic value) {

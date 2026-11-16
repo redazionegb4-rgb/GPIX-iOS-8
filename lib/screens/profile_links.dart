@@ -89,10 +89,11 @@ class ProfileLinkChips extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 11.2,
+                        fontSize: 12,
                         color: ink,
                         fontWeight: FontWeight.w600,
                         height: 1.16,
+                        letterSpacing: 0,
                       ),
                     ),
                   ),

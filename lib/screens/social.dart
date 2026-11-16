@@ -21,6 +21,7 @@ import 'inbox_widgets.dart' show DirectSearchField, directSearchTerm;
 import 'video.dart';
 import 'live.dart';
 import 'community.dart';
+import 'conversations.dart' show PulsePostPage;
 import 'notes.dart';
 import 'giphy.dart';
 import '../rebuild/surfaces.dart' show DiscoverHome, ProfileHome, TimelinePost;
@@ -1533,7 +1534,13 @@ Future<void> comments(BuildContext c, String id) => showModalBottomSheet<void>(
 class Comments extends StatefulWidget {
   final String id;
   final bool reel;
-  const Comments({super.key, required this.id, this.reel = false});
+  final Widget? inlineHeader;
+  const Comments({
+    super.key,
+    required this.id,
+    this.reel = false,
+    this.inlineHeader,
+  });
   @override
   State<Comments> createState() => _CommentsState();
 }
@@ -1608,7 +1615,10 @@ class _CommentsState extends State<Comments> {
               owner ||
               root.str('author') == s.myId;
         }).toList();
-    if (widget.reel) return _commentPanel(c, s, p, comments);
+    if (widget.reel || widget.inlineHeader != null) {
+      return _commentPanel(c, s, p, comments);
+    }
+    final textPost = p.str('kind') == 'text';
     return Column(
       children: [
         const SizedBox(height: 7),
@@ -1625,13 +1635,16 @@ class _CommentsState extends State<Comments> {
           child: Stack(
             alignment: Alignment.center,
             children: [
-              const Center(
+              Center(
                 child: Text(
-                  'Commenti',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                  textPost ? 'Risposte' : 'Commenti',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
-              if (p.isNotEmpty)
+              if (p.isNotEmpty && (!textPost || s.supportsPulseMedia))
                 Positioned(
                   right: 10,
                   child: IconButton(
@@ -1721,6 +1734,7 @@ class _CommentsState extends State<Comments> {
   }
 
   Widget _commentPanel(BuildContext c, GpixStore s, J post, List<J> comments) {
+    final textPost = post.str('kind') == 'text';
     final canSend =
         post.isNotEmpty &&
         (!post.flag('commentsOff') || post.str('author') == s.myId);
@@ -1738,47 +1752,52 @@ class _CommentsState extends State<Comments> {
     const scroll = ClampingScrollPhysics(
       parent: AlwaysScrollableScrollPhysics(),
     );
+    final header = widget.inlineHeader;
     return Column(
       children: [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Padding(
-            padding: const EdgeInsets.only(left: 15),
-            child: PopupMenuButton<bool>(
-              tooltip: 'Ordina commenti',
-              onSelected: (v) => setState(() => _recent = v),
-              initialValue: _recent,
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: false, child: Text('Per te')),
-                PopupMenuItem(value: true, child: Text('Più recenti')),
-              ],
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _recent ? 'Più recenti' : 'Per te',
-                      style: TextStyle(
-                        color: secondaryText(c),
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
+        if (header == null)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 15),
+              child: PopupMenuButton<bool>(
+                tooltip: 'Ordina commenti',
+                onSelected: (v) => setState(() => _recent = v),
+                initialValue: _recent,
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: false, child: Text('Per te')),
+                  PopupMenuItem(value: true, child: Text('Più recenti')),
+                ],
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 2,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _recent ? 'Più recenti' : 'Per te',
+                        style: TextStyle(
+                          color: secondaryText(c),
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 5),
-                    GIcon(
-                      CupertinoIcons.chevron_down,
-                      color: secondaryText(c),
-                      size: 11,
-                    ),
-                  ],
+                      const SizedBox(width: 5),
+                      GIcon(
+                        CupertinoIcons.chevron_down,
+                        color: secondaryText(c),
+                        size: 11,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
         Expanded(
-          child: roots.isEmpty
+          child: roots.isEmpty && header == null
               ? CustomScrollView(
                   physics: scroll,
                   slivers: [
@@ -1788,7 +1807,9 @@ class _CommentsState extends State<Comments> {
                         child: Padding(
                           padding: const EdgeInsets.all(12),
                           child: Text(
-                            'Ancora nessun commento',
+                            textPost
+                                ? 'Ancora nessuna risposta'
+                                : 'Ancora nessun commento',
                             style: TextStyle(
                               color: secondaryText(c),
                               fontSize: 13,
@@ -1804,8 +1825,10 @@ class _CommentsState extends State<Comments> {
                   physics: scroll,
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
-                  itemCount: roots.length,
-                  itemBuilder: (c, i) {
+                  itemCount: roots.length + (header == null ? 0 : 1),
+                  itemBuilder: (c, index) {
+                    if (header != null && index == 0) return header;
+                    final i = index - (header == null ? 0 : 1);
                     final root = roots[i], id = roots[i].str('id');
                     final children = replies[id] ?? const <J>[];
                     final expanded = _expandedReplies.contains(id);
@@ -1852,13 +1875,15 @@ class _CommentsState extends State<Comments> {
                 ),
         ),
         if (canSend)
-          _composer(c, s)
+          _composer(c, s, textPost: textPost)
         else
           Padding(
             padding: const EdgeInsets.all(13),
             child: Text(
               post.isEmpty
                   ? 'Contenuto non disponibile'
+                  : textPost
+                  ? 'Risposte disattivate'
                   : 'Commenti disattivati',
               style: TextStyle(color: secondaryText(c), fontSize: 13),
             ),
@@ -1867,7 +1892,7 @@ class _CommentsState extends State<Comments> {
     );
   }
 
-  Widget _composer(BuildContext c, GpixStore s) {
+  Widget _composer(BuildContext c, GpixStore s, {required bool textPost}) {
     final sending = _hasText || media.isNotEmpty;
     final dark = Theme.of(c).brightness == Brightness.dark;
     final compact =
@@ -2000,7 +2025,7 @@ class _CommentsState extends State<Comments> {
                             focusNode: focus,
                             minLines: 1,
                             maxLines: compact ? 2 : 3,
-                            maxLength: 2000,
+                            maxLength: textPost ? textPostLimit : 2000,
                             keyboardAppearance: Theme.of(c).brightness,
                             onChanged: (_) => setState(() {}),
                             style: TextStyle(
@@ -2009,7 +2034,9 @@ class _CommentsState extends State<Comments> {
                             ),
                             decoration: InputDecoration(
                               counterText: '',
-                              hintText: 'Cosa ne pensi?',
+                              hintText: textPost
+                                  ? 'Scrivi una risposta'
+                                  : 'Cosa ne pensi?',
                               hintStyle: TextStyle(
                                 fontSize: 13,
                                 color: secondaryText(c),
@@ -2028,7 +2055,9 @@ class _CommentsState extends State<Comments> {
                       ),
                       if (sending)
                         IconButton(
-                          tooltip: 'Pubblica commento',
+                          tooltip: textPost
+                              ? 'Pubblica risposta'
+                              : 'Pubblica commento',
                           constraints: const BoxConstraints.tightFor(
                             width: 40,
                             height: 39,
@@ -2041,7 +2070,7 @@ class _CommentsState extends State<Comments> {
                             size: 26,
                           ),
                         )
-                      else
+                      else if (!textPost || s.supportsPulseMedia)
                         for (final (gif, label, icon) in const [
                           (false, 'Foto nel commento', CupertinoIcons.photo),
                           (true, 'GIF nel commento', Icons.gif_box_outlined),
@@ -2450,6 +2479,7 @@ class PostPage extends StatelessWidget {
     final kind = post.str('kind');
     if (kind == 'story') return StoryViewer(user: author, ids: [id]);
     if (kind == 'reel') return Reels(initial: id);
+    if (kind == 'text') return PulsePostPage(id: id);
     final selection = postIds.indexOf(id);
     final posts = {for (final item in store.allPosts) item.str('id'): item};
     bool visible(String id) {
