@@ -247,6 +247,16 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
       chatReactions(t).isNotEmpty;
   final _readingThreads = <String>{};
   bool get hasActivity => socialNotifications.any((n) => !n.flag('seen'));
+  Future<void> recordReelView(String id) async {
+    final reel = post(id);
+    if (reel.str('kind') != 'reel' ||
+        reel.str('author') == myId ||
+        reel.flag('seenByMe')) {
+      return;
+    }
+    await act('see', {'id': id}).catchError((Object _) {});
+  }
+
   List<String> viewers(J p) =>
       p.ids('viewers').where((id) => id != p.str('author')).toList();
   List<J> get notes => state
@@ -928,6 +938,35 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
     } catch (e) {
       if (!silent) rethrow;
     }
+  }
+
+  String get _avatarModelKey => 'gpix.avatarModel.$server.$myId';
+
+  J get avatarModel {
+    final model = me.obj('avatarModel');
+    if (demo || model.isNotEmpty) return model;
+    final saved = prefs?.getString(_avatarModelKey);
+    if (saved == null) return const {};
+    try {
+      return object(jsonDecode(saved));
+    } on FormatException {
+      return const {};
+    }
+  }
+
+  Future<void> saveAvatarModel(J model) async {
+    final key = _avatarModelKey;
+    if (demo || state.flag('profileAvatars')) {
+      await act('profileAvatar', {'model': model});
+      await prefs?.remove(key);
+      return;
+    }
+    final preferences = prefs ??= await SharedPreferences.getInstance();
+    final saved = model.isEmpty
+        ? await preferences.remove(key)
+        : await preferences.setString(key, jsonEncode(model));
+    if (!saved) throw StateError('Impossibile salvare l’avatar.');
+    notifyListeners();
   }
 
   Future<void> act(String action, [J payload = const {}]) async {
@@ -1704,6 +1743,9 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
         final ids = state.ids('closeFriends')..remove(uid);
         if (p['enabled'] != false) ids.add(uid);
         state['closeFriends'] = ids;
+        break;
+      case 'profileAvatar':
+        me['avatarModel'] = p.obj('model');
         break;
       case 'profile':
         me.addAll(p);

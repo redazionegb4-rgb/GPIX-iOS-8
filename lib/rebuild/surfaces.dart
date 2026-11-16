@@ -10,7 +10,7 @@ import '../screens/community.dart';
 import '../screens/notes.dart';
 import '../screens/instants.dart';
 import '../screens/inbox_widgets.dart';
-import '../screens/profile_links.dart' show ProfileLinkChips;
+import '../screens/profile_links.dart' show ProfileLinkChips, openProfileLink;
 import '../screens/messages.dart';
 import '../screens/moments.dart';
 import '../screens/people.dart';
@@ -172,7 +172,7 @@ class _HomeTimelineState extends State<HomeTimeline> {
               actions: [
                 IconButton(
                   constraints: const BoxConstraints.tightFor(
-                    width: _HomeActivityBadge.width,
+                    width: 72,
                     height: 52,
                   ),
                   padding: EdgeInsets.zero,
@@ -181,7 +181,16 @@ class _HomeTimelineState extends State<HomeTimeline> {
                   icon: Badge(
                     isLabelVisible: store.hasActivity,
                     backgroundColor: danger,
-                    child: const GIcon(CupertinoIcons.heart, size: 25),
+                    child:
+                        widget.active &&
+                            feed == 'all' &&
+                            showActivityBubble &&
+                            unreadIds.isNotEmpty
+                        ? _HomeActivityAnchor(
+                            count: unreadIds.length,
+                            onTap: openActivity,
+                          )
+                        : const GIcon(CupertinoIcons.heart, size: 25),
                   ),
                 ),
               ],
@@ -191,25 +200,7 @@ class _HomeTimelineState extends State<HomeTimeline> {
                 child: CommunityDirectory(bottomPadding: _dockSpace(context)),
               )
             else ...[
-              if (feed == 'all')
-                SliverToBoxAdapter(
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      const StoryTray(),
-                      if (showActivityBubble && unreadIds.isNotEmpty)
-                        Positioned(
-                          right: 0,
-                          top: 0,
-                          child: _HomeActivityBadge(
-                            key: const ValueKey('activity-bubble'),
-                            count: unreadIds.length,
-                            onTap: openActivity,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
+              if (feed == 'all') const SliverToBoxAdapter(child: StoryTray()),
               if (entries.isEmpty)
                 SliverToBoxAdapter(
                   child: feed == 'favorites'
@@ -259,6 +250,49 @@ class _HomeTimelineState extends State<HomeTimeline> {
   }
 }
 
+class _HomeActivityAnchor extends StatefulWidget {
+  const _HomeActivityAnchor({required this.count, required this.onTap});
+
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  State<_HomeActivityAnchor> createState() => _HomeActivityAnchorState();
+}
+
+class _HomeActivityAnchorState extends State<_HomeActivityAnchor> {
+  final link = LayerLink();
+  final portal = OverlayPortalController()..show();
+
+  @override
+  Widget build(BuildContext context) => OverlayPortal(
+    controller: portal,
+    overlayChildBuilder: (context) => Align(
+      alignment: Alignment.topLeft,
+      child: CompositedTransformFollower(
+        link: link,
+        showWhenUnlinked: false,
+        targetAnchor: Alignment.bottomCenter,
+        followerAnchor: Alignment.topCenter,
+        offset: const Offset(0, -3),
+        child: _HomeActivityBadge(
+          key: const ValueKey('activity-bubble'),
+          count: widget.count,
+          onTap: widget.onTap,
+        ),
+      ),
+    ),
+    child: CompositedTransformTarget(
+      link: link,
+      child: const GIcon(
+        CupertinoIcons.heart,
+        key: ValueKey('activity-heart'),
+        size: 25,
+      ),
+    ),
+  );
+}
+
 class _HomeActivityBadge extends StatelessWidget {
   const _HomeActivityBadge({
     super.key,
@@ -269,81 +303,93 @@ class _HomeActivityBadge extends StatelessWidget {
   final int count;
   final VoidCallback onTap;
 
-  static const color = Color(0xffff0035);
-  static const double width = 72;
-
   @override
   Widget build(BuildContext context) => Semantics(
     label: '$count attività non lette',
     button: true,
-    child: SizedBox(
-      width: width,
-      child: Stack(
-        alignment: Alignment.topCenter,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Material(
-              color: color,
-              borderRadius: BorderRadius.circular(24),
-              elevation: 4,
-              shadowColor: const Color(0x50000000),
-              child: InkWell(
-                onTap: onTap,
-                borderRadius: BorderRadius.circular(24),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minWidth: 60, minHeight: 38),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 7),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const GIcon(
-                          CupertinoIcons.heart_fill,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 4),
-                        Flexible(
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              '$count',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+    child: Material(
+      color: const Color(0xffff0035),
+      shape: const _ActivityBubbleShape(),
+      elevation: 5,
+      shadowColor: const Color(0x50000000),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            minWidth: 58,
+            maxWidth: 68,
+            minHeight: 42,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const GIcon(
+                  CupertinoIcons.heart_fill,
+                  color: Colors.white,
+                  size: 16,
+                ),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      '$count',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
           ),
-          Positioned(
-            top: 3,
-            child: IgnorePointer(
-              child: Transform.rotate(
-                angle: .7853981633974483,
-                child: Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: color,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     ),
   );
+}
+
+class _ActivityBubbleShape extends ShapeBorder {
+  const _ActivityBubbleShape();
+
+  @override
+  EdgeInsetsGeometry get dimensions => EdgeInsets.zero;
+
+  @override
+  Path getOuterPath(Rect rect, {TextDirection? textDirection}) {
+    final x = rect.center.dx;
+    final y = rect.top;
+    final pointer = Path()
+      ..moveTo(x - 8, y + 7)
+      ..lineTo(x - 2, y + 1)
+      ..quadraticBezierTo(x, y - 1, x + 2, y + 1)
+      ..lineTo(x + 8, y + 7)
+      ..close();
+    final body = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTRB(rect.left, y + 6, rect.right, rect.bottom),
+          const Radius.circular(22),
+        ),
+      );
+    return Path.combine(PathOperation.union, body, pointer);
+  }
+
+  @override
+  Path getInnerPath(Rect rect, {TextDirection? textDirection}) =>
+      getOuterPath(rect, textDirection: textDirection);
+
+  @override
+  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {}
+
+  @override
+  ShapeBorder scale(double t) => this;
 }
 
 class _FeedSelector extends StatefulWidget {
@@ -742,6 +788,7 @@ class _TimelinePostState extends State<TimelinePost> {
             child: _InlinePostVideo(
               reference: post.str('media'),
               cover: store.reelCover(post),
+              onViewed: () => unawaited(store.recordReelView(id)),
               enabled: widget.playReels,
               onTap: () => open(context, PostPage(id: id)),
             ),
@@ -1178,10 +1225,11 @@ class _InlinePostVideo extends StatefulWidget {
     required this.cover,
     required this.enabled,
     this.onTap,
+    this.onViewed,
   });
 
   final String reference;
-  final VoidCallback? onTap;
+  final VoidCallback? onTap, onViewed;
   final String cover;
   final bool enabled;
 
@@ -1257,6 +1305,7 @@ class _InlinePostVideoState extends State<_InlinePostVideo> {
               muted: muted,
               placeholder: thumbnail,
               showSubtitles: false,
+              onViewed: widget.onViewed,
             )
           else ...[
             if (thumbnail != null) thumbnail,
@@ -2146,23 +2195,28 @@ class _ExploreLabel extends StatelessWidget {
 }
 
 class ProfileHome extends StatefulWidget {
-  const ProfileHome({
-    super.key,
-    required this.user,
-    this.detail = false,
-    this.onBoundarySwipe,
-  });
+  const ProfileHome({super.key, required this.user, this.detail = false});
   final String user;
   final bool detail;
-  final ValueChanged<int>? onBoundarySwipe;
 
   @override
   State<ProfileHome> createState() => _ProfileHomeState();
 }
 
-class _ProfileHomeState extends State<ProfileHome> {
-  int section = 0;
+class _ProfileHomeState extends State<ProfileHome>
+    with SingleTickerProviderStateMixin {
+  late final _tabs = TabController(
+    length: _ProfileSection.values.length,
+    vsync: this,
+  );
   bool showSuggestions = true;
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
+
   final dismissedSuggestions = <String>{};
 
   Future<void> profileOptions(GpixStore store, J person) async {
@@ -2244,24 +2298,20 @@ class _ProfileHomeState extends State<ProfileHome> {
               !post.flag('collaborationPending'),
         )
         .toList();
-    final posts = switch (section) {
-      1 => personal.where((post) => post.str('kind') == 'reel').toList(),
-      2 =>
-        store.allPosts
-            .where(
-              (post) =>
-                  !store.blocked(post.str('author')) &&
-                  !post.flag('archived') &&
-                  post.str('kind') != 'story' &&
-                  post.ids('reposts').contains(widget.user),
-            )
-            .toList(),
-      3 => store.taggedPosts(widget.user),
-      _ => personal.where((post) => post.str('kind') == 'post').toList(),
-    };
+    final posts = personal.where((post) => post.str('kind') == 'post').toList();
+    final reels = personal.where((post) => post.str('kind') == 'reel').toList();
+    final reposts = store.allPosts
+        .where(
+          (post) =>
+              !store.blocked(post.str('author')) &&
+              !post.flag('archived') &&
+              post.str('kind') != 'story' &&
+              post.ids('reposts').contains(widget.user),
+        )
+        .toList();
     final pinned = person.ids('pinnedPosts');
     final gridOrder = person.ids('gridOrder');
-    if (section == 0 && (pinned.isNotEmpty || gridOrder.isNotEmpty)) {
+    if (pinned.isNotEmpty || gridOrder.isNotEmpty) {
       final ids = <String>{
         ...pinned,
         ...gridOrder,
@@ -2270,6 +2320,12 @@ class _ProfileHomeState extends State<ProfileHome> {
       final rank = {for (final (i, id) in ids.indexed) id: i};
       posts.sort((a, b) => rank[a.str('id')]!.compareTo(rank[b.str('id')]!));
     }
+    final grid = {
+      _ProfileSection.posts: posts,
+      _ProfileSection.reels: reels,
+      _ProfileSection.reposts: reposts,
+      _ProfileSection.tagged: store.taggedPosts(widget.user),
+    };
     final highlights = store.highlights(widget.user);
     final note = store.notes
         .where((entry) => entry.str('owner') == widget.user)
@@ -2289,10 +2345,14 @@ class _ProfileHomeState extends State<ProfileHome> {
                   1.8
         : 0.0;
     final connections = person.rows('links');
+    final website = person.str('website');
     final page = Scaffold(
+      backgroundColor: surface(context),
       appBar: AppBar(
+        backgroundColor: surface(context),
+        foregroundColor: _profileInk(context),
         centerTitle: true,
-        toolbarHeight: 60,
+        toolbarHeight: 55,
         leadingWidth: 72,
         title: own
             ? _AccountTitle(
@@ -2339,309 +2399,319 @@ class _ProfileHomeState extends State<ProfileHome> {
             ),
         ],
       ),
-      body: SectionSwipe(
-        section: section,
-        enabled: !restricted,
-        onStep: (step) {
-          final target = section + step;
-          if (target >= 0 && target < 4) {
-            setState(() => section = target);
-          } else {
-            widget.onBoundarySwipe?.call(step);
-          }
-        },
-        child: CustomScrollView(
-          key: PageStorageKey('rebuilt-profile-${widget.user}'),
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 2, 16, 0),
-              sliver: SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        SizedBox(
-                          width: portraitSize,
-                          height: portraitSize + noteOffset,
-                          child: Stack(
-                            clipBehavior: Clip.none,
-                            alignment: Alignment.bottomCenter,
-                            children: [
+      body: NestedScrollView(
+        key: PageStorageKey('rebuilt-profile-${widget.user}'),
+        headerSliverBuilder: (context, _) => [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 2, 16, 0),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      SizedBox(
+                        width: portraitSize,
+                        height: portraitSize + noteOffset,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          alignment: Alignment.bottomCenter,
+                          children: [
+                            Positioned(
+                              left: -5,
+                              bottom: 0,
+                              child: InkWell(
+                                customBorder: const CircleBorder(),
+                                onTap: activeStories
+                                    ? () => open(
+                                        context,
+                                        StoryViewer(user: widget.user),
+                                      )
+                                    : own
+                                    ? () => open(context, const EditProfile())
+                                    : null,
+                                child: Avatar(
+                                  widget.user,
+                                  key: const ValueKey('profile-avatar'),
+                                  size:
+                                      portraitSize - (activeStories ? 10.2 : 0),
+                                  ring: activeStories,
+                                  viewed:
+                                      !own &&
+                                      !store.hasUnseenStories(widget.user),
+                                ),
+                              ),
+                            ),
+                            if (hasNote)
                               Positioned(
-                                left: -5,
-                                bottom: 0,
-                                child: InkWell(
-                                  customBorder: const CircleBorder(),
-                                  onTap: activeStories
-                                      ? () => open(
-                                          context,
-                                          StoryViewer(user: widget.user),
-                                        )
-                                      : own
-                                      ? () => open(context, const EditProfile())
-                                      : null,
-                                  child: Avatar(
-                                    widget.user,
-                                    key: const ValueKey('profile-avatar'),
-                                    size:
-                                        portraitSize -
-                                        (activeStories ? 10.2 : 0),
-                                    ring: activeStories,
-                                    viewed:
-                                        !own &&
-                                        !store.hasUnseenStories(widget.user),
+                                top: 0,
+                                left: 1,
+                                right: 11,
+                                child: Tooltip(
+                                  message: own
+                                      ? 'La tua nota'
+                                      : 'Rispondi alla nota',
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(17),
+                                    onTap: own
+                                        ? () => manageOwnNote(context)
+                                        : () => replyNote(context, note!),
+                                    child: NoteBubble(
+                                      text:
+                                          note?.str('text') ??
+                                          'Lascia una nota…',
+                                      details: note?.obj('details') ?? const {},
+                                      placeholder: note == null,
+                                    ),
                                   ),
                                 ),
                               ),
-                              if (hasNote)
-                                Positioned(
-                                  top: 0,
-                                  left: 1,
-                                  right: 11,
-                                  child: Tooltip(
-                                    message: own
-                                        ? 'La tua nota'
-                                        : 'Rispondi alla nota',
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(17),
-                                      onTap: own
-                                          ? () => manageOwnNote(context)
-                                          : () => replyNote(context, note!),
-                                      child: NoteBubble(
-                                        text:
-                                            note?.str('text') ??
-                                            'Lascia una nota…',
-                                        details:
-                                            note?.obj('details') ?? const {},
-                                        placeholder: note == null,
-                                      ),
+                            if (own)
+                              Positioned(
+                                right: -1,
+                                bottom: 4,
+                                child: Tooltip(
+                                  message: 'Aggiungi alla storia',
+                                  child: InkWell(
+                                    onTap: () => open(
+                                      context,
+                                      const Composer(kind: 'story'),
                                     ),
-                                  ),
-                                ),
-                              if (own)
-                                Positioned(
-                                  right: -1,
-                                  bottom: 4,
-                                  child: Tooltip(
-                                    message: 'Aggiungi alla storia',
-                                    child: InkWell(
-                                      onTap: () => open(
-                                        context,
-                                        const Composer(kind: 'story'),
-                                      ),
-                                      customBorder: const CircleBorder(),
-                                      child: Container(
-                                        width: 29,
-                                        height: 29,
-                                        decoration: BoxDecoration(
-                                          color: foreground(context),
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: surface(context),
-                                            width: 2.6,
-                                          ),
-                                        ),
-                                        child: GIcon(
-                                          CupertinoIcons.plus,
-                                          size: 17,
+                                    customBorder: const CircleBorder(),
+                                    child: Container(
+                                      width: 29,
+                                      height: 29,
+                                      decoration: BoxDecoration(
+                                        color: foreground(context),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
                                           color: surface(context),
+                                          width: 2.6,
                                         ),
+                                      ),
+                                      child: GIcon(
+                                        CupertinoIcons.plus,
+                                        size: 17,
+                                        color: surface(context),
                                       ),
                                     ),
                                   ),
                                 ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 31),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                person.str('name', person.str('username')),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  height: 1.23,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 9),
+                              Row(
+                                children: [
+                                  _stat(
+                                    person.str(
+                                      'postCount',
+                                      '${personal.where((p) => p.str('kind') != 'story').length}',
+                                    ),
+                                    'post',
+                                  ),
+                                  _stat(
+                                    person.str('followers', '0'),
+                                    'follower',
+                                    () => open(
+                                      context,
+                                      Connections(user: widget.user),
+                                    ),
+                                  ),
+                                  _stat(
+                                    person.str('following', '0'),
+                                    'seguiti',
+                                    () => open(
+                                      context,
+                                      Connections(
+                                        user: widget.user,
+                                        initial: 1,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ],
                           ),
                         ),
-                        const SizedBox(width: 9),
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.only(bottom: 34),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  person.str('name', person.str('username')),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    height: 1.2,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 9),
-                                Row(
-                                  children: [
-                                    _stat(
-                                      person.str(
-                                        'postCount',
-                                        '${personal.where((p) => p.str('kind') != 'story').length}',
-                                      ),
-                                      'post',
-                                    ),
-                                    _stat(
-                                      person.str('followers', '0'),
-                                      'follower',
-                                      () => open(
-                                        context,
-                                        Connections(user: widget.user),
-                                      ),
-                                    ),
-                                    _stat(
-                                      person.str('following', '0'),
-                                      'seguiti',
-                                      () => open(
-                                        context,
-                                        Connections(
-                                          user: widget.user,
-                                          initial: 1,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (person.str('pronouns').isNotEmpty ||
-                        person.str('bio').isNotEmpty)
-                      const SizedBox(height: 6),
-                    if (person.str('pronouns').isNotEmpty) ...[
-                      Text(
-                        person.str('pronouns'),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: secondaryText(context),
-                        ),
                       ),
                     ],
-                    if (person.str('bio').isNotEmpty) ...[
-                      if (person.str('pronouns').isNotEmpty)
-                        const SizedBox(height: 4),
-                      Text(
-                        person.str('bio').replaceAll(r'\n', '\n'),
-                        style: const TextStyle(fontSize: 13, height: 1.26),
+                  ),
+                  if (person.str('pronouns').isNotEmpty ||
+                      person.str('bio').isNotEmpty)
+                    const SizedBox(height: 6),
+                  if (person.str('pronouns').isNotEmpty) ...[
+                    Text(
+                      person.str('pronouns'),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: secondaryText(context),
                       ),
-                    ],
-                    if (person.rows('links').isNotEmpty || own) ...[
-                      const SizedBox(height: 12),
-                      ProfileLinkChips(
-                        links: connections,
-                        own: own,
-                        compact: true,
-                      ),
-                    ],
-                    const SizedBox(height: 9),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: FilledButton(
-                            style: _profileButton(
-                              context,
-                              primary: !own && !following && !pending,
-                            ),
-                            onPressed: own
-                                ? () => open(context, const EditProfile())
-                                : following
-                                ? () => relationshipMenu(context, widget.user)
-                                : () => perform(
-                                    context,
-                                    () => store.act('follow', {
-                                      'user': widget.user,
-                                      'enabled': !pending,
-                                    }),
-                                  ),
-                            child: Text(
-                              own
-                                  ? 'Modifica'
-                                  : following
-                                  ? store.state
-                                            .ids('closeFriends')
-                                            .contains(widget.user)
-                                        ? 'Amici più stretti'
-                                        : 'Segui già'
-                                  : pending
-                                  ? 'Richiesta inviata'
-                                  : 'Segui',
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 5),
-                        Expanded(
-                          child: FilledButton(
-                            style: _profileButton(context),
-                            onPressed: own
-                                ? () => perform(context, () async {
-                                    final box =
-                                        context.findRenderObject()
-                                            as RenderBox?;
-                                    await SharePlus.instance.share(
-                                      ShareParams(
-                                        text:
-                                            'Seguimi su GPIX: @${person.str('username')}',
-                                        sharePositionOrigin: box == null
-                                            ? null
-                                            : box.localToGlobal(Offset.zero) &
-                                                  box.size,
-                                      ),
-                                    );
-                                  })
-                                : () => perform(context, () async {
-                                    final thread = await store.openThread(
-                                      widget.user,
-                                    );
-                                    if (context.mounted)
-                                      open(context, Chat(id: thread));
-                                  }),
-                            child: Text(
-                              own ? 'Condividi profilo' : 'Messaggio',
-                            ),
-                          ),
-                        ),
-                        if (own) ...[
-                          const SizedBox(width: 6),
-                          IconButton(
-                            tooltip: 'Persone suggerite',
-                            isSelected: showSuggestions,
-                            onPressed: () => setState(
-                              () => showSuggestions = !showSuggestions,
-                            ),
-                            style: IconButton.styleFrom(
-                              backgroundColor: _profileControl(context),
-                              minimumSize: const Size.square(32),
-                              padding: EdgeInsets.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(7),
-                              ),
-                            ),
-                            icon: const Icon(
-                              Icons.person_add_alt_1_rounded,
-                              size: 20,
-                            ),
-                          ),
-                        ],
-                      ],
                     ),
                   ],
-                ),
+                  if (person.str('bio').isNotEmpty) ...[
+                    if (person.str('pronouns').isNotEmpty)
+                      const SizedBox(height: 4),
+                    Text(
+                      person.str('bio').replaceAll(r'\n', '\n'),
+                      style: const TextStyle(fontSize: 12.5, height: 1.35),
+                    ),
+                  ],
+                  if (website.startsWith('https://')) ...[
+                    const SizedBox(height: 5),
+                    InkWell(
+                      onTap: () => openProfileLink(context, {
+                        'type': 'website',
+                        'url': website,
+                      }),
+                      child: Text(
+                        Uri.tryParse(website)?.host ?? website,
+                        style: TextStyle(
+                          color: accent(context),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (person.rows('links').isNotEmpty || own) ...[
+                    const SizedBox(height: 12),
+                    ProfileLinkChips(
+                      links: connections,
+                      own: own,
+                      compact: true,
+                    ),
+                  ],
+                  const SizedBox(height: 9),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton(
+                          style: _profileButton(
+                            context,
+                            primary: !own && !following && !pending,
+                          ),
+                          onPressed: own
+                              ? () => open(context, const EditProfile())
+                              : following
+                              ? () => relationshipMenu(context, widget.user)
+                              : () => perform(
+                                  context,
+                                  () => store.act('follow', {
+                                    'user': widget.user,
+                                    'enabled': !pending,
+                                  }),
+                                ),
+                          child: Text(
+                            own
+                                ? 'Modifica'
+                                : following
+                                ? store.state
+                                          .ids('closeFriends')
+                                          .contains(widget.user)
+                                      ? 'Amici più stretti'
+                                      : 'Segui già'
+                                : pending
+                                ? 'Richiesta inviata'
+                                : 'Segui',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        child: FilledButton(
+                          style: _profileButton(context),
+                          onPressed: own
+                              ? () => perform(context, () async {
+                                  final box =
+                                      context.findRenderObject() as RenderBox?;
+                                  await SharePlus.instance.share(
+                                    ShareParams(
+                                      text:
+                                          'Seguimi su GPIX: @${person.str('username')}',
+                                      sharePositionOrigin: box == null
+                                          ? null
+                                          : box.localToGlobal(Offset.zero) &
+                                                box.size,
+                                    ),
+                                  );
+                                })
+                              : () => perform(context, () async {
+                                  final thread = await store.openThread(
+                                    widget.user,
+                                  );
+                                  if (context.mounted)
+                                    open(context, Chat(id: thread));
+                                }),
+                          child: Text(own ? 'Condividi profilo' : 'Messaggio'),
+                        ),
+                      ),
+                      if (own) ...[
+                        const SizedBox(width: 6),
+                        IconButton(
+                          tooltip: 'Persone suggerite',
+                          isSelected: showSuggestions,
+                          onPressed: () => setState(
+                            () => showSuggestions = !showSuggestions,
+                          ),
+                          style: IconButton.styleFrom(
+                            backgroundColor: _profileControl(context),
+                            minimumSize: const Size.square(32),
+                            padding: EdgeInsets.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(7),
+                            ),
+                          ),
+                          icon: const Icon(
+                            Icons.person_add_alt_1_rounded,
+                            size: 20,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
               ),
             ),
-            if (own && showSuggestions)
-              SliverToBoxAdapter(child: _suggestions(context, store)),
-            if (!restricted && (own || highlights.isNotEmpty))
-              SliverToBoxAdapter(
-                child: _highlights(context, store, highlights, own: own),
+          ),
+          if (own && showSuggestions)
+            SliverToBoxAdapter(child: _suggestions(context, store)),
+          if (!restricted && (own || highlights.isNotEmpty))
+            SliverToBoxAdapter(
+              child: _highlights(context, store, highlights, own: own),
+            ),
+          if (!restricted)
+            SliverOverlapAbsorber(
+              handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+              sliver: SliverPersistentHeader(
+                pinned: true,
+                delegate: _ProfileTabStrip(controller: _tabs),
               ),
-            if (restricted)
-              SliverToBoxAdapter(
+            ),
+        ],
+        body: restricted
+            ? SingleChildScrollView(
                 child: EmptyState(
                   CupertinoIcons.lock,
                   store.blocked(widget.user)
@@ -2650,90 +2720,79 @@ class _ProfileHomeState extends State<ProfileHome> {
                   'I contenuti non sono visibili.',
                 ),
               )
-            else ...[
-              SliverToBoxAdapter(
-                child: Row(
-                  children: [
-                    for (final (index, icon) in const [
-                      CupertinoIcons.square_grid_3x2_fill,
-                      CupertinoIcons.play_rectangle,
-                      CupertinoIcons.repeat,
-                      CupertinoIcons.person_crop_rectangle,
-                    ].indexed)
-                      Expanded(
-                        child: Semantics(
-                          selected: section == index,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              border: Border(
-                                bottom: BorderSide(
-                                  width: section == index ? 2 : 1,
-                                  color: section == index
-                                      ? foreground(context)
-                                      : Theme.of(context).dividerColor,
+            : TabBarView(
+                key: const ValueKey('profile-grid-pages'),
+                controller: _tabs,
+                children: [
+                  for (final section in _ProfileSection.values)
+                    Builder(
+                      builder: (context) => CustomScrollView(
+                        key: PageStorageKey((
+                          'profile-grid',
+                          widget.user,
+                          section,
+                        )),
+                        slivers: [
+                          SliverOverlapInjector(
+                            handle:
+                                NestedScrollView.sliverOverlapAbsorberHandleFor(
+                                  context,
+                                ),
+                          ),
+                          if (section == _ProfileSection.tagged &&
+                              own &&
+                              store.supportsPostTagManagement)
+                            SliverToBoxAdapter(
+                              child: ListTile(
+                                contentPadding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  0,
+                                  20,
+                                  0,
+                                ),
+                                title: const Text('Post con tag'),
+                                trailing: TextButton(
+                                  onPressed: () =>
+                                      open(context, const TaggedPostsPage()),
+                                  child: const Text('Gestisci'),
                                 ),
                               ),
                             ),
-                            child: IconButton(
-                              tooltip: const [
-                                'Post',
-                                'Reel',
-                                'Ripubblicazioni',
-                                'Tag',
-                              ][index],
-                              onPressed: () => setState(() => section = index),
-                              icon: index == 0
-                                  ? _profileGridGlyph(context, section == 0)
-                                  : Icon(
-                                      icon,
-                                      size: 25,
-                                      color: section == index
-                                          ? foreground(context)
-                                          : secondaryText(context),
-                                    ),
+                          if (grid[section]!.isEmpty)
+                            SliverFillRemaining(
+                              hasScrollBody: false,
+                              child: Align(
+                                alignment: Alignment.topCenter,
+                                child: EmptyState(
+                                  section == _ProfileSection.tagged
+                                      ? CupertinoIcons.person_crop_rectangle
+                                      : CupertinoIcons.photo,
+                                  section.emptyTitle,
+                                  '',
+                                ),
+                              ),
+                            )
+                          else
+                            _postGrid(
+                              context,
+                              grid[section]!,
+                              pinned: pinned,
+                              profileReels: section == _ProfileSection.reels,
+                              profileGrid: true,
+                              taggedUser: section == _ProfileSection.tagged
+                                  ? widget.user
+                                  : null,
+                            ),
+                          SliverToBoxAdapter(
+                            child: SizedBox(
+                              height: widget.detail ? 24 : _dockSpace(context),
                             ),
                           ),
-                        ),
+                        ],
                       ),
-                  ],
-                ),
-              ),
-              if (section == 3 && own && store.supportsPostTagManagement)
-                SliverToBoxAdapter(
-                  child: ListTile(
-                    title: const Text('Post con tag'),
-                    trailing: TextButton(
-                      onPressed: () => open(context, const TaggedPostsPage()),
-                      child: const Text('Gestisci'),
                     ),
-                  ),
-                ),
-              if (posts.isEmpty)
-                SliverToBoxAdapter(
-                  child: section == 3
-                      ? const EmptyState(
-                          CupertinoIcons.person_crop_rectangle,
-                          'Nessun post con tag',
-                          'Qui vedrai i post in cui sei taggato.',
-                        )
-                      : const EmptyState(
-                          CupertinoIcons.photo,
-                          'Nessun contenuto',
-                          'I contenuti appariranno qui.',
-                        ),
-                ),
-              _postGrid(
-                context,
-                posts,
-                pinned: pinned,
-                taggedUser: section == 3 ? widget.user : null,
+                ],
               ),
-            ],
-            SliverToBoxAdapter(
-              child: SizedBox(height: widget.detail ? 24 : _dockSpace(context)),
-            ),
-          ],
-        ),
       ),
     );
     return widget.detail ? AccountSheetBackdrop(child: page) : page;
@@ -2741,48 +2800,21 @@ class _ProfileHomeState extends State<ProfileHome> {
 
   Color _profileControl(BuildContext context) =>
       Theme.of(context).brightness == Brightness.light
-      ? const Color(0xffeef0f3)
+      ? const Color(0xffeff0f4)
       : subdued(context);
 
   ButtonStyle _profileButton(BuildContext context, {bool primary = false}) =>
       FilledButton.styleFrom(
         backgroundColor: primary
-            ? const Color(0xff4656f6)
+            ? const Color(0xff4555f5)
             : _profileControl(context),
         foregroundColor: primary ? Colors.white : foreground(context),
         padding: const EdgeInsets.symmetric(horizontal: 7),
         minimumSize: const Size(0, 32),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
       );
-
-  Widget _profileGridGlyph(BuildContext context, bool active) => SizedBox(
-    width: 19,
-    height: 22,
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        for (var row = 0; row < 4; row++)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              for (var col = 0; col < 3; col++)
-                Container(
-                  width: 4.5,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: active
-                        ? foreground(context)
-                        : secondaryText(context),
-                    borderRadius: BorderRadius.circular(1),
-                  ),
-                ),
-            ],
-          ),
-      ],
-    ),
-  );
 
   Widget _highlights(
     BuildContext context,
@@ -2792,7 +2824,7 @@ class _ProfileHomeState extends State<ProfileHome> {
   }) {
     final textSize = MediaQuery.textScalerOf(context).scale(11);
     return Padding(
-      padding: const EdgeInsets.only(top: 20, bottom: 12),
+      padding: const EdgeInsets.only(top: 19, bottom: 10),
       child: SizedBox(
         height: 72 + textSize * 1.45,
         child: ListView.separated(
@@ -2850,7 +2882,10 @@ class _ProfileHomeState extends State<ProfileHome> {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: Theme.of(context).dividerColor,
+                          color:
+                              Theme.of(context).brightness == Brightness.light
+                              ? Color(add ? 0xffe7e8ed : 0xffdadde2)
+                              : Theme.of(context).dividerColor,
                           width: add ? 2.0 : 2.7,
                         ),
                       ),
@@ -2916,7 +2951,7 @@ class _ProfileHomeState extends State<ProfileHome> {
                   style: TextButton.styleFrom(
                     foregroundColor:
                         Theme.of(context).brightness == Brightness.light
-                        ? const Color(0xff4656f6)
+                        ? const Color(0xff4555f5)
                         : accent(context),
                     padding: EdgeInsets.zero,
                     minimumSize: const Size(0, 35),
@@ -3073,6 +3108,212 @@ class _ProfileHomeState extends State<ProfileHome> {
   );
 }
 
+Color _profileInk(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.light
+    ? const Color(0xff0c0f14)
+    : foreground(context);
+
+enum _ProfileSection {
+  posts('Post', 'Nessun post'),
+  reels('Reel', 'Nessun Reel'),
+  reposts('Ripubblicazioni', 'Nessuna ripubblicazione'),
+  tagged('Tag', 'Nessun post con tag');
+
+  const _ProfileSection(this.label, this.emptyTitle);
+
+  final String label;
+  final String emptyTitle;
+}
+
+class _ProfileTabStrip extends SliverPersistentHeaderDelegate {
+  _ProfileTabStrip({required this.controller});
+
+  final TabController controller;
+
+  @override
+  double get minExtent => 48;
+
+  @override
+  double get maxExtent => minExtent;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    final active = _profileInk(context);
+    final idle = Theme.of(context).brightness == Brightness.light
+        ? const Color(0xff656b75)
+        : secondaryText(context);
+    return Material(
+      color: surface(context),
+      child: AnimatedBuilder(
+        animation: controller,
+        builder: (context, _) => TabBar(
+          controller: controller,
+          labelColor: active,
+          unselectedLabelColor: idle,
+          labelPadding: EdgeInsets.zero,
+          indicatorSize: TabBarIndicatorSize.label,
+          indicator: UnderlineTabIndicator(
+            borderSide: BorderSide(color: active, width: 2),
+          ),
+          dividerColor: Theme.of(context).dividerColor,
+          tabs: [
+            for (final section in _ProfileSection.values)
+              Tooltip(
+                message: section.label,
+                child: SizedBox(
+                  width: 64,
+                  height: minExtent,
+                  child: Center(
+                    child: _ProfileTabIcon(
+                      section,
+                      selected: controller.index == section.index,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(_ProfileTabStrip oldDelegate) =>
+      oldDelegate.controller != controller;
+}
+
+class _ProfileTabIcon extends StatelessWidget {
+  const _ProfileTabIcon(this.section, {required this.selected});
+
+  final _ProfileSection section;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    size: const Size.square(26),
+    painter: _ProfileTabGlyph(
+      section,
+      color: IconTheme.of(context).color ?? _profileInk(context),
+      background: surface(context),
+      selected: selected,
+    ),
+  );
+}
+
+class _ProfileTabGlyph extends CustomPainter {
+  const _ProfileTabGlyph(
+    this.section, {
+    required this.color,
+    required this.background,
+    required this.selected,
+  });
+
+  final _ProfileSection section;
+  final Color color;
+  final Color background;
+  final bool selected;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.scale(size.width / 26, size.height / 26);
+    final fill = Paint()..color = color;
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.9
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    switch (section) {
+      case _ProfileSection.posts:
+        for (var row = 0; row < 4; row++) {
+          for (var column = 0; column < 3; column++) {
+            canvas.drawRRect(
+              RRect.fromRectAndRadius(
+                Rect.fromLTWH(4 + column * 6.2, 2 + row * 5.8, 4.6, 4.3),
+                const Radius.circular(.95),
+              ),
+              fill,
+            );
+          }
+        }
+      case _ProfileSection.reels:
+        final frame = RRect.fromRectAndRadius(
+          selected
+              ? const Rect.fromLTWH(2, 2, 22, 22)
+              : const Rect.fromLTWH(1.3, 4, 23.4, 18),
+          Radius.circular(selected ? 6.3 : 2.1),
+        );
+        canvas.drawRRect(frame, selected ? fill : stroke);
+        final play = Path()
+          ..moveTo(9.5, selected ? 9 : 9.1)
+          ..quadraticBezierTo(9.5, 7.2, 11.1, 8.1)
+          ..lineTo(16.7, 11.7)
+          ..quadraticBezierTo(18.5, 12.9, 16.8, 14)
+          ..lineTo(11.1, 17.5)
+          ..quadraticBezierTo(9.5, 18.4, 9.5, 16.6)
+          ..close();
+        canvas.drawPath(play, Paint()..color = selected ? background : color);
+      case _ProfileSection.reposts:
+        final arrows = Path()
+          ..moveTo(3, 13)
+          ..lineTo(3, 11)
+          ..quadraticBezierTo(3, 7.8, 6.4, 7.8)
+          ..lineTo(20.2, 7.8)
+          ..moveTo(16.7, 4.2)
+          ..lineTo(20.2, 7.8)
+          ..lineTo(16.7, 11.4)
+          ..moveTo(23, 13)
+          ..lineTo(23, 15)
+          ..quadraticBezierTo(23, 18.2, 19.6, 18.2)
+          ..lineTo(5.8, 18.2)
+          ..moveTo(9.3, 14.6)
+          ..lineTo(5.8, 18.2)
+          ..lineTo(9.3, 21.8);
+        canvas.drawPath(arrows, stroke..strokeWidth = 2.15);
+      case _ProfileSection.tagged:
+        final frame = Path()
+          ..moveTo(3, 22.5)
+          ..quadraticBezierTo(1.7, 22.5, 1.7, 20)
+          ..lineTo(1.7, 8.6)
+          ..quadraticBezierTo(1.7, 5.7, 4.3, 5.7)
+          ..lineTo(8.1, 5.7)
+          ..quadraticBezierTo(9.4, 5.7, 10.3, 4.4)
+          ..lineTo(11.7, 2.9)
+          ..quadraticBezierTo(13, 1.6, 14.3, 2.9)
+          ..lineTo(15.7, 4.4)
+          ..quadraticBezierTo(16.6, 5.7, 17.9, 5.7)
+          ..lineTo(21.7, 5.7)
+          ..quadraticBezierTo(24.3, 5.7, 24.3, 8.6)
+          ..lineTo(24.3, 20)
+          ..quadraticBezierTo(24.3, 22.5, 21.7, 22.5)
+          ..close();
+        canvas.drawPath(frame, stroke);
+        canvas.drawCircle(
+          const Offset(13, 11.7),
+          3.7,
+          selected ? fill : stroke,
+        );
+        final body = Path()
+          ..moveTo(5.2, 21.8)
+          ..cubicTo(6.3, 17.2, 10, 16.5, 13, 16.5)
+          ..cubicTo(16, 16.5, 19.7, 17.2, 20.8, 21.8);
+        if (selected) body.close();
+        canvas.drawPath(body, selected ? fill : stroke);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ProfileTabGlyph oldDelegate) =>
+      oldDelegate.section != section ||
+      oldDelegate.color != color ||
+      oldDelegate.background != background ||
+      oldDelegate.selected != selected;
+}
+
 class TaggedPostsPage extends StatefulWidget {
   const TaggedPostsPage({super.key});
   @override
@@ -3129,13 +3370,15 @@ Widget _postGrid(
   List<String> pinned = const [],
   VoidCallback? onOpen,
   bool explore = false,
+  bool profileGrid = false,
+  bool profileReels = false,
   String? taggedUser,
 }) => SliverGrid.builder(
   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
     crossAxisCount: 3,
-    crossAxisSpacing: explore ? 1 : 2,
-    mainAxisSpacing: explore ? 1 : 2,
-    childAspectRatio: .75,
+    crossAxisSpacing: explore || profileGrid ? 1 : 2,
+    mainAxisSpacing: explore || profileGrid ? 1 : 2,
+    childAspectRatio: profileReels ? 9 / 16 : .75,
   ),
   itemCount: posts.length,
   itemBuilder: (context, index) {
@@ -3145,7 +3388,13 @@ Widget _postGrid(
     final cover = reel
         ? store.reelCover(post)
         : (store.media(post).firstOrNull ?? '');
-    return InkWell(
+    final pinnedHere = pinned.contains(post.str('id'));
+    final views = switch (post['viewCount']) {
+      final num count => count,
+      _ when post.str('author') == store.myId => store.viewers(post).length,
+      _ => null,
+    };
+    final tile = InkWell(
       onTap: () {
         onOpen?.call();
         open(
@@ -3180,14 +3429,69 @@ Widget _postGrid(
                 ),
               ),
             ),
-          if (reel ||
-              pinned.contains(post.str('id')) ||
-              store.media(post).length > 1)
+          if (profileReels && views != null)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: DecoratedBox(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, Color(0x58000000)],
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 15, 8, 8),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        CupertinoIcons.eye,
+                        size: 13,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          MaterialLocalizations.of(
+                            context,
+                          ).formatDecimal(views.toInt()),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          if (profileReels && pinnedHere)
+            const Positioned(
+              top: 7,
+              left: 7,
+              child: CircleAvatar(
+                radius: 8,
+                backgroundColor: Colors.white,
+                child: Icon(
+                  CupertinoIcons.pin_fill,
+                  size: 11,
+                  color: Color(0xff162237),
+                ),
+              ),
+            )
+          else if (!profileReels &&
+              (reel || pinnedHere || store.media(post).length > 1))
             Positioned(
               top: 7,
               right: 7,
               child: Icon(
-                pinned.contains(post.str('id'))
+                pinnedHere
                     ? CupertinoIcons.pin_fill
                     : reel
                     ? CupertinoIcons.play_rectangle_fill
@@ -3200,6 +3504,9 @@ Widget _postGrid(
         ],
       ),
     );
+    return profileReels
+        ? ClipRRect(borderRadius: BorderRadius.circular(6), child: tile)
+        : tile;
   },
 );
 

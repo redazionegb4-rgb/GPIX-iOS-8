@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 class GIcon extends StatelessWidget {
   final IconData? icon;
-  final bool postAction;
+  final bool postAction, dock;
   final double? size;
   final Color? color;
   final String? semanticLabel;
@@ -16,10 +16,20 @@ class GIcon extends StatelessWidget {
     this.semanticLabel,
     this.shadows,
     this.postAction = false,
+    this.dock = false,
   });
   @override
   Widget build(BuildContext c) {
-    final name = postAction
+    final name = dock
+        ? switch (names[icon]) {
+            'home' => 'dockHome',
+            'homeFill' => 'dockHomeFill',
+            'reel' => 'dockReel',
+            'reelFill' => 'dockReelFill',
+            'send' || 'sendFill' => 'postSend',
+            final value => value,
+          }
+        : postAction
         ? switch (names[icon]) {
             'send' => 'postSend',
             'chat' => 'postChat',
@@ -118,6 +128,49 @@ class _LineIcon extends CustomPainter {
         path.quadraticBezierTo(3, 21, 3, 20);
         path.close();
         break;
+      case 'dockHome':
+        path.moveTo(2.6, 10.7);
+        path.quadraticBezierTo(2.6, 9.6, 3.4, 8.8);
+        path.lineTo(10.6, 2.8);
+        path.quadraticBezierTo(12, 1.6, 13.4, 2.8);
+        path.lineTo(20.6, 8.8);
+        path.quadraticBezierTo(21.4, 9.6, 21.4, 10.7);
+        path.lineTo(21.4, 19.7);
+        path.quadraticBezierTo(21.4, 21.5, 19.6, 21.5);
+        path.lineTo(15.2, 21.5);
+        path.lineTo(15.2, 16);
+        path.quadraticBezierTo(15.2, 12.8, 12, 12.8);
+        path.quadraticBezierTo(8.8, 12.8, 8.8, 16);
+        path.lineTo(8.8, 21.5);
+        path.lineTo(4.4, 21.5);
+        path.quadraticBezierTo(2.6, 21.5, 2.6, 19.7);
+        path.close();
+        break;
+      case 'dockReel':
+        final filled = kind.endsWith('Fill');
+        c.drawRRect(
+          RRect.fromRectAndRadius(
+            const Rect.fromLTWH(2.7, 2.7, 18.6, 18.6),
+            const Radius.circular(5),
+          ),
+          paint,
+        );
+        final play = Path()
+          ..moveTo(10, 8.3)
+          ..quadraticBezierTo(8.9, 7.7, 8.9, 9)
+          ..lineTo(8.9, 15)
+          ..quadraticBezierTo(8.9, 16.3, 10.1, 15.7)
+          ..lineTo(15.8, 12.9)
+          ..quadraticBezierTo(17.3, 12.1, 15.9, 11.2)
+          ..close();
+        paint.strokeWidth = 1.55;
+        if (filled) {
+          paint.color = color.computeLuminance() > .5
+              ? Colors.black
+              : Colors.white;
+        }
+        c.drawPath(play, paint);
+        return;
       case 'heart':
         path.moveTo(12, 21);
         path.cubicTo(8, 18, 2.3, 13.5, 2.3, 8);

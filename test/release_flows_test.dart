@@ -1027,10 +1027,21 @@ void main() {
       await tester.tap(find.text('Apri condivisione'));
       await tester.pumpAndSettle();
       expect(find.text('Aggiungi alla storia'), findsOneWidget);
+      final addToStory = find
+          .ancestor(
+            of: find.text('Aggiungi alla storia'),
+            matching: find.byType(InkWell),
+          )
+          .first;
       await tester.runAsync(() async {
         await tester.tap(find.text('Condividi in…'));
-        for (var attempt = 0; attempt < 40 && exported == null; attempt++) {
+        for (var attempt = 0; attempt < 40; attempt++) {
           await Future<void>.delayed(const Duration(milliseconds: 25));
+          await tester.pump();
+          if (exported != null &&
+              tester.widget<InkWell>(addToStory).onTap != null) {
+            break;
+          }
         }
       });
       await tester.pumpAndSettle();

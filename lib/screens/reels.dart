@@ -629,6 +629,7 @@ class _ReelState extends State<_Reel> with SingleTickerProviderStateMixin {
             ? 12
             : widget.progressBottom + 111,
         onCompleted: widget.onComplete,
+        onViewed: () => unawaited(s.recordReelView(id)),
       ),
     );
     return LayoutBuilder(

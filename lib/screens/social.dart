@@ -10,8 +10,10 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:path_provider/path_provider.dart';
 import '../core/data.dart';
+import '../core/avatar_style.dart';
 import '../core/store.dart';
 import '../ui/kit.dart';
+import '../ui/avatar_preview.dart';
 import 'stories.dart';
 import 'reel_editor.dart';
 import 'features13.dart';
@@ -26,6 +28,7 @@ import 'creation_studio.dart';
 import 'giphy.dart';
 import '../rebuild/surfaces.dart' show DiscoverHome, ProfileHome, TimelinePost;
 import 'moments.dart';
+import 'profile_avatar.dart';
 
 class StoryTray extends StatefulWidget {
   const StoryTray({super.key});
@@ -2763,58 +2766,99 @@ class _EditProfileState extends State<EditProfile> {
     }
   });
 
-  Future<void> changePhoto(GpixStore store) async {
-    final choice = await sheet<String>(
+  Future<void> changePhoto(GpixStore store, {bool avatarTab = false}) async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final model = store.avatarModel;
+    final choice = await sheet<_ProfileImageAction>(
       context,
-      Builder(
-        builder: (menu) => Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Avatar(store.myId, size: 54, image: previewPhoto(store)),
-            const SizedBox(height: 14),
-            const Divider(height: 1),
-            for (final option in [
-              (CupertinoIcons.photo, 'Scegli dalla libreria', 'gallery'),
-              (CupertinoIcons.camera, 'Scatta foto', 'camera'),
-              if (avatar.isNotEmpty)
-                (CupertinoIcons.trash, 'Rimuovi immagine attuale', 'remove'),
-            ])
-              ListTile(
-                leading: GIcon(
-                  option.$1,
-                  color: option.$3 == 'remove' ? danger : null,
-                ),
-                title: Text(
-                  option.$2,
-                  style: TextStyle(color: option.$3 == 'remove' ? danger : null),
-                ),
-                onTap: () => Navigator.pop(menu, option.$3),
-              ),
-          ],
-        ),
+      _ProfileImageSheet(
+        user: store.myId,
+        photo: previewPhoto(store),
+        model: model,
+        avatarTab: avatarTab,
       ),
+      scroll: false,
     );
     if (choice == null || !mounted) return;
-    if (choice == 'remove') {
-      setState(() => avatar = '');
-      return;
+    switch (choice) {
+      case _ProfileImageAction.editAvatar:
+        await open<bool>(context, const ProfileAvatarEditor());
+      case _ProfileImageAction.removeAvatar:
+        if (await gpixAlert(
+              context,
+              'Rimuovere l’avatar?',
+              'Potrai crearne uno nuovo da Modifica profilo.',
+              confirm: 'Rimuovi',
+              cancel: true,
+              destructive: true,
+            ) &&
+            mounted) {
+          await perform(context, () => store.saveAvatarModel(const {}));
+        }
+      case _ProfileImageAction.removePhoto:
+        setState(() => avatar = '');
+      case _ProfileImageAction.useAvatar:
+        await changeImage(store, () async {
+          final directory = await (await getTemporaryDirectory()).createTemp(
+            'gpix-avatar-',
+          );
+          try {
+            final photo = File('${directory.path}/avatar.png');
+            final image = await AvatarPreview.profilePhoto(
+              AvatarStyle.fromJson(model),
+            );
+            await photo.writeAsBytes(image);
+            return await store.upload(photo.path, 'image/png');
+          } finally {
+            await directory.delete(recursive: true);
+          }
+        });
+      case _ProfileImageAction.gallery:
+      case _ProfileImageAction.camera:
+        await changeImage(store, () async {
+          final file = await ImagePicker().pickImage(
+            source: choice == _ProfileImageAction.camera
+                ? ImageSource.camera
+                : ImageSource.gallery,
+            maxWidth: 800,
+            imageQuality: 85,
+          );
+          if (!mounted || file == null) return null;
+          final type = file.path.toLowerCase().endsWith('.png')
+              ? 'png'
+              : 'jpeg';
+          return store.upload(file.path, 'image/$type');
+        });
     }
+  }
+
+  Future<void> changeImage(
+    GpixStore store,
+    Future<String?> Function() upload,
+  ) async {
+    final account = store.myId;
     setState(() => busy = true);
     try {
       await perform(context, () async {
-        final file = await ImagePicker().pickImage(
-          source: choice == 'camera' ? ImageSource.camera : ImageSource.gallery,
-          maxWidth: 800,
-          imageQuality: 85,
-        );
-        if (!mounted || file == null) return;
-        final type = file.path.toLowerCase().endsWith('.png') ? 'png' : 'jpeg';
-        final ref = await store.upload(file.path, 'image/$type');
-        if (mounted) setState(() => avatar = ref);
+        final ref = await upload();
+        if (mounted && store.myId == account && ref != null) {
+          setState(() => avatar = ref);
+        }
       });
     } finally {
       if (mounted) setState(() => busy = false);
     }
+  }
+
+  Future<void> editWebsite() async {
+    final website = fields['website']!;
+    final value = await textDialog(
+      context,
+      'Link del profilo',
+      website.text,
+      hint: 'https://',
+    );
+    if (value != null && mounted) setState(() => website.text = value);
   }
 
   String previewPhoto(GpixStore store) => avatar.isEmpty
@@ -2826,11 +2870,16 @@ class _EditProfileState extends State<EditProfile> {
   @override
   Widget build(BuildContext c) {
     final s = GpixScope.of(c);
+    final model = s.avatarModel;
+    final links = s.me.rows('links');
     return Scaffold(
       appBar: AppBar(
         leading: const _ProfileScreenBack(),
         centerTitle: true,
-        title: pageTitle('Modifica profilo'),
+        title: const Text(
+          'Modifica profilo',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
         actions: [
           TextButton(
             onPressed: busy ? null : () => save(s),
@@ -2842,27 +2891,48 @@ class _EditProfileState extends State<EditProfile> {
         padding: const EdgeInsets.only(bottom: 28),
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         children: [
-          const SizedBox(height: 18),
-          Center(
-            child: InkWell(
-              onTap: busy ? null : () => changePhoto(s),
-              borderRadius: BorderRadius.circular(46),
-              child: Avatar(s.myId, size: 82, image: previewPhoto(s)),
-            ),
+          const SizedBox(height: 17),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              InkWell(
+                onTap: busy ? null : () => changePhoto(s),
+                customBorder: const CircleBorder(),
+                child: Avatar(s.myId, size: 80, image: previewPhoto(s)),
+              ),
+              const SizedBox(width: 17),
+              Tooltip(
+                message: model.isEmpty ? 'Crea avatar' : 'Modifica avatar',
+                child: InkWell(
+                  onTap: busy ? null : () => changePhoto(s, avatarTab: true),
+                  customBorder: const CircleBorder(),
+                  child: _ProfileAvatarPortrait(model: model, size: 80),
+                ),
+              ),
+            ],
           ),
           Center(
             child: TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(c).brightness == Brightness.light
+                    ? const Color(0xff4656f6)
+                    : accent(c),
+                textStyle: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
               onPressed: busy ? null : () => changePhoto(s),
-              child: const Text('Modifica immagine del profilo'),
+              child: const Text('Modifica immagine o avatar'),
             ),
           ),
+          const Divider(height: 1),
           const SizedBox(height: 10),
           for (final field in const [
             (key: 'name', label: 'Nome', max: 60),
             (key: 'username', label: 'Nome utente', max: 30),
             (key: 'pronouns', label: 'Pronomi', max: 40),
             (key: 'bio', label: 'Biografia', max: 150),
-            (key: 'website', label: 'Sito web', max: 200),
           ])
             _ProfileEditRow(
               label: field.label,
@@ -2875,11 +2945,11 @@ class _EditProfileState extends State<EditProfile> {
                   maxLength: field.max,
                   minLines: field.key == 'bio' ? 2 : 1,
                   maxLines: field.key == 'bio' ? 5 : 1,
-                  keyboardType: field.key == 'website'
-                      ? TextInputType.url
-                      : null,
+                  textInputAction: field.key == 'bio'
+                      ? TextInputAction.newline
+                      : TextInputAction.next,
                   decoration: InputDecoration(
-                    hintText: field.key == 'website' ? 'https://' : field.label,
+                    hintText: field.label,
                     filled: false,
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
@@ -2891,50 +2961,88 @@ class _EditProfileState extends State<EditProfile> {
                 ),
               ),
             ),
+          InkWell(
+            onTap: busy ? null : editWebsite,
+            child: _ProfileEditRow(
+              label: 'Link',
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        fields['website']!.text.isEmpty
+                            ? 'Aggiungi link'
+                            : fields['website']!.text,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 13, color: secondaryText(c)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const GIcon(CupertinoIcons.chevron_right, size: 15),
+                  ],
+                ),
+              ),
+            ),
+          ),
           ListTile(
-            title: const Text('Link'),
-            trailing: const GIcon(CupertinoIcons.chevron_right, size: 16),
+            title: const Text('Banner'),
+            subtitle: const Text(
+              'Aggiungi profili social e altri collegamenti.',
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (links.isNotEmpty) Text('${links.length}'),
+                const SizedBox(width: 8),
+                const GIcon(CupertinoIcons.chevron_right, size: 15),
+              ],
+            ),
             onTap: busy ? null : () => open(c, const ProfileLinks()),
           ),
           const Divider(height: 1),
           ListTile(
             title: const Text('Riordina griglia'),
-            trailing: const GIcon(CupertinoIcons.chevron_right, size: 16),
+            trailing: const GIcon(CupertinoIcons.chevron_right, size: 15),
             onTap: busy ? null : () => open(c, const GridOrder()),
           ),
           const Divider(height: 1),
           InkWell(
-            onTap: busy ? null : () async {
-              final selected = await sheet<String>(
-                c,
-                Builder(
-                  builder: (menu) => Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (final gender in [
-                        'Uomo',
-                        'Donna',
-                        'Non binario',
-                        'Preferisco non specificarlo',
-                      ])
-                        ListTile(
-                          title: Text(gender),
-                          trailing: fields['gender']!.text == gender
-                              ? const GIcon(
-                                  CupertinoIcons.check_mark,
-                                  color: auraBlue,
-                                )
-                              : null,
-                          onTap: () => Navigator.pop(menu, gender),
+            onTap: busy
+                ? null
+                : () async {
+                    final selected = await sheet<String>(
+                      c,
+                      Builder(
+                        builder: (menu) => Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            for (final gender in [
+                              'Uomo',
+                              'Donna',
+                              'Non binario',
+                              'Preferisco non specificarlo',
+                            ])
+                              ListTile(
+                                title: Text(gender),
+                                trailing: fields['gender']!.text == gender
+                                    ? const GIcon(
+                                        CupertinoIcons.check_mark,
+                                        color: auraBlue,
+                                      )
+                                    : null,
+                                onTap: () => Navigator.pop(menu, gender),
+                              ),
+                          ],
                         ),
-                    ],
-                  ),
-                ),
-              );
-              if (selected != null && mounted) {
-                setState(() => fields['gender']!.text = selected);
-              }
-            },
+                      ),
+                    );
+                    if (selected != null && mounted) {
+                      setState(() => fields['gender']!.text = selected);
+                    }
+                  },
             child: _ProfileEditRow(
               label: 'Genere',
               child: Padding(
@@ -2962,6 +3070,165 @@ class _EditProfileState extends State<EditProfile> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+enum _ProfileImageAction {
+  gallery,
+  camera,
+  removePhoto,
+  editAvatar,
+  useAvatar,
+  removeAvatar,
+}
+
+class _ProfileAvatarPortrait extends StatelessWidget {
+  const _ProfileAvatarPortrait({required this.model, required this.size});
+
+  final J model;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      border: Border.all(color: Theme.of(context).dividerColor),
+    ),
+    child: model.isEmpty
+        ? const Center(
+            child: GIcon(CupertinoIcons.person_crop_circle, size: 25),
+          )
+        : ClipOval(
+            child: AvatarPreview(
+              style: AvatarStyle.fromJson(model),
+              detail: false,
+            ),
+          ),
+  );
+}
+
+class _ProfileImageSheet extends StatelessWidget {
+  const _ProfileImageSheet({
+    required this.user,
+    required this.photo,
+    required this.model,
+    required this.avatarTab,
+  });
+
+  final String user, photo;
+  final J model;
+  final bool avatarTab;
+
+  @override
+  Widget build(BuildContext context) {
+    void choose(_ProfileImageAction action) => Navigator.pop(context, action);
+    return DefaultTabController(
+      length: 2,
+      initialIndex: avatarTab ? 1 : 0,
+      child: SizedBox(
+        height: 315,
+        child: Column(
+          children: [
+            TabBar(
+              labelColor: foreground(context),
+              indicatorColor: foreground(context),
+              indicatorSize: TabBarIndicatorSize.label,
+              tabs: [
+                Tooltip(
+                  message: 'Foto del profilo',
+                  child: SizedBox(
+                    height: 50,
+                    width: 76,
+                    child: Center(child: Avatar(user, size: 42, image: photo)),
+                  ),
+                ),
+                Tooltip(
+                  message: 'Avatar',
+                  child: SizedBox(
+                    height: 50,
+                    width: 76,
+                    child: Center(
+                      child: _ProfileAvatarPortrait(model: model, size: 42),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Expanded(
+              child: TabBarView(
+                children: [
+                  ListView(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    children: [
+                      ActionRow(
+                        CupertinoIcons.photo,
+                        'Scegli dalla libreria',
+                        () => choose(_ProfileImageAction.gallery),
+                      ),
+                      ActionRow(
+                        CupertinoIcons.camera,
+                        'Scatta foto',
+                        () => choose(_ProfileImageAction.camera),
+                      ),
+                      if (photo.isNotEmpty)
+                        ActionRow(
+                          CupertinoIcons.trash,
+                          'Rimuovi immagine attuale',
+                          () => choose(_ProfileImageAction.removePhoto),
+                          destructive: true,
+                        ),
+                    ],
+                  ),
+                  ListView(
+                    padding: const EdgeInsets.fromLTRB(0, 12, 0, 12),
+                    children: [
+                      if (model.isNotEmpty) ...[
+                        ActionRow(
+                          CupertinoIcons.pencil,
+                          'Modifica avatar',
+                          () => choose(_ProfileImageAction.editAvatar),
+                        ),
+                        ActionRow(
+                          CupertinoIcons.photo,
+                          'Usa come immagine del profilo',
+                          () => choose(_ProfileImageAction.useAvatar),
+                        ),
+                        ActionRow(
+                          CupertinoIcons.trash,
+                          'Rimuovi avatar',
+                          () => choose(_ProfileImageAction.removeAvatar),
+                          destructive: true,
+                        ),
+                      ] else ...[
+                        const SizedBox(height: 15),
+                        const Center(
+                          child: _ProfileAvatarPortrait(model: {}, size: 60),
+                        ),
+                        const SizedBox(height: 13),
+                        const Text(
+                          'Crea il tuo avatar',
+                          textAlign: TextAlign.center,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
+                          child: FilledButton(
+                            onPressed: () =>
+                                choose(_ProfileImageAction.editAvatar),
+                            child: const Text('Crea avatar'),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -4829,13 +5096,20 @@ class _SettingsState extends State<Settings> {
       VoidCallback tap, {
       String? value,
       String? subtitle,
+      bool emphasized = false,
     }) => ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
       minLeadingWidth: 22,
       horizontalTitleGap: 12,
       minTileHeight: 48,
       leading: GIcon(icon, size: 25, color: foreground(c)),
-      title: Text(title, style: const TextStyle(fontSize: 15)),
+      title: Text(
+        title,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: emphasized ? FontWeight.w600 : FontWeight.w400,
+        ),
+      ),
       subtitle: subtitle == null
           ? null
           : Text(
@@ -5166,10 +5440,8 @@ class _SettingsState extends State<Settings> {
     final events = row(
       CupertinoIcons.calendar,
       'Eventi e momenti',
-      () => open(
-        c,
-        const Scaffold(body: SafeArea(child: CommunityDirectory())),
-      ),
+      () =>
+          open(c, const Scaffold(body: SafeArea(child: CommunityDirectory()))),
     );
     List<Widget> entries(String name, {Set<String> excluding = const {}}) => [
       for (final entry in groups.firstWhere((group) => group.$1 == name).$4)
@@ -5195,11 +5467,20 @@ class _SettingsState extends State<Settings> {
       ),
     );
 
+    final sectionDivider = SizedBox(
+      height: 4,
+      child: ColoredBox(
+        color: Theme.of(c).brightness == Brightness.light
+            ? const Color(0xfff0f0f2)
+            : Theme.of(c).dividerColor,
+      ),
+    );
     final accountCenter = row(
       CupertinoIcons.person_crop_circle,
       'Centro gestione account',
       () => open(c, const Settings._category('Account')),
       subtitle: 'Profilo, dispositivi, password e sicurezza',
+      emphasized: true,
     );
     final filter = query.trim().toLowerCase();
     final results = [
@@ -5215,7 +5496,10 @@ class _SettingsState extends State<Settings> {
     return Scaffold(
       appBar: AppBar(
         leading: const _ProfileScreenBack(),
-        title: pageTitle('Impostazioni e attività'),
+        title: const Text(
+          'Impostazioni e attività',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
         centerTitle: true,
       ),
       body: ListView(
@@ -5233,7 +5517,9 @@ class _SettingsState extends State<Settings> {
                   child: GIcon(CupertinoIcons.search, size: 21, color: muted),
                 ),
                 filled: true,
-                fillColor: subdued(c),
+                fillColor: Theme.of(c).brightness == Brightness.light
+                    ? const Color(0xffeff0f4)
+                    : subdued(c),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(28),
                   borderSide: BorderSide.none,
@@ -5245,33 +5531,37 @@ class _SettingsState extends State<Settings> {
           if (filter.isEmpty) ...[
             heading('Il tuo account'),
             accountCenter,
-            const Divider(height: 12),
+            sectionDivider,
             heading('Come usi GPIX'),
-            ...entries('I tuoi contenuti'),
+            for (final entry
+                in groups
+                    .firstWhere((group) => group.$1 == 'I tuoi contenuti')
+                    .$4)
+              if (entry.$1 == 'Salvati' || entry.$1 == 'Archivio') entry.$2,
             activity,
             ...entries('Notifiche'),
+            ...entries(
+              'I tuoi contenuti',
+              excluding: const {'Salvati', 'Archivio'},
+            ),
             events,
-            const Divider(height: 12),
+            sectionDivider,
             heading('Chi può vedere i tuoi contenuti'),
             for (final entry in privacyEntries)
               if (visibility.contains(entry.$1)) entry.$2,
-            const Divider(height: 12),
+            sectionDivider,
             heading('Come possono interagire gli altri con te'),
             ...entries('Privacy', excluding: visibility),
-            const Divider(height: 12),
+            sectionDivider,
             heading('Preferenze'),
             ...entries('Aspetto'),
-            const Divider(height: 12),
+            sectionDivider,
             heading('Maggiori informazioni e assistenza'),
             ...entries('Assistenza'),
-            const Divider(height: 12),
+            sectionDivider,
             heading('Accesso'),
             access,
-            row(
-              CupertinoIcons.square_arrow_left,
-              'Esci',
-              () => _logout(c, s),
-            ),
+            row(CupertinoIcons.square_arrow_left, 'Esci', () => _logout(c, s)),
           ] else if (results.isEmpty)
             const Padding(
               padding: EdgeInsets.all(20),

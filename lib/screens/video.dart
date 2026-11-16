@@ -46,6 +46,7 @@ class ClipPlayer extends StatefulWidget {
     this.muted,
     this.subtitleBottom = 24,
     this.onCompleted,
+    this.onViewed,
   });
 
   final String reference;
@@ -56,7 +57,7 @@ class ClipPlayer extends StatefulWidget {
   final ClipControls? controls;
   final Widget? placeholder;
   final ValueChanged<Duration>? onDuration;
-  final VoidCallback? onCompleted;
+  final VoidCallback? onCompleted, onViewed;
 
   @override
   State<ClipPlayer> createState() => _ClipPlayerState();
@@ -69,7 +70,7 @@ class _ClipPlayerState extends State<ClipPlayer> with WidgetsBindingObserver {
   String? _error;
   bool _muted = false, _playing = false, _buffering = true;
   bool _starting = false, _ready = false, _userPaused = false;
-  bool _foreground = true;
+  bool _foreground = true, _viewed = false;
   int _generation = 0;
 
   bool get _shouldPlay =>
@@ -143,10 +144,27 @@ class _ClipPlayerState extends State<ClipPlayer> with WidgetsBindingObserver {
           if (duration > Duration.zero) widget.onDuration?.call(duration);
           _publishProgress(player);
         }),
-        if (widget.controls != null) ...[
-          player.stream.position.listen((_) {
-            if (_current(generation)) _publishProgress(player);
+        if (widget.controls != null || widget.onViewed != null)
+          player.stream.position.listen((position) {
+            if (!_current(generation)) return;
+            if (widget.controls != null) _publishProgress(player);
+            final duration = player.state.duration;
+            final threshold =
+                duration > Duration.zero &&
+                    duration < const Duration(seconds: 1)
+                ? duration * .75
+                : const Duration(seconds: 1);
+            final onViewed = widget.onViewed;
+            if (!_viewed &&
+                _shouldPlay &&
+                _playing &&
+                onViewed != null &&
+                position >= threshold) {
+              _viewed = true;
+              onViewed();
+            }
           }),
+        if (widget.controls != null) ...[
           player.stream.tracks.listen((tracks) {
             if (_current(generation)) {
               widget.controls?.hasSubtitles.value = tracks.subtitle.any(
@@ -274,6 +292,7 @@ class _ClipPlayerState extends State<ClipPlayer> with WidgetsBindingObserver {
       if (old.controls?._player == this) old.controls?._player = null;
       widget.controls?._player = this;
     }
+    if (old.reference != widget.reference) _viewed = false;
     if (old.reference != widget.reference || old.active != widget.active) {
       _release();
       _error = null;

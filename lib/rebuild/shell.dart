@@ -105,6 +105,7 @@ class _SocialShellState extends State<SocialShell> {
     final inset = MediaQuery.viewPaddingOf(context).bottom;
     final reel = _selected == 1;
     final compactDock = _compact;
+    final profile = _selected == 4;
     final covered = reel && _reelCoverAccount == store.myId;
     final dockBottom = reel ? reelDockBottom(inset) : inset + 8;
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -116,7 +117,9 @@ class _SocialShellState extends State<SocialShell> {
               PageView(
                 key: const ValueKey('gpix-destinations'),
                 controller: _controller,
-                physics: covered ? const NeverScrollableScrollPhysics() : null,
+                physics: covered || _selected == 4
+                    ? const NeverScrollableScrollPhysics()
+                    : null,
                 onPageChanged: (index) => setState(() {
                   _selected = index;
                   _compact = false;
@@ -165,10 +168,7 @@ class _SocialShellState extends State<SocialShell> {
                   ),
                   _KeepPage(
                     key: ValueKey(('profile', store.myId)),
-                    child: _scrollAware(
-                      4,
-                      ProfileHome(user: store.myId, onBoundarySwipe: _swipeTab),
-                    ),
+                    child: _scrollAware(4, ProfileHome(user: store.myId)),
                   ),
                 ],
               ),
@@ -190,10 +190,18 @@ class _SocialShellState extends State<SocialShell> {
                                 224.0,
                                 355.0,
                               )
+                            : profile
+                            ? (MediaQuery.sizeOf(context).width *
+                                      (compactDock ? .75 : .895))
+                                  .clamp(224.0, 430.0)
                             : (MediaQuery.sizeOf(context).width -
                                       (compactDock ? 100 : 38))
                                   .clamp(224.0, 430.0),
-                        height: reel ? reelDockHeight : (compactDock ? 45 : 57),
+                        height: reel
+                            ? reelDockHeight
+                            : profile
+                            ? (compactDock ? 50 : 59)
+                            : (compactDock ? 45 : 57),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(40),
                           child: BackdropFilter(
@@ -205,7 +213,7 @@ class _SocialShellState extends State<SocialShell> {
                                     ? const Color(0xad202024)
                                     : dark
                                     ? const Color(0xc9232327)
-                                    : const Color(0xe6ffffff),
+                                    : const Color(0xe9ffffff),
                                 border: Border.all(
                                   color: ink.withValues(
                                     alpha: reel ? .25 : .12,
@@ -251,7 +259,11 @@ class _SocialShellState extends State<SocialShell> {
                                                       : 1,
                                                   duration: duration,
                                                   child: Badge(
-                                                    backgroundColor: danger,
+                                                    backgroundColor:
+                                                        const Color(0xffff0035),
+                                                    alignment:
+                                                        Alignment.bottomRight,
+                                                    offset: const Offset(2, 2),
                                                     isLabelVisible:
                                                         index == 2 &&
                                                         store.inboxThreads.any(
@@ -268,6 +280,7 @@ class _SocialShellState extends State<SocialShell> {
                                                                 : _icons[index],
                                                             color: ink,
                                                             size: 25,
+                                                            dock: true,
                                                           ),
                                                   ),
                                                 ),
