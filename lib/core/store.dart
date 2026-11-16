@@ -940,35 +940,6 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  String get _avatarModelKey => 'gpix.avatarModel.$server.$myId';
-
-  J get avatarModel {
-    final model = me.obj('avatarModel');
-    if (demo || model.isNotEmpty) return model;
-    final saved = prefs?.getString(_avatarModelKey);
-    if (saved == null) return const {};
-    try {
-      return object(jsonDecode(saved));
-    } on FormatException {
-      return const {};
-    }
-  }
-
-  Future<void> saveAvatarModel(J model) async {
-    final key = _avatarModelKey;
-    if (demo || state.flag('profileAvatars')) {
-      await act('profileAvatar', {'model': model});
-      await prefs?.remove(key);
-      return;
-    }
-    final preferences = prefs ??= await SharedPreferences.getInstance();
-    final saved = model.isEmpty
-        ? await preferences.remove(key)
-        : await preferences.setString(key, jsonEncode(model));
-    if (!saved) throw StateError('Impossibile salvare l’avatar.');
-    notifyListeners();
-  }
-
   Future<void> act(String action, [J payload = const {}]) async {
     if (action == 'note' && !payload.flag('delete')) {
       final value = payload.str('text').trim();
@@ -1743,9 +1714,6 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
         final ids = state.ids('closeFriends')..remove(uid);
         if (p['enabled'] != false) ids.add(uid);
         state['closeFriends'] = ids;
-        break;
-      case 'profileAvatar':
-        me['avatarModel'] = p.obj('model');
         break;
       case 'profile':
         me.addAll(p);
