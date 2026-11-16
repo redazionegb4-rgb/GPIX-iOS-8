@@ -2741,163 +2741,221 @@ class _EditProfileState extends State<EditProfile> {
     super.dispose();
   }
 
+  Future<void> save(GpixStore store) => perform(context, () async {
+    if (fields['name']!.text.trim().isEmpty ||
+        fields['username']!.text.trim().isEmpty) {
+      throw Exception('Nome e nome utente sono obbligatori.');
+    }
+    final site = fields['website']!.text.trim();
+    if (site.isNotEmpty && !site.startsWith('https://')) {
+      throw Exception('Il sito deve iniziare con https://');
+    }
+    setState(() => busy = true);
+    try {
+      await store.act('profile', {
+        for (final entry in fields.entries) entry.key: entry.value.text.trim(),
+        'avatar': avatar,
+        'private': store.me.flag('private'),
+      });
+      if (mounted) Navigator.pop(context);
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  });
+
+  Future<void> changePhoto(GpixStore store) async {
+    final choice = await sheet<String>(
+      context,
+      Builder(
+        builder: (menu) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Avatar(store.myId, size: 54, image: previewPhoto(store)),
+            const SizedBox(height: 14),
+            const Divider(height: 1),
+            for (final option in [
+              (CupertinoIcons.photo, 'Scegli dalla libreria', 'gallery'),
+              (CupertinoIcons.camera, 'Scatta foto', 'camera'),
+              if (avatar.isNotEmpty)
+                (CupertinoIcons.trash, 'Rimuovi immagine attuale', 'remove'),
+            ])
+              ListTile(
+                leading: GIcon(
+                  option.$1,
+                  color: option.$3 == 'remove' ? danger : null,
+                ),
+                title: Text(
+                  option.$2,
+                  style: TextStyle(color: option.$3 == 'remove' ? danger : null),
+                ),
+                onTap: () => Navigator.pop(menu, option.$3),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    if (choice == 'remove') {
+      setState(() => avatar = '');
+      return;
+    }
+    setState(() => busy = true);
+    try {
+      await perform(context, () async {
+        final file = await ImagePicker().pickImage(
+          source: choice == 'camera' ? ImageSource.camera : ImageSource.gallery,
+          maxWidth: 800,
+          imageQuality: 85,
+        );
+        if (!mounted || file == null) return;
+        final type = file.path.toLowerCase().endsWith('.png') ? 'png' : 'jpeg';
+        final ref = await store.upload(file.path, 'image/$type');
+        if (mounted) setState(() => avatar = ref);
+      });
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  String previewPhoto(GpixStore store) => avatar.isEmpty
+      ? ''
+      : avatar == store.me.str('avatarId')
+      ? store.me.str('avatar')
+      : avatar;
+
   @override
   Widget build(BuildContext c) {
     final s = GpixScope.of(c);
     return Scaffold(
-      appBar: AppBar(centerTitle: true, title: pageTitle('Modifica profilo')),
-      bottomNavigationBar: SafeArea(
-        minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-        child: FilledButton(
-          onPressed: busy
-              ? null
-              : () => perform(c, () async {
-                  if (fields['name']!.text.trim().isEmpty ||
-                      fields['username']!.text.trim().isEmpty)
-                    throw Exception('Nome e nome utente sono obbligatori.');
-                  final site = fields['website']!.text.trim();
-                  if (site.isNotEmpty && !site.startsWith('https://'))
-                    throw Exception('Il sito deve iniziare con https://');
-                  setState(() => busy = true);
-                  try {
-                    await s.act('profile', {
-                      for (final e in fields.entries)
-                        e.key: e.value.text.trim(),
-                      'avatar': avatar,
-                      'private': s.me.flag('private'),
-                    });
-                    if (c.mounted) Navigator.pop(c);
-                  } finally {
-                    if (mounted) setState(() => busy = false);
-                  }
-                }),
-          child: Text(busy ? 'Salvo…' : 'Salva'),
-        ),
+      appBar: AppBar(
+        leading: const _ProfileScreenBack(),
+        centerTitle: true,
+        title: pageTitle('Modifica profilo'),
+        actions: [
+          TextButton(
+            onPressed: busy ? null : () => save(s),
+            child: Text(busy ? 'Attendi…' : 'Salva'),
+          ),
+        ],
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 30),
+        padding: const EdgeInsets.only(bottom: 28),
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         children: [
-          const SizedBox(height: 22),
+          const SizedBox(height: 18),
           Center(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: auraBlue),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(2),
-                child: Avatar(
-                  s.myId,
-                  size: 88,
-                  image: avatar == s.me.str('avatarId')
-                      ? s.me.str('avatar')
-                      : avatar,
-                ),
-              ),
+            child: InkWell(
+              onTap: busy ? null : () => changePhoto(s),
+              borderRadius: BorderRadius.circular(46),
+              child: Avatar(s.myId, size: 82, image: previewPhoto(s)),
             ),
           ),
-          TextButton(
-            onPressed: () => perform(c, () async {
-              final file = await ImagePicker().pickImage(
-                source: ImageSource.gallery,
-                maxWidth: 800,
-                imageQuality: 85,
-              );
-              if (file == null) return;
-              final ref = await s.upload(
-                file.path,
-                'image/${file.path.toLowerCase().endsWith('.png') ? 'png' : 'jpeg'}',
-              );
-              if (mounted) setState(() => avatar = ref);
-            }),
-            child: const Text('Cambia foto'),
+          Center(
+            child: TextButton(
+              onPressed: busy ? null : () => changePhoto(s),
+              child: const Text('Modifica immagine del profilo'),
+            ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           for (final field in const [
             (key: 'name', label: 'Nome', max: 60),
             (key: 'username', label: 'Nome utente', max: 30),
+            (key: 'pronouns', label: 'Pronomi', max: 40),
             (key: 'bio', label: 'Biografia', max: 150),
             (key: 'website', label: 'Sito web', max: 200),
-            (key: 'pronouns', label: 'Pronomi', max: 40),
           ])
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: TextField(
-                key: ValueKey('edit-profile-${field.key}'),
-                controller: fields[field.key],
-                maxLength: field.max,
-                minLines: field.key == 'bio' ? 2 : 1,
-                maxLines: field.key == 'bio' ? 5 : 1,
-                keyboardType: field.key == 'website' ? TextInputType.url : null,
-                decoration: InputDecoration(
-                  labelText: field.label,
-                  hintText: field.key == 'website' ? 'https://' : null,
-                  alignLabelWithHint: field.key == 'bio',
-                  counterText: '',
+            _ProfileEditRow(
+              label: field.label,
+              child: Semantics(
+                label: field.label,
+                child: TextField(
+                  key: ValueKey('edit-profile-${field.key}'),
+                  controller: fields[field.key],
+                  enabled: !busy,
+                  maxLength: field.max,
+                  minLines: field.key == 'bio' ? 2 : 1,
+                  maxLines: field.key == 'bio' ? 5 : 1,
+                  keyboardType: field.key == 'website'
+                      ? TextInputType.url
+                      : null,
+                  decoration: InputDecoration(
+                    hintText: field.key == 'website' ? 'https://' : field.label,
+                    filled: false,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    counterText: '',
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 13),
+                  ),
                 ),
               ),
             ),
-          const SizedBox(height: 20),
-          const Divider(height: 1),
           ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const GIcon(CupertinoIcons.link),
-            title: const Text('Link del profilo'),
-            trailing: const GIcon(CupertinoIcons.chevron_right, size: 17),
-            onTap: () => open(c, const ProfileLinks()),
+            title: const Text('Link'),
+            trailing: const GIcon(CupertinoIcons.chevron_right, size: 16),
+            onTap: busy ? null : () => open(c, const ProfileLinks()),
           ),
           const Divider(height: 1),
           ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const GIcon(CupertinoIcons.square_grid_2x2),
             title: const Text('Riordina griglia'),
-            trailing: const GIcon(CupertinoIcons.chevron_right, size: 17),
-            onTap: () => open(c, const GridOrder()),
+            trailing: const GIcon(CupertinoIcons.chevron_right, size: 16),
+            onTap: busy ? null : () => open(c, const GridOrder()),
           ),
           const Divider(height: 1),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const GIcon(CupertinoIcons.person),
-            title: const Text('Genere'),
-            subtitle: Text(
-              fields['gender']!.text.isEmpty
-                  ? 'Non specificato'
-                  : fields['gender']!.text,
-            ),
-            trailing: const GIcon(CupertinoIcons.chevron_right, size: 17),
-            onTap: () => sheet(
-              c,
-              Builder(
-                builder: (menu) => Column(
+          InkWell(
+            onTap: busy ? null : () async {
+              final selected = await sheet<String>(
+                c,
+                Builder(
+                  builder: (menu) => Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final gender in [
+                        'Uomo',
+                        'Donna',
+                        'Non binario',
+                        'Preferisco non specificarlo',
+                      ])
+                        ListTile(
+                          title: Text(gender),
+                          trailing: fields['gender']!.text == gender
+                              ? const GIcon(
+                                  CupertinoIcons.check_mark,
+                                  color: auraBlue,
+                                )
+                              : null,
+                          onTap: () => Navigator.pop(menu, gender),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+              if (selected != null && mounted) {
+                setState(() => fields['gender']!.text = selected);
+              }
+            },
+            child: _ProfileEditRow(
+              label: 'Genere',
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                child: Row(
                   children: [
-                    for (final gender in [
-                      'Uomo',
-                      'Donna',
-                      'Non binario',
-                      'Preferisco non specificarlo',
-                    ])
-                      ListTile(
-                        title: Text(gender),
-                        trailing: fields['gender']!.text == gender
-                            ? const GIcon(
-                                CupertinoIcons.check_mark,
-                                color: auraBlue,
-                              )
-                            : null,
-                        onTap: () {
-                          setState(() => fields['gender']!.text = gender);
-                          Navigator.pop(menu);
-                        },
+                    Expanded(
+                      child: Text(
+                        fields['gender']!.text.isEmpty
+                            ? 'Non specificato'
+                            : fields['gender']!.text,
                       ),
+                    ),
+                    const GIcon(CupertinoIcons.chevron_right, size: 16),
                   ],
                 ),
               ),
             ),
           ),
-          const Divider(height: 1),
           const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: Text(
               'Il genere non viene mostrato nel profilo pubblico.',
               style: TextStyle(color: muted, fontSize: 12),
@@ -2907,6 +2965,47 @@ class _EditProfileState extends State<EditProfile> {
       ),
     );
   }
+}
+
+class _ProfileEditRow extends StatelessWidget {
+  const _ProfileEditRow({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            Expanded(flex: 3, child: Text(label)),
+            const SizedBox(width: 12),
+            Expanded(flex: 7, child: child),
+          ],
+        ),
+      ),
+      const Divider(height: 1),
+    ],
+  );
+}
+
+class _ProfileScreenBack extends StatelessWidget {
+  const _ProfileScreenBack();
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: IconButton(
+      tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+      onPressed: () => Navigator.maybePop(context),
+      style: IconButton.styleFrom(
+        backgroundColor: subdued(context),
+        foregroundColor: foreground(context),
+      ),
+      icon: const GIcon(CupertinoIcons.chevron_back, size: 23),
+    ),
+  );
 }
 
 class CollectionPage extends StatelessWidget {
@@ -4731,8 +4830,10 @@ class _SettingsState extends State<Settings> {
       String? value,
       String? subtitle,
     }) => ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 17, vertical: 4),
-      minLeadingWidth: 30,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+      minLeadingWidth: 22,
+      horizontalTitleGap: 12,
+      minTileHeight: 48,
       leading: GIcon(icon, size: 25, color: foreground(c)),
       title: Text(title, style: const TextStyle(fontSize: 15)),
       subtitle: subtitle == null
@@ -4913,14 +5014,6 @@ class _SettingsState extends State<Settings> {
         CupertinoIcons.photo_on_rectangle,
         [
           (
-            'Bozze',
-            row(
-              CupertinoIcons.doc_text,
-              'Bozze',
-              () => open(c, const DraftList()),
-            ),
-          ),
-          (
             'Salvati',
             row(
               CupertinoIcons.bookmark,
@@ -4934,6 +5027,14 @@ class _SettingsState extends State<Settings> {
               CupertinoIcons.archivebox,
               'Archivio',
               () => open(c, const CollectionPage(kind: 'archive')),
+            ),
+          ),
+          (
+            'Bozze',
+            row(
+              CupertinoIcons.doc_text,
+              'Bozze',
+              () => open(c, const DraftList()),
             ),
           ),
           (
@@ -5003,7 +5104,7 @@ class _SettingsState extends State<Settings> {
                   leading: GIcon(CupertinoIcons.person_crop_circle),
                   title: Text('Modificare il profilo'),
                   subtitle: Text(
-                    'Apri Profilo → Modifica profilo e premi Fine per salvare.',
+                    'Apri Profilo → Modifica profilo e premi Salva per applicare le modifiche.',
                   ),
                 ),
                 ListTile(
@@ -5057,16 +5158,63 @@ class _SettingsState extends State<Settings> {
         ),
       );
     }
+    final activity = row(
+      CupertinoIcons.clock,
+      'La tua attività',
+      () => open(c, const Activity()),
+    );
+    final events = row(
+      CupertinoIcons.calendar,
+      'Eventi e momenti',
+      () => open(
+        c,
+        const Scaffold(body: SafeArea(child: CommunityDirectory())),
+      ),
+    );
+    List<Widget> entries(String name, {Set<String> excluding = const {}}) => [
+      for (final entry in groups.firstWhere((group) => group.$1 == name).$4)
+        if (!excluding.contains(entry.$1)) entry.$2,
+    ];
+    const visibility = {
+      "Privacy dell'account",
+      'Amici più stretti',
+      'Utenti bloccati',
+    };
+    final privacyEntries = groups
+        .firstWhere((group) => group.$1 == 'Privacy')
+        .$4;
+    Widget heading(String title) => Padding(
+      padding: const EdgeInsets.fromLTRB(16, 13, 16, 5),
+      child: Text(
+        title,
+        style: TextStyle(
+          color: secondaryText(c),
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+
+    final accountCenter = row(
+      CupertinoIcons.person_crop_circle,
+      'Centro gestione account',
+      () => open(c, const Settings._category('Account')),
+      subtitle: 'Profilo, dispositivi, password e sicurezza',
+    );
     final filter = query.trim().toLowerCase();
     final results = [
+      if ('centro gestione account'.contains(filter)) accountCenter,
       for (final group in groups)
         for (final entry in group.$4)
           if ('${group.$1} ${entry.$1}'.toLowerCase().contains(filter))
             entry.$2,
+      if ('la tua attività'.contains(filter)) activity,
+      if ('eventi e momenti'.contains(filter)) events,
       if ('gestisci accesso esci elimina account'.contains(filter)) access,
     ];
     return Scaffold(
       appBar: AppBar(
+        leading: const _ProfileScreenBack(),
         title: pageTitle('Impostazioni e attività'),
         centerTitle: true,
       ),
@@ -5074,12 +5222,12 @@ class _SettingsState extends State<Settings> {
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
             child: TextField(
               key: const ValueKey('settings-search'),
               onChanged: (v) => setState(() => query = v),
               decoration: InputDecoration(
-                hintText: 'Cerca un’impostazione',
+                hintText: 'Cerca',
                 prefixIcon: const Padding(
                   padding: EdgeInsets.all(13),
                   child: GIcon(CupertinoIcons.search, size: 21, color: muted),
@@ -5095,77 +5243,34 @@ class _SettingsState extends State<Settings> {
             ),
           ),
           if (filter.isEmpty) ...[
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 17,
-                vertical: 6,
-              ),
-              leading: Avatar(s.myId, size: 48),
-              title: Text(
-                s.me.str('name'),
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-              subtitle: Text('@${s.me.str('username')}'),
-              trailing: const GIcon(CupertinoIcons.chevron_right, size: 17),
-              onTap: () => open(c, const EditProfile()),
-            ),
-            const Divider(height: 19),
-            for (final group in groups) ...[
-              ListTile(
-                onTap: () => open(c, Settings._category(group.$1)),
-                leading: SizedBox.square(
-                  dimension: 40,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: subdued(c),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: GIcon(group.$3, size: 22),
-                  ),
-                ),
-                title: Text(
-                  group.$1,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-                subtitle: Text(
-                  group.$2,
-                  style: TextStyle(color: secondaryText(c), fontSize: 12),
-                ),
-                trailing: const GIcon(CupertinoIcons.chevron_right, size: 15),
-              ),
-            ],
-            const Divider(height: 21),
-            row(
-              CupertinoIcons.bell,
-              'La tua attività',
-              () => open(c, const Activity()),
-            ),
-            row(
-              CupertinoIcons.bookmark,
-              'Elementi salvati',
-              () => open(c, const CollectionPage(kind: 'saved')),
-            ),
-            row(
-              CupertinoIcons.calendar,
-              'Eventi e momenti',
-              () => open(
-                c,
-                const Scaffold(body: SafeArea(child: CommunityDirectory())),
-              ),
-            ),
+            heading('Il tuo account'),
+            accountCenter,
+            const Divider(height: 12),
+            heading('Come usi GPIX'),
+            ...entries('I tuoi contenuti'),
+            activity,
+            ...entries('Notifiche'),
+            events,
+            const Divider(height: 12),
+            heading('Chi può vedere i tuoi contenuti'),
+            for (final entry in privacyEntries)
+              if (visibility.contains(entry.$1)) entry.$2,
+            const Divider(height: 12),
+            heading('Come possono interagire gli altri con te'),
+            ...entries('Privacy', excluding: visibility),
+            const Divider(height: 12),
+            heading('Preferenze'),
+            ...entries('Aspetto'),
+            const Divider(height: 12),
+            heading('Maggiori informazioni e assistenza'),
+            ...entries('Assistenza'),
+            const Divider(height: 12),
+            heading('Accesso'),
             access,
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-              child: OutlinedButton.icon(
-                onPressed: () => _logout(c, s),
-                style: OutlinedButton.styleFrom(foregroundColor: danger),
-                icon: const GIcon(
-                  CupertinoIcons.square_arrow_left,
-                  size: 20,
-                  color: danger,
-                ),
-                label: const Text('Esci'),
-              ),
+            row(
+              CupertinoIcons.square_arrow_left,
+              'Esci',
+              () => _logout(c, s),
             ),
           ] else if (results.isEmpty)
             const Padding(

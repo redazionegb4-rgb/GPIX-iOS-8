@@ -171,7 +171,11 @@ class _HomeTimelineState extends State<HomeTimeline> {
               title: _FeedSelector(feed: feed, onSelected: selectFeed),
               actions: [
                 IconButton(
-                  padding: const EdgeInsets.symmetric(horizontal: 23),
+                  constraints: const BoxConstraints.tightFor(
+                    width: _HomeActivityBadge.width,
+                    height: 52,
+                  ),
+                  padding: EdgeInsets.zero,
                   tooltip: 'Attività',
                   onPressed: openActivity,
                   icon: Badge(
@@ -195,7 +199,7 @@ class _HomeTimelineState extends State<HomeTimeline> {
                       const StoryTray(),
                       if (showActivityBubble && unreadIds.isNotEmpty)
                         Positioned(
-                          right: 10,
+                          right: 0,
                           top: 0,
                           child: _HomeActivityBadge(
                             key: const ValueKey('activity-bubble'),
@@ -265,38 +269,78 @@ class _HomeActivityBadge extends StatelessWidget {
   final int count;
   final VoidCallback onTap;
 
+  static const color = Color(0xffff0035);
+  static const double width = 72;
+
   @override
   Widget build(BuildContext context) => Semantics(
     label: '$count attività non lette',
     button: true,
-    child: Material(
-      color: const Color(0xffff0035),
-      borderRadius: BorderRadius.circular(22),
-      elevation: 4,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(22),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const GIcon(
-                CupertinoIcons.heart_fill,
-                color: Colors.white,
-                size: 14,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                '$count',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
+    child: SizedBox(
+      width: width,
+      child: Stack(
+        alignment: Alignment.topCenter,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Material(
+              color: color,
+              borderRadius: BorderRadius.circular(24),
+              elevation: 4,
+              shadowColor: const Color(0x50000000),
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(24),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 60, minHeight: 38),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 7),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const GIcon(
+                          CupertinoIcons.heart_fill,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              '$count',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ],
+            ),
           ),
-        ),
+          Positioned(
+            top: 3,
+            child: IgnorePointer(
+              child: Transform.rotate(
+                angle: .7853981633974483,
+                child: Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     ),
   );
