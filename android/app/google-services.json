@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1041335485680",
+    "project_id": "gpix-8b008",
+    "storage_bucket": "gpix-8b008.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1041335485680:android:128786e407332ae543ee35",
+        "android_client_info": {
+          "package_name": "app.gpix.gpix"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCSkLp0K7ckQN4CjbJrk7K38nb77QRo30Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
