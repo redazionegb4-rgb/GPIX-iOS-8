@@ -121,7 +121,7 @@ class _ConnectionsState extends State<Connections>
     FocusScope.of(context).unfocus();
     open(
       context,
-      _PeopleDirectory(title: title, ids: ids, allowFollow: allowFollow),
+      PeopleDirectory(title: title, ids: ids, allowFollow: allowFollow),
     );
   }
 
@@ -565,8 +565,9 @@ class _ConnectionButton extends StatelessWidget {
   );
 }
 
-class _PeopleDirectory extends StatelessWidget {
-  const _PeopleDirectory({
+class PeopleDirectory extends StatelessWidget {
+  const PeopleDirectory({
+    super.key,
     required this.title,
     required this.ids,
     required this.allowFollow,

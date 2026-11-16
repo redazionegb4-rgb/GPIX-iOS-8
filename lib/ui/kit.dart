@@ -911,6 +911,7 @@ class Avatar extends StatelessWidget {
   final double size;
   final bool ring, viewed, roundedSquare;
   final String? image;
+  final Gradient? ringGradient;
   const Avatar(
     this.user, {
     super.key,
@@ -919,6 +920,7 @@ class Avatar extends StatelessWidget {
     this.viewed = false,
     this.roundedSquare = false,
     this.image,
+    this.ringGradient,
   });
   @override
   Widget build(BuildContext c) {
@@ -962,15 +964,16 @@ class Avatar extends StatelessWidget {
               borderRadius: roundedSquare ? BorderRadius.circular(19) : null,
               gradient: roundedSquare || viewed || closeStory
                   ? null
-                  : const SweepGradient(
-                      colors: [
-                        Color(0xffffa500),
-                        Color(0xfff84b18),
-                        Color(0xffe5008f),
-                        Color(0xffa621cc),
-                        Color(0xffffa500),
-                      ],
-                    ),
+                  : ringGradient ??
+                        const SweepGradient(
+                          colors: [
+                            Color(0xffffa500),
+                            Color(0xfff84b18),
+                            Color(0xffe5008f),
+                            Color(0xffa621cc),
+                            Color(0xffffa500),
+                          ],
+                        ),
               color: closeStory
                   ? const Color(0xff25bd61)
                   : viewed

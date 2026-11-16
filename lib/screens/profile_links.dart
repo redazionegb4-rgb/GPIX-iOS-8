@@ -65,41 +65,80 @@ class ProfileLinkChips extends StatelessWidget {
       String text,
       VoidCallback tap, {
       bool add = false,
-    }) => ActionChip(
-      label: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox.square(
-            dimension: compact ? 14 : 18,
-            child: Center(child: icon),
-          ),
-          SizedBox(width: compact ? 4 : 6),
-          Flexible(
-            child: Text(
-              text,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: compact && add ? secondaryText(c) : foreground(c),
-                fontWeight: FontWeight.w600,
-                fontSize: compact ? 11 : 13,
+    }) {
+      if (compact) {
+        final ink = add ? secondaryText(c) : foreground(c);
+        final outline = Theme.of(c).dividerColor;
+        return Material(
+          color: surface(c),
+          shape: StadiumBorder(side: BorderSide(color: outline, width: .8)),
+          child: InkWell(
+            customBorder: const StadiumBorder(),
+            onTap: tap,
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 23.5),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox.square(dimension: 13, child: Center(child: icon)),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      text,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11.2,
+                        color: ink,
+                        fontWeight: FontWeight.w600,
+                        height: 1.16,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-        ],
-      ),
-      padding: EdgeInsets.symmetric(
-        horizontal: compact ? 7 : 10,
-        vertical: compact ? 0 : 6,
-      ),
-      labelPadding: EdgeInsets.zero,
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      visualDensity: VisualDensity.compact,
-      backgroundColor: surface(c),
-      side: BorderSide(color: Theme.of(c).dividerColor),
-      shape: const StadiumBorder(),
-      onPressed: tap,
-    );
+        );
+      }
+      return ActionChip(
+        label: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox.square(
+              dimension: compact ? 14 : 18,
+              child: Center(child: icon),
+            ),
+            SizedBox(width: compact ? 4 : 6),
+            Flexible(
+              child: Text(
+                text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: compact && add ? secondaryText(c) : foreground(c),
+                  fontWeight: FontWeight.w600,
+                  fontSize: compact ? 11 : 13,
+                ),
+              ),
+            ),
+          ],
+        ),
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 7 : 10,
+          vertical: compact ? 0 : 6,
+        ),
+        labelPadding: EdgeInsets.zero,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+        backgroundColor: surface(c),
+        side: BorderSide(color: Theme.of(c).dividerColor),
+        shape: const StadiumBorder(),
+        onPressed: tap,
+      );
+    }
+
     return Wrap(
       spacing: 8,
       runSpacing: 7,
