@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show setEquals;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, setEquals;
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -79,7 +79,7 @@ class _StoryTrayState extends State<StoryTray> {
     final ringDiameter = avatar + 10.2;
     const padding = EdgeInsets.fromLTRB(5, 2, 5, 7);
     const labelGap = 7.0;
-    const labelSize = 10.5;
+    final labelSize = defaultTargetPlatform == TargetPlatform.iOS ? 10.0 : 10.5;
     const labelLineHeight = 1.32;
     final labelHeight =
         (MediaQuery.textScalerOf(c).scale(labelSize) * labelLineHeight)

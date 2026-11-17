@@ -16,7 +16,7 @@ import 'package:gpix/screens/stories.dart';
 import 'package:gpix/ui/kit.dart';
 
 void main() {
-  test('Android and iPhone use the same text sizes and weights', () {
+  test('The shared theme keeps the common Roboto typography and colors', () {
     final savedPlatform = debugDefaultTargetPlatformOverride;
     try {
       for (final brightness in Brightness.values) {
@@ -41,7 +41,7 @@ void main() {
   });
 
   testWidgets(
-    'An iPhone with small system text matches the Home and Profile proportions',
+    'An iPhone uses the measured Home and Profile typography',
     (tester) async {
       tester.view.physicalSize = const Size(402, 874);
       tester.view.devicePixelRatio = 1;
@@ -99,9 +99,11 @@ void main() {
       final home = find.text('Per te').last;
       expect(
         MediaQuery.textScalerOf(tester.element(home)).scale(22),
-        closeTo(26, .1),
+        closeTo(23.03, .1),
       );
-      expect(tester.getSize(home).width, inInclusiveRange(61, 70));
+      expect(tester.getSize(home).width, inInclusiveRange(56, 61));
+      expect(tester.getCenter(home).dx, closeTo(201, 1));
+      expect(tester.widget<Text>(home).style?.fontWeight, FontWeight.w700);
       expect(
         Theme.of(tester.element(home)).textTheme.bodyMedium?.fontFamily,
         'GpixRoboto',
@@ -124,11 +126,11 @@ void main() {
           matching: find.text('andrea.rossi'),
         ),
       );
-      expect(name.style?.fontSize, 14);
-      expect(name.style?.fontWeight, FontWeight.w600);
+      expect(name.style?.fontSize, 12.5);
+      expect(name.style?.fontWeight, FontWeight.w500);
       expect(count.style?.fontSize, 15.6);
       expect(count.style?.fontWeight, FontWeight.w600);
-      expect(handle.style?.fontSize, 26);
+      expect(handle.style?.fontSize, 23);
       expect(handle.style?.fontWeight, FontWeight.w700);
       final paragraph = tester.renderObject<RenderParagraph>(find.text(bio));
       final lines = paragraph
@@ -137,17 +139,10 @@ void main() {
           )
           .map((box) => box.top)
           .toSet();
-      expect(lines, hasLength(3));
+      expect(lines, hasLength(2));
       final links = find.byType(ProfileLinkChips);
       final add = find.descendant(of: links, matching: find.text('Aggiungi'));
-      final facebook = find.descendant(
-        of: links,
-        matching: find.text('Andrea Russo'),
-      );
-      expect(
-        tester.getCenter(add).dy,
-        greaterThan(tester.getCenter(facebook).dy),
-      );
+      expect(add.hitTestable(), findsOneWidget);
       expect(
         find.descendant(
           of: find.byType(ProfileLinkChips),

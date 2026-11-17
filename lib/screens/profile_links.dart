@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/data.dart';
@@ -60,6 +61,7 @@ class ProfileLinkChips extends StatelessWidget {
   @override
   Widget build(BuildContext c) {
     final visibleLinks = links.map(resolveSocialLink).toList();
+    final iphone = defaultTargetPlatform == TargetPlatform.iOS;
     Widget chip(
       Widget icon,
       String text,
@@ -89,9 +91,9 @@ class ProfileLinkChips extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: iphone ? 11 : 12,
                         color: ink,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: iphone ? FontWeight.w500 : FontWeight.w600,
                         height: 1.16,
                         letterSpacing: 0,
                       ),

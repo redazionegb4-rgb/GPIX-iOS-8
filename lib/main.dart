@@ -68,10 +68,10 @@ class GpixApp extends StatelessWidget {
           );
           if (defaultTargetPlatform != TargetPlatform.iOS) return app;
           final media = MediaQuery.of(c);
-          // Use the Android reference's text proportions at phone widths.
-          final referenceScale = (media.size.shortestSide / 340).clamp(
+          // Keep the iPhone baseline close to the reference at phone widths.
+          final referenceScale = (media.size.shortestSide / 384).clamp(
             1.0,
-            1.2,
+            1.12,
           );
           return MediaQuery(
             data: media.copyWith(

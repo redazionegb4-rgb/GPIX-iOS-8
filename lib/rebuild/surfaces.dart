@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:share_plus/share_plus.dart';
@@ -442,6 +443,7 @@ class _FeedSelectorState extends State<_FeedSelector> {
     final duration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
         : const Duration(milliseconds: 190);
+    final iphone = defaultTargetPlatform == TargetPlatform.iOS;
     return Tooltip(
       message: 'Sezioni del feed',
       child: Semantics(
@@ -457,6 +459,7 @@ class _FeedSelectorState extends State<_FeedSelector> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (iphone) const SizedBox(width: 16),
                   Flexible(
                     child: AnimatedSwitcher(
                       duration: duration,
@@ -468,7 +471,9 @@ class _FeedSelectorState extends State<_FeedSelector> {
                         style: TextStyle(
                           color: foreground(context),
                           fontSize: 22,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: iphone
+                              ? FontWeight.w700
+                              : FontWeight.w800,
                           letterSpacing: -.75,
                           height: 1,
                         ),
@@ -2284,6 +2289,7 @@ class _ProfileHomeState extends State<ProfileHome>
   Widget build(BuildContext context) {
     final store = GpixScope.of(context);
     final person = store.user(widget.user);
+    final iphone = defaultTargetPlatform == TargetPlatform.iOS;
     final own = widget.user == store.myId;
     final following = store.follows(widget.user);
     final pending = store.state.ids('pending').contains(widget.user);
@@ -2522,10 +2528,12 @@ class _ProfileHomeState extends State<ProfileHome>
                                 person.str('name', person.str('username')),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 14,
+                                style: TextStyle(
+                                  fontSize: iphone ? 12.5 : 14,
                                   height: 1.2,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: iphone
+                                      ? FontWeight.w500
+                                      : FontWeight.w600,
                                   letterSpacing: 0,
                                 ),
                               ),
@@ -2587,8 +2595,8 @@ class _ProfileHomeState extends State<ProfileHome>
                       const SizedBox(height: 4),
                     Text(
                       person.str('bio').replaceAll(r'\n', '\n'),
-                      style: const TextStyle(
-                        fontSize: 14,
+                      style: TextStyle(
+                        fontSize: iphone ? 12.2 : 14,
                         height: 1.28,
                         letterSpacing: 0,
                       ),
@@ -2824,23 +2832,25 @@ class _ProfileHomeState extends State<ProfileHome>
       ? const Color(0xfff0f1f5)
       : subdued(context);
 
-  ButtonStyle _profileButton(BuildContext context, {bool primary = false}) =>
-      FilledButton.styleFrom(
-        backgroundColor: primary
-            ? const Color(0xff455eff)
-            : _profileControl(context),
-        foregroundColor: primary ? Colors.white : _profileInk(context),
-        padding: const EdgeInsets.symmetric(horizontal: 7),
-        minimumSize: const Size(0, 31),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          height: 1.12,
-          letterSpacing: 0,
-        ),
-      );
+  ButtonStyle _profileButton(BuildContext context, {bool primary = false}) {
+    final iphone = defaultTargetPlatform == TargetPlatform.iOS;
+    return FilledButton.styleFrom(
+      backgroundColor: primary
+          ? const Color(0xff455eff)
+          : _profileControl(context),
+      foregroundColor: primary ? Colors.white : _profileInk(context),
+      padding: const EdgeInsets.symmetric(horizontal: 7),
+      minimumSize: const Size(0, 31),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+        fontSize: iphone ? 12.5 : 14,
+        fontWeight: iphone ? FontWeight.w500 : FontWeight.w600,
+        height: 1.12,
+        letterSpacing: 0,
+      ),
+    );
+  }
 
   Widget _highlights(
     BuildContext context,
@@ -2848,7 +2858,7 @@ class _ProfileHomeState extends State<ProfileHome>
     List<J> highlights, {
     required bool own,
   }) {
-    const fontSize = 13.0;
+    final fontSize = defaultTargetPlatform == TargetPlatform.iOS ? 11.5 : 13.0;
     final textSize = MediaQuery.textScalerOf(context).scale(fontSize);
     return Padding(
       padding: const EdgeInsets.only(top: 20, bottom: 12),
@@ -3758,7 +3768,9 @@ class _AccountTitle extends StatelessWidget {
                 style: profile
                     ? TextStyle(
                         color: _profileInk(context),
-                        fontSize: 26,
+                        fontSize: defaultTargetPlatform == TargetPlatform.iOS
+                            ? 23
+                            : 26,
                         fontWeight: FontWeight.w700,
                         letterSpacing: -.65,
                         height: 1.12,
