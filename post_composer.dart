@@ -1,0 +1,2706 @@
+import 'dart:io';
+import 'dart:async';
+import '../core/drafts.dart';
+import 'dart:convert';
+import 'photo_effects.dart';
+import 'music_picker.dart';
+import 'dart:ui' as ui;
+import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import '../core/gallery.dart';
+import 'social.dart' show textDialog;
+import 'package:image/image.dart' as im;
+import 'package:path_provider/path_provider.dart';
+import '../core/data.dart';
+import '../core/store.dart';
+import '../ui/kit.dart';
+import '../ui/creation.dart';
+
+Future<String> renderPostPhoto(J args) async {
+  var img = im.decodeImage(await processPhoto(args))!;
+  final overlayPath = args.str('overlay');
+  if (overlayPath.isNotEmpty) {
+    final overlay = im.decodeImage(await File(overlayPath).readAsBytes());
+    if (overlay != null) {
+      final stamp = im.copyResize(
+        im.bakeOrientation(overlay),
+        width: (img.width * .28).round(),
+      );
+      img = im.compositeImage(
+        img,
+        stamp,
+        dstX: img.width - stamp.width - (img.width * .03).round(),
+        dstY: img.height - stamp.height - (img.width * .03).round(),
+      );
+    }
+  }
+  final captionPng = args.str('captionPng');
+  if (captionPng.isNotEmpty) {
+    final label = im.decodePng(base64Decode(captionPng))!;
+    final stamp = im.copyResize(
+      label,
+      width: (img.width * args.number('textWidth', .8)).round(),
+    );
+    img = im.compositeImage(
+      img,
+      stamp,
+      dstX: ((img.width - stamp.width) * args.number('textX', .5)).round(),
+      dstY: ((img.height - stamp.height) * args.number('textY', .5)).round(),
+    );
+  }
+  final out = args.str('output');
+  await File(out).writeAsBytes(im.encodeJpg(img, quality: 91));
+  return out;
+}
+
+List<double> postMatrix(String filter, double brightness) {
+  if (filter == 'Mono')
+    return [
+      .2126 * brightness,
+      .7152 * brightness,
+      .0722 * brightness,
+      0,
+      0,
+      .2126 * brightness,
+      .7152 * brightness,
+      .0722 * brightness,
+      0,
+      0,
+      .2126 * brightness,
+      .7152 * brightness,
+      .0722 * brightness,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+    ];
+  if (filter == 'Vivido') {
+    const sat = 1.35, contrast = 1.12;
+    final a = (1 - sat) * .2126,
+        b = (1 - sat) * .7152,
+        c = (1 - sat) * .0722,
+        v = contrast * brightness;
+    const offset = 128 * (1 - contrast);
+    return [
+      (a + sat) * v,
+      b * v,
+      c * v,
+      0,
+      offset,
+      a * v,
+      (b + sat) * v,
+      c * v,
+      0,
+      offset,
+      a * v,
+      b * v,
+      (c + sat) * v,
+      0,
+      offset,
+      0,
+      0,
+      0,
+      1,
+      0,
+    ];
+  }
+  return [
+    brightness * (filter == 'Caldo' ? 1.1 : 1),
+    0,
+    0,
+    0,
+    0,
+    0,
+    brightness,
+    0,
+    0,
+    0,
+    0,
+    0,
+    brightness * (filter == 'Caldo' ? 0.9 : 1),
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+  ];
+}
+
+class PostComposer extends StatefulWidget {
+  final List<String> initialFiles;
+  final J? initialDraft;
+  final ValueChanged<bool>? onEditingChanged;
+  const PostComposer({
+    super.key,
+    this.initialFiles = const [],
+    this.initialDraft,
+    this.onEditingChanged,
+  });
+  @override
+  State<PostComposer> createState() => _PostComposerState();
+}
+
+class _PostComposerState extends State<PostComposer> {
+  late List<String> files = [...widget.initialFiles];
+  int step = 0, index = 0;
+  late String draftId;
+  Timer? draftTimer;
+  bool savingDraft = false;
+  String lastDraft = '';
+  J draftData() => {
+    'id': draftId,
+    'kind': 'post',
+    'files': List.of(files),
+    'photoCrops': {
+      for (final path in files)
+        if (photoCrops.containsKey(path)) path: photoCrops[path],
+    },
+    'text': caption.text,
+    'location': location.text,
+    'aspect': aspect,
+    'filter': filter,
+    'brightness': brightness,
+    'intensity': intensity,
+    'adjustments': adjustments,
+    'overlayText': overlayText,
+    'overlay': overlay,
+    'poll': poll,
+    'aiLabel': aiLabel,
+    'topic': topic,
+    'textX': textX,
+    'textY': textY,
+    'textSize': textSize,
+    'textColor': textColor.toARGB32(),
+    'textAlign': textAlign.index,
+    'audience': audience,
+    'tagged': tagged.toList(),
+    'collaboratorInvites': collaboratorInvites.toList(),
+    'photoTags': {
+      for (final path in files)
+        if (photoTags.containsKey(path))
+          path: [
+            for (final tag in photoTags[path]!) Map<String, dynamic>.of(tag),
+          ],
+    },
+    'music': music,
+    'audioName': audioName,
+    'commentsOff': commentsOff,
+    'hideLikes': hideLikes,
+  };
+  Future<void> saveDraft({bool feedback = false}) async {
+    if (files.isEmpty) {
+      if (feedback)
+        notice(context, 'Aggiungi una foto prima di salvare la bozza.');
+      return;
+    }
+    if (savingDraft) {
+      if (!feedback) return;
+      while (savingDraft && mounted) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+      if (mounted) await saveDraft(feedback: true);
+      return;
+    }
+    if (busy) return;
+    final data = draftData(), encoded = jsonEncode(draftData());
+    if (!feedback && encoded == lastDraft) return;
+    savingDraft = true;
+    try {
+      final s = GpixScope.of(context, listen: false);
+      await Drafts.save('${s.server}|${s.myId}', data);
+      lastDraft = encoded;
+      if (feedback && mounted) notice(context, 'Bozza salvata');
+    } catch (e) {
+      if (feedback && mounted) notice(context, 'Bozza non salvata: $e');
+    } finally {
+      savingDraft = false;
+    }
+  }
+
+  double aspect = 1, brightness = 1;
+  String filter = 'Originale';
+  String overlayText = '',
+      overlay = '',
+      audio = '',
+      audioName = '',
+      topic = '',
+      audience = 'followers';
+  J? poll, music;
+  final J adjustments = {};
+  final photoCrops = <String, J>{};
+  bool formatChosen = false;
+  double intensity = 1, textX = .5, textY = .7, textSize = 24;
+  Color textColor = Colors.white;
+  TextAlign textAlign = TextAlign.center;
+  final Map<String, Future<Uint8List>> previews = {};
+  Future<Uint8List> photoBytes(String path, {String? preset, int limit = 650}) {
+    final args = <String, dynamic>{
+      'path': path,
+      'aspect': aspect,
+      'crop': photoCrops[path],
+      'filter': preset ?? filter,
+      'brightness': brightness,
+      'intensity': intensity,
+      'adjustments': Map<String, dynamic>.from(adjustments),
+      'limit': limit,
+      'preview': true,
+    };
+    final key = jsonEncode(args);
+    if (previews.length > 60) previews.clear();
+    return previews.putIfAbsent(key, () => compute(processPhoto, args));
+  }
+
+  Widget processed(String path, {String? preset, int limit = 650}) =>
+      FutureBuilder<Uint8List>(
+        future: photoBytes(path, preset: preset, limit: limit),
+        builder: (c, snapshot) => snapshot.hasData
+            ? Image.memory(
+                snapshot.data!,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+              )
+            : MediaView(path, fit: BoxFit.cover),
+      );
+  TextStyle get captionStyle => TextStyle(
+    fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily,
+    color: textColor,
+    fontSize: textSize,
+    fontWeight: FontWeight.w700,
+    shadows: const [
+      Shadow(color: Colors.black87, blurRadius: 4, offset: Offset(1, 2)),
+    ],
+  );
+  double exportedTextWidth = .5;
+  Future<String> captionImage() async {
+    if (overlayText.trim().isEmpty) return '';
+    final painter = TextPainter(
+      text: TextSpan(
+        text: overlayText,
+        style: captionStyle.copyWith(fontSize: textSize * 3),
+      ),
+      textDirection: TextDirection.ltr,
+      textAlign: textAlign,
+      maxLines: 6,
+    )..layout(maxWidth: 1053);
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    painter.paint(canvas, const Offset(8, 8));
+    final picture = recorder.endRecording();
+    final labelWidth = (painter.width + 16).ceil();
+    exportedTextWidth = labelWidth / 1170;
+    final image = await picture.toImage(
+      labelWidth,
+      (painter.height + 16).ceil(),
+    );
+    picture.dispose();
+    painter.dispose();
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    return base64Encode(data!.buffer.asUint8List());
+  }
+
+  bool aiLabel = false,
+      multiple = false,
+      loadingGallery = true,
+      copying = false;
+  List<GalleryPhoto> recent = [];
+  final copied = <String, String>{};
+  final tagged = <String>{};
+  final collaboratorInvites = <String>{};
+  final photoTags = <String, List<J>>{};
+  Set<String> get taggedUsers => {
+    ...tagged,
+    for (final path in files)
+      for (final tag in photoTags[path] ?? const <J>[]) tag.str('user'),
+  };
+  final photos = PageController(keepPage: false);
+  final publishPhotos = PageController(viewportFraction: .93, keepPage: false);
+
+  void goToStep(int value) {
+    setState(() => step = value);
+    widget.onEditingChanged?.call(value != 0);
+    positionPreview();
+  }
+
+  void positionPreview() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final controller = step == 2 && files.length > 1 ? publishPhotos : photos;
+      if (controller.hasClients) controller.jumpToPage(index);
+    });
+  }
+
+  bool busy = false, commentsOff = false, hideLikes = false;
+  final overlayInput = TextEditingController();
+  final caption = TextEditingController(), location = TextEditingController();
+  @override
+  void initState() {
+    super.initState();
+    final d = widget.initialDraft;
+    draftId = d?.str('id') ?? newId();
+    if (d != null) {
+      files = d.ids('files');
+      caption.text = d.str('text');
+      location.text = d.str('location');
+      aspect = d.number('aspect', 1).toDouble();
+      formatChosen = true;
+      multiple = files.length > 1;
+      photoCrops.addAll(
+        d.obj('photoCrops').map((path, crop) => MapEntry(path, object(crop))),
+      );
+      filter = d.str('filter', 'Originale');
+      brightness = d.number('brightness', 1).toDouble();
+      intensity = d.number('intensity', 1).toDouble();
+      adjustments.addAll(d.obj('adjustments'));
+      overlayText = d.str('overlayText');
+      overlay = d.str('overlay');
+      poll = d['poll'] == null ? null : d.obj('poll');
+      aiLabel = d.flag('aiLabel');
+      topic = d.str('topic');
+      overlayInput.text = overlayText;
+      textX = d.number('textX', .5).toDouble();
+      textY = d.number('textY', .7).toDouble();
+      textSize = d.number('textSize', 24).toDouble();
+      textColor = Color(d.number('textColor', 0xffffffff).toInt());
+      textAlign =
+          TextAlign.values[d
+              .number('textAlign', 2)
+              .toInt()
+              .clamp(0, TextAlign.values.length - 1)];
+      audience = d.str('audience') == 'close' ? 'close' : 'followers';
+      tagged.addAll(d.ids('tagged'));
+      collaboratorInvites.addAll(d.ids('collaboratorInvites'));
+      photoTags.addAll(
+        d.obj('photoTags').map((path, tags) => MapEntry(path, objects(tags))),
+      );
+      music = d['music'] == null ? null : d.obj('music');
+      audioName = d.str('audioName');
+      commentsOff = d.flag('commentsOff');
+      hideLikes = d.flag('hideLikes');
+      step = files.isEmpty ? 0 : 1;
+    }
+    draftTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (mounted) saveDraft();
+    });
+    if (d == null && files.isNotEmpty) originalRatio(files.first);
+    loadGallery();
+  }
+
+  Future<void> loadGallery() async {
+    try {
+      final values = await DeviceGallery.recent();
+      if (mounted) {
+        setState(() => recent = values);
+        if (files.isEmpty && values.isNotEmpty) await selectPhoto(values.first);
+      }
+    } catch (_) {}
+    if (mounted) setState(() => loadingGallery = false);
+  }
+
+  Future<void> originalRatio(String path) async {
+    try {
+      final bytes = await File(path).readAsBytes();
+      final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+      final descriptor = await ui.ImageDescriptor.encoded(buffer);
+      final ratio = descriptor.width / descriptor.height;
+      descriptor.dispose();
+      buffer.dispose();
+      if (mounted && !formatChosen && files.firstOrNull == path) {
+        setState(() => aspect = ratio.clamp(.5, 2));
+      }
+    } catch (_) {}
+  }
+
+  Future<void> selectPhoto(GalleryPhoto photo) async {
+    final selected = copied[photo.id];
+    if (!multiple && selected != null && files.contains(selected)) return;
+    if (copying) return;
+    if (multiple && files.length >= 10 && !files.contains(selected)) {
+      notice(context, 'Puoi selezionare fino a 10 foto.');
+      return;
+    }
+    setState(() => copying = true);
+    await perform(context, () async {
+      final path = copied[photo.id] ?? await DeviceGallery.copy(photo.id);
+      copied[photo.id] = path;
+      if (!mounted) return;
+      final previousFirst = files.firstOrNull;
+      setState(() {
+        if (!multiple) {
+          files = [path];
+          index = 0;
+        } else if (files.contains(path)) {
+          final current = files[index.clamp(0, files.length - 1)];
+          files.remove(path);
+          final next = files.indexOf(current);
+          index = next >= 0
+              ? next
+              : index.clamp(0, math.max(0, files.length - 1));
+        } else if (files.length < 10) {
+          files.add(path);
+          index = files.length - 1;
+        }
+      });
+      final first = files.firstOrNull;
+      if (first != null && first != previousFirst) await originalRatio(first);
+    });
+    if (mounted) {
+      setState(() => copying = false);
+      positionPreview();
+    }
+  }
+
+  @override
+  void dispose() {
+    draftTimer?.cancel();
+    photos.dispose();
+    publishPhotos.dispose();
+    overlayInput.dispose();
+    caption.dispose();
+    location.dispose();
+    super.dispose();
+  }
+
+  Future<void> pick({bool camera = false, bool append = false}) async {
+    final limit = append ? 10 - files.length : 10;
+    if (limit == 0) return;
+    await perform(context, () async {
+      final picker = ImagePicker();
+      final chosen = camera
+          ? [
+              await picker.pickImage(
+                source: ImageSource.camera,
+                imageQuality: 94,
+              ),
+            ]
+          : limit == 1
+          ? [
+              await picker.pickImage(
+                source: ImageSource.gallery,
+                imageQuality: 94,
+              ),
+            ]
+          : await picker.pickMultiImage(limit: limit, imageQuality: 94);
+      final list = chosen.whereType<XFile>().map((f) => f.path).toList();
+      if (mounted && list.isNotEmpty) {
+        setState(() {
+          index = append ? files.length : 0;
+          files = [if (append) ...files, ...list.take(limit)];
+          multiple = files.length > 1 || multiple;
+        });
+        if (!append) await originalRatio(list.first);
+        if (!mounted) return;
+        positionPreview();
+      }
+    });
+  }
+
+  bool preparingPublish = false;
+
+  Future<void> publish() async {
+    if (busy || preparingPublish) return;
+    preparingPublish = true;
+    try {
+      await saveDraft();
+    } finally {
+      preparingPublish = false;
+    }
+    if (!mounted) return;
+    setState(() => busy = true);
+    await perform(context, () async {
+      final s = GpixScope.of(context, listen: false),
+          root = await getTemporaryDirectory();
+      if (collaboratorInvites.isNotEmpty && !s.supportsPostCollaborations) {
+        throw Exception(
+          'Aggiorna il server GPIX per inviare gli inviti di collaborazione.',
+        );
+      }
+      final media = <String>[];
+      final label = await captionImage();
+      for (final f in files) {
+        final path = await compute(renderPostPhoto, {
+          'path': f,
+          'output': '${root.path}/gpix-post-${newId()}.jpg',
+          'aspect': aspect,
+          'crop': photoCrops[f],
+          'filter': filter,
+          'brightness': brightness,
+          'captionPng': label,
+          'textX': textX,
+          'textY': textY,
+          'textWidth': exportedTextWidth,
+          'intensity': intensity,
+          'adjustments': Map<String, dynamic>.from(adjustments),
+          'overlay': overlay,
+        });
+        try {
+          media.add(await s.upload(path, 'image/jpeg'));
+        } finally {
+          await File(path).delete();
+        }
+      }
+      final track = music?.str('audio') ?? '';
+      await s.act(
+        audience == 'followers' && !s.demo ? 'postForFollowers' : 'post',
+        {
+          'kind': 'post',
+          'idempotencyKey': draftId,
+          'text': caption.text.trim(),
+          'location': location.text.trim(),
+          'media': media.first,
+          'mediaItems': media,
+          if (collaboratorInvites.isNotEmpty)
+            'collaboratorInvites': collaboratorInvites.toList(),
+          'audience': audience,
+          'style': {
+            'aspect': aspect,
+            'draftKey': draftId,
+            'audio': track,
+            'audioName': audioName,
+            if (music != null) 'music': music,
+            'taggedUsers': taggedUsers.toList(),
+            if (photoTags.isNotEmpty)
+              'photoTags': [
+                for (final (position, path) in files.indexed)
+                  for (final tag in photoTags[path] ?? const <J>[])
+                    {...tag, 'slide': position},
+              ],
+            'aiLabel': aiLabel,
+            'topic': topic,
+            if (poll != null) 'poll': poll,
+          },
+        },
+      );
+      final post = s.posts.firstWhere(
+        (p) =>
+            p.str('author') == s.myId &&
+            p.obj('style').str('draftKey') == draftId,
+      );
+      if (commentsOff || hideLikes)
+        await s.act('postOptions', {
+          'id': post['id'],
+          'commentsOff': commentsOff,
+          'hideLikes': hideLikes,
+        });
+      if (mounted) {
+        Navigator.pop(context);
+        unawaited(Drafts.delete('${s.server}|${s.myId}', draftId));
+        notice(context, 'Post condiviso');
+      }
+    });
+    if (mounted) setState(() => busy = false);
+  }
+
+  List<double> get matrix => postMatrix(filter, brightness);
+
+  static const blue = Color(0xff4656f6);
+  Widget preview({bool finalStep = false}) {
+    if (files.isEmpty) {
+      return CreationEmpty(
+        icon: CupertinoIcons.photo_on_rectangle,
+        title: 'Il tuo prossimo post',
+        description: 'Scegli una foto oppure scattane una nuova.',
+        action: 'Scegli foto',
+        onPressed: busy ? null : pick,
+      );
+    }
+    return PageView.builder(
+      key: ValueKey(files.join('|')),
+      controller: finalStep && files.length > 1 ? publishPhotos : photos,
+      itemCount: files.length,
+      onPageChanged: (i) => setState(() => index = i),
+      itemBuilder: (c, i) => step == 0
+          ? InkWell(
+              onTap: () => openPhotoGallery(c, List.of(files), initial: i),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (formatChosen)
+                    Center(
+                      child: AspectRatio(
+                        aspectRatio: aspect,
+                        child: processed(files[i]),
+                      ),
+                    )
+                  else
+                    MediaView(files[i], fit: BoxFit.contain),
+                  if (files.length > 1)
+                    Positioned(
+                      top: 10,
+                      right: 12,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 9,
+                            vertical: 5,
+                          ),
+                          child: Text(
+                            '${i + 1}/${files.length}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            )
+          : Padding(
+              padding: EdgeInsets.symmetric(horizontal: finalStep ? 5 : 0),
+              child: Center(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(finalStep ? 18 : 0),
+                  child: AspectRatio(
+                    aspectRatio: aspect,
+                    child: LayoutBuilder(
+                      builder: (c, box) => Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          processed(files[i]),
+                          if (overlayText.isNotEmpty) movableCaption(box),
+                          if (overlay.isNotEmpty)
+                            Positioned(
+                              bottom: 12,
+                              right: 12,
+                              width: box.maxWidth * .28,
+                              child: MediaView(overlay),
+                            ),
+                          if (files.length > 1)
+                            Positioned(
+                              top: 12,
+                              right: 12,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  '${i + 1}/${files.length}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+
+  Widget movableCaption(BoxConstraints box) {
+    final scale = box.maxWidth / 390;
+    final style = captionStyle.copyWith(fontSize: textSize * scale);
+    final padding = 8 / 3 * scale;
+    final measure = TextPainter(
+      text: TextSpan(text: overlayText, style: style),
+      textDirection: TextDirection.ltr,
+      textAlign: textAlign,
+      maxLines: 6,
+    )..layout(maxWidth: box.maxWidth * .9);
+    final width = (measure.width + padding * 2)
+            .ceilToDouble()
+            .clamp(1.0, box.maxWidth)
+            .toDouble(),
+        height = (measure.height + padding * 2)
+            .ceilToDouble()
+            .clamp(1.0, box.maxHeight)
+            .toDouble();
+    measure.dispose();
+    final travelX = (box.maxWidth - width).clamp(1, double.infinity),
+        travelY = (box.maxHeight - height).clamp(1, double.infinity);
+    return Positioned(
+      left: textX * travelX,
+      top: textY * travelY,
+      width: width,
+      height: height,
+      child: GestureDetector(
+        key: const ValueKey('post-draggable-text'),
+        behavior: HitTestBehavior.opaque,
+        onPanUpdate: step == 1
+            ? (details) => setState(() {
+                textX = (textX + details.delta.dx / travelX).clamp(0, 1);
+                textY = (textY + details.delta.dy / travelY).clamp(0, 1);
+              })
+            : null,
+        onDoubleTap: step == 1 ? editText : null,
+        child: Padding(
+          padding: EdgeInsets.all(padding),
+          child: RichText(
+            text: TextSpan(text: overlayText, style: style),
+            textAlign: textAlign,
+            textDirection: TextDirection.ltr,
+            maxLines: 6,
+            softWrap: true,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget circle(IconData icon, VoidCallback action, {String? label}) =>
+      MediaToolButton(
+        icon: icon,
+        label: label ?? 'Modifica foto',
+        onPressed: action,
+      );
+  @override
+  Widget build(BuildContext c) {
+    return Theme(
+      data: step == 2 ? Theme.of(c) : gpixTheme(Brightness.dark),
+      child: Builder(builder: buildStage),
+    );
+  }
+
+  Widget buildStage(BuildContext c) {
+    return Scaffold(
+      backgroundColor: Theme.of(c).canvasColor,
+      appBar: AppBar(
+        foregroundColor: foreground(c),
+        centerTitle: true,
+        leadingWidth: 48,
+        leading: IconButton(
+          tooltip: step == 0 ? 'Annulla' : 'Indietro',
+          onPressed: busy
+              ? null
+              : () {
+                  if (step > 0) {
+                    goToStep(step - 1);
+                  } else {
+                    Navigator.pop(c);
+                  }
+                },
+          icon: GIcon(
+            step == 0 ? CupertinoIcons.xmark : CupertinoIcons.chevron_left,
+            color: foreground(c),
+          ),
+        ),
+        title: Text(switch (step) {
+          1 => 'Modifica post',
+          _ => 'Nuovo post',
+        }, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
+        actions: [
+          if (step == 1)
+            TextButton.icon(
+              key: const ValueKey('save-post-draft'),
+              onPressed: busy ? null : () => saveDraft(feedback: true),
+              icon: GIcon(
+                CupertinoIcons.doc_text,
+                size: 18,
+                color: foreground(c),
+              ),
+              label: Text('Bozza', style: TextStyle(color: foreground(c))),
+            ),
+          if (step == 0)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: FilledButton(
+                onPressed: files.isEmpty || copying
+                    ? null
+                    : () {
+                        goToStep(1);
+                      },
+                style: FilledButton.styleFrom(backgroundColor: blue),
+                child: const Text(
+                  'Avanti',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+        ],
+      ),
+      bottomNavigationBar: step == 2
+          ? SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                child: FilledButton(
+                  onPressed: busy ? null : publish,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: blue,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                  ),
+                  child: busy
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Condividi'),
+                ),
+              ),
+            )
+          : null,
+      floatingActionButton: busy
+          ? ValueListenableBuilder<double>(
+              valueListenable: GpixScope.of(c).uploadProgress,
+              builder: (c, v, _) => Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: surface(c),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  v < 1
+                      ? 'Caricamento ${(v * 100).round()}%'
+                      : 'Pubblicazione…',
+                ),
+              ),
+            )
+          : null,
+      body: TweenAnimationBuilder<double>(
+        key: ValueKey(step),
+        tween: Tween(begin: MediaQuery.disableAnimationsOf(c) ? 1 : 0, end: 1),
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        builder: (_, value, child) => Opacity(
+          opacity: value,
+          child: FractionalTranslation(
+            translation: Offset((1 - value) * .025, 0),
+            child: child,
+          ),
+        ),
+        child: switch (step) {
+          0 => selectPage(c),
+          1 => editPage(c),
+          _ => share(c),
+        },
+      ),
+    );
+  }
+
+  Widget selectPage(BuildContext c) => LayoutBuilder(
+    builder: (c, box) => Column(
+      children: [
+        SizedBox(
+          height: math.min(
+            box.maxHeight * .56,
+            MediaQuery.sizeOf(c).width * 1.1,
+          ),
+          child: ColoredBox(
+            color: Theme.of(c).colorScheme.surfaceContainerLow,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                preview(),
+                Positioned(
+                  left: 12,
+                  bottom: 12,
+                  child: circle(
+                    CupertinoIcons.arrow_up_left_arrow_down_right,
+                    () => ratios(c),
+                    label: 'Proporzioni',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: copying ? null : () => gallerySources(c),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            'Recenti',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: foreground(c),
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 6),
+                        GIcon(
+                          CupertinoIcons.chevron_down,
+                          color: foreground(c),
+                          size: 15,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              if (multiple && files.length > 1)
+                IconButton(
+                  tooltip: 'Riordina foto',
+                  onPressed: () => reorderPhotos(c),
+                  icon: const GIcon(CupertinoIcons.line_horizontal_3),
+                ),
+              TextButton.icon(
+                onPressed: copying
+                    ? null
+                    : () {
+                        setState(() {
+                          multiple = !multiple;
+                          if (!multiple && files.length > 1) {
+                            files = [files[index.clamp(0, files.length - 1)]];
+                            index = 0;
+                          }
+                        });
+                        positionPreview();
+                      },
+                style: TextButton.styleFrom(
+                  backgroundColor: multiple ? blue : subdued(c),
+                  foregroundColor: multiple ? Colors.white : foreground(c),
+                  padding: const EdgeInsets.symmetric(horizontal: 11),
+                  textStyle: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                icon: GIcon(
+                  CupertinoIcons.square_on_square,
+                  color: multiple ? Colors.white : foreground(c),
+                  size: 19,
+                ),
+                label: Text(multiple ? 'Multipla' : 'Seleziona'),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: loadingGallery
+              ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+              : recent.isEmpty
+              ? fallbackGallery(c)
+              : GridView.builder(
+                  key: const ValueKey('recent-photo-grid'),
+                  padding: EdgeInsets.zero,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 4,
+                    mainAxisSpacing: 2,
+                    crossAxisSpacing: 2,
+                  ),
+                  itemCount: recent.length + 1,
+                  itemBuilder: (c, i) {
+                    if (i == 0)
+                      return InkWell(
+                        onTap: () => pick(
+                          camera: true,
+                          append: multiple && files.isNotEmpty,
+                        ),
+                        child: ColoredBox(
+                          color: subdued(c),
+                          child: Center(
+                            child: GIcon(
+                              CupertinoIcons.camera_fill,
+                              color: accent(c),
+                              size: 30,
+                            ),
+                          ),
+                        ),
+                      );
+                    final photo = recent[i - 1],
+                        path = copied[photo.id],
+                        number = path == null ? 0 : files.indexOf(path) + 1;
+                    return GestureDetector(
+                      key: ValueKey('gallery-photo-${photo.id}'),
+                      onTap: () => selectPhoto(photo),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          ColoredBox(
+                            color: subdued(c),
+                            child: Image.memory(
+                              photo.thumbnail,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                          if (multiple)
+                            Positioned(
+                              top: 7,
+                              right: 7,
+                              child: Container(
+                                width: 24,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  color: number > 0 ? blue : Colors.black26,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: number > 0
+                                    ? Center(
+                                        child: Text(
+                                          '$number',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      )
+                                    : null,
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    ),
+  );
+  Widget fallbackGallery(BuildContext c) => ListView(
+    children: [
+      if (files.isNotEmpty)
+        SizedBox(
+          height: 100,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              for (final path in files)
+                Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: InkWell(
+                    onTap: () => openPhotoPreview(c, path),
+                    child: SizedBox(
+                      width: 90,
+                      child: MediaView(path, fit: BoxFit.contain),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      Padding(
+        padding: const EdgeInsets.all(20),
+        child: FilledButton.icon(
+          onPressed: pick,
+          icon: const GIcon(
+            CupertinoIcons.photo_on_rectangle,
+            color: Colors.white,
+          ),
+          label: const Text('Apri galleria di sistema'),
+        ),
+      ),
+      const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 26),
+        child: Text(
+          'Consenti l’accesso alle foto per vedere qui la griglia dei recenti.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: muted, fontSize: 12),
+        ),
+      ),
+    ],
+  );
+  Future<void> chooseAudio() async {
+    final chosen = await Navigator.of(
+      context,
+    ).push<J>(MaterialPageRoute(builder: (_) => const MusicPicker()));
+    if (chosen != null && mounted)
+      setState(() {
+        music = chosen;
+        audio = chosen.str('audio');
+        audioName = '${chosen.str('artist')} · ${chosen.str('title')}';
+      });
+  }
+
+  Future<void> editText() async {
+    final input = overlayInput;
+    input.text = overlayText;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: surface(context),
+      builder: (c) => StatefulBuilder(
+        builder: (c, update) => Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            MediaQuery.viewInsetsOf(c).bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Testo sulla foto',
+                      style: TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(c),
+                    child: const Text('Fine'),
+                  ),
+                ],
+              ),
+              TextField(
+                controller: input,
+                autofocus: true,
+                maxLength: 160,
+                maxLines: 3,
+                decoration: const InputDecoration(hintText: 'Scrivi qualcosa…'),
+                onChanged: (value) => setState(() => overlayText = value),
+              ),
+              Row(
+                children: [
+                  const Text('Dimensione'),
+                  Expanded(
+                    child: Slider(
+                      value: textSize,
+                      min: 14,
+                      max: 48,
+                      onChanged: (v) {
+                        setState(() => textSize = v);
+                        update(() {});
+                      },
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () {
+                      setState(
+                        () => textAlign = textAlign == TextAlign.center
+                            ? TextAlign.left
+                            : textAlign == TextAlign.left
+                            ? TextAlign.right
+                            : TextAlign.center,
+                      );
+                      update(() {});
+                    },
+                    icon: const Icon(Icons.format_align_center),
+                  ),
+                ],
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  for (final color in [
+                    Colors.white,
+                    Colors.black,
+                    Colors.yellow,
+                    Colors.red,
+                    Colors.pink,
+                    Colors.cyan,
+                  ])
+                    InkWell(
+                      onTap: () {
+                        setState(() => textColor = color);
+                        update(() {});
+                      },
+                      child: Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: textColor == color
+                                ? accent(c)
+                                : Theme.of(c).dividerColor,
+                            width: textColor == color ? 3 : 1,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Trascina il testo sulla foto per spostarlo. Toccalo due volte per modificarlo.',
+                style: TextStyle(color: secondaryText(c), fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget editPage(BuildContext c) => Column(
+    children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: TextButton.icon(
+                onPressed: chooseAudio,
+                style: TextButton.styleFrom(
+                  backgroundColor: subdued(c),
+                  foregroundColor: foreground(c),
+                ),
+                icon: GIcon(
+                  CupertinoIcons.music_note_2,
+                  color: accent(c),
+                  size: 20,
+                ),
+                label: Text(
+                  audioName.isEmpty ? 'Aggiungi musica' : audioName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            if (audio.isNotEmpty)
+              IconButton(
+                onPressed: () => setState(() {
+                  audio = '';
+                  audioName = '';
+                  music = null;
+                }),
+                icon: const GIcon(CupertinoIcons.xmark, size: 17),
+              ),
+          ],
+        ),
+      ),
+      Expanded(
+        child: ColoredBox(
+          color: Theme.of(c).colorScheme.surfaceContainerLow,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 5),
+            child: preview(),
+          ),
+        ),
+      ),
+      const SizedBox(height: 14),
+      SizedBox(
+        height: 92,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          children: [
+            tool(CupertinoIcons.textformat, 'Testo', editText),
+            tool(CupertinoIcons.square_on_square, 'Overlay', () async {
+              final value = await ImagePicker().pickImage(
+                source: ImageSource.gallery,
+                imageQuality: 90,
+              );
+              if (value != null && mounted)
+                setState(() => overlay = value.path);
+            }),
+            tool(
+              CupertinoIcons.color_filter,
+              'Filtri',
+              () => adjust(c, filters: true),
+            ),
+            tool(
+              CupertinoIcons.slider_horizontal_3,
+              'Modifica',
+              () => adjust(c, filters: false),
+            ),
+            tool(CupertinoIcons.crop, 'Ritaglia', () => cropPhoto(c)),
+            tool(Icons.aspect_ratio, 'Proporzioni', () => ratios(c)),
+            tool(
+              CupertinoIcons.arrow_counterclockwise,
+              'Ripristina',
+              () => setState(() {
+                filter = 'Originale';
+                brightness = 1;
+                adjustments.clear();
+                intensity = 1;
+                textX = .5;
+                textY = .7;
+                textSize = 24;
+                overlay = '';
+                overlayText = '';
+                photoCrops.remove(files[index]);
+              }),
+            ),
+          ],
+        ),
+      ),
+      SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+          child: Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 56,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: [
+                      for (var i = 0; i < files.length; i++)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() => index = i);
+                              positionPreview();
+                            },
+                            child: Container(
+                              width: 42,
+                              height: 52,
+                              padding: const EdgeInsets.all(2),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: index == i
+                                      ? auraBlue
+                                      : Colors.transparent,
+                                  width: 2,
+                                ),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(5),
+                                child: MediaView(files[i]),
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (files.length < 10)
+                        IconButton(
+                          tooltip: 'Aggiungi foto',
+                          onPressed: () => pick(append: true),
+                          icon: const GIcon(CupertinoIcons.plus),
+                        ),
+                      if (files.length > 1)
+                        IconButton(
+                          tooltip: 'Riordina foto',
+                          onPressed: () => reorderPhotos(c),
+                          icon: const GIcon(CupertinoIcons.line_horizontal_3),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton(
+                onPressed: files.isEmpty ? null : () => goToStep(2),
+                style: FilledButton.styleFrom(backgroundColor: blue),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Avanti'),
+                    SizedBox(width: 7),
+                    GIcon(
+                      CupertinoIcons.arrow_right,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ],
+  );
+
+  Widget tool(IconData icon, String title, VoidCallback action) => Builder(
+    builder: (context) => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: InkWell(
+        onTap: action,
+        borderRadius: BorderRadius.circular(15),
+        child: Container(
+          width: 82,
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: subdued(context),
+            borderRadius: BorderRadius.circular(15),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              GIcon(icon, color: foreground(context), size: 25),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11, color: foreground(context)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+  Future<void> adjust(BuildContext c, {required bool filters}) async {
+    final oldFilter = filter,
+        oldIntensity = intensity,
+        oldValues = Map<String, dynamic>.from(adjustments);
+    var selected = filters ? filter : 'Luminosità', committed = false;
+    await showModalBottomSheet<void>(
+      context: c,
+      isScrollControlled: true,
+      backgroundColor: surface(context),
+      builder: (c) => StatefulBuilder(
+        builder: (c, update) => SafeArea(
+          child: SizedBox(
+            height: filters ? 300 : 330,
+            child: Column(
+              children: [
+                const SizedBox(height: 10),
+                Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(c).dividerColor,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(c),
+                        child: const Text('Annulla'),
+                      ),
+                      Expanded(
+                        child: Text(
+                          filters ? 'Filtri' : 'Modifica',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          committed = true;
+                          Navigator.pop(c);
+                        },
+                        child: const Text('Fine'),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    children: [
+                      if (filters)
+                        for (final name in photoFilters.keys)
+                          InkWell(
+                            onTap: () {
+                              setState(() => filter = name);
+                              update(() => selected = name);
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                              ),
+                              child: Column(
+                                children: [
+                                  Text(
+                                    name,
+                                    style: TextStyle(
+                                      color: filter == name
+                                          ? accent(c)
+                                          : Theme.of(
+                                              c,
+                                            ).colorScheme.onSurfaceVariant,
+                                      fontWeight: filter == name
+                                          ? FontWeight.w700
+                                          : FontWeight.w400,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Container(
+                                    width: 86,
+                                    height: 90,
+                                    clipBehavior: Clip.antiAlias,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: filter == name
+                                            ? accent(c)
+                                            : Colors.transparent,
+                                        width: 2,
+                                      ),
+                                    ),
+                                    child: processed(
+                                      files[index],
+                                      preset: name,
+                                      limit: 150,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                      else
+                        for (var i = 0; i < photoAdjustments.length; i++)
+                          InkWell(
+                            onTap: () =>
+                                update(() => selected = photoAdjustments[i]),
+                            child: SizedBox(
+                              width: 100,
+                              child: Column(
+                                children: [
+                                  Text(
+                                    photoAdjustments[i],
+                                    style: TextStyle(
+                                      color: selected == photoAdjustments[i]
+                                          ? accent(c)
+                                          : Theme.of(
+                                              c,
+                                            ).colorScheme.onSurfaceVariant,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    width: 70,
+                                    height: 70,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: selected == photoAdjustments[i]
+                                            ? blue
+                                            : Theme.of(c).dividerColor,
+                                      ),
+                                    ),
+                                    child: Icon(
+                                      [
+                                        Icons.rotate_right,
+                                        Icons.auto_fix_high,
+                                        Icons.wb_sunny_outlined,
+                                        Icons.contrast,
+                                        Icons.water_drop_outlined,
+                                        Icons.color_lens_outlined,
+                                        Icons.cloud_outlined,
+                                        Icons.light_mode_outlined,
+                                        Icons.tonality,
+                                        Icons.vignette,
+                                        Icons.blur_linear,
+                                        Icons.details_outlined,
+                                      ][i],
+                                      size: 32,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                    ],
+                  ),
+                ),
+                Text(
+                  filters
+                      ? 'Intensità · ${(intensity * 100).round()}'
+                      : '$selected · ${adjustments.number(selected).round()}',
+                  style: TextStyle(color: secondaryText(c), fontSize: 12),
+                ),
+                Slider(
+                  value: filters ? intensity : adjustments.number(selected),
+                  min: filters
+                      ? 0
+                      : [
+                          'Regola',
+                          'Luminosità',
+                          'Contrasto',
+                          'Saturazione',
+                          'Colore',
+                          'Alte luci',
+                          'Ombre',
+                        ].contains(selected)
+                      ? -100
+                      : 0,
+                  max: filters ? 1 : 100,
+                  onChanged: (v) {
+                    setState(() {
+                      if (filters)
+                        intensity = v;
+                      else
+                        adjustments[selected] = v;
+                    });
+                    update(() {});
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (!committed && mounted)
+      setState(() {
+        filter = oldFilter;
+        intensity = oldIntensity;
+        adjustments
+          ..clear()
+          ..addAll(oldValues);
+      });
+  }
+
+  Future<void> gallerySources(BuildContext c) => sheet<void>(
+    c,
+    Builder(
+      builder: (menu) => Column(
+        children: [
+          ActionRow(
+            CupertinoIcons.photo_on_rectangle,
+            'Recenti',
+            () => Navigator.pop(menu),
+          ),
+          ActionRow(CupertinoIcons.folder, 'Galleria di sistema', () {
+            Navigator.pop(menu);
+            pick();
+          }),
+          ActionRow(CupertinoIcons.camera, 'Fotocamera', () {
+            Navigator.pop(menu);
+            pick(camera: true);
+          }),
+        ],
+      ),
+    ),
+  );
+
+  Future<void> reorderPhotos(BuildContext c) async {
+    final pending = files.indexed.toList();
+    final selected = files[index];
+    final result = await sheet<bool>(
+      c,
+      SizedBox(
+        height: MediaQuery.sizeOf(c).height * .55,
+        child: StatefulBuilder(
+          builder: (menu, update) => Column(
+            children: [
+              ListTile(
+                title: const Text('Riordina foto'),
+                trailing: TextButton(
+                  onPressed: () => Navigator.pop(menu, true),
+                  child: const Text('Fine'),
+                ),
+              ),
+              Expanded(
+                child: ReorderableListView.builder(
+                  buildDefaultDragHandles: false,
+                  itemCount: pending.length,
+                  onReorder: (from, to) => update(() {
+                    pending.insert(
+                      to > from ? to - 1 : to,
+                      pending.removeAt(from),
+                    );
+                  }),
+                  itemBuilder: (context, i) => ListTile(
+                    key: ValueKey(pending[i].$1),
+                    leading: SizedBox.square(
+                      dimension: 42,
+                      child: MediaView(pending[i].$2, fit: BoxFit.cover),
+                    ),
+                    title: Text('Foto ${i + 1}'),
+                    trailing: ReorderableDragStartListener(
+                      index: i,
+                      child: const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: GIcon(CupertinoIcons.line_horizontal_3),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      scroll: false,
+    );
+    if (result != true || !mounted) return;
+    setState(() {
+      files = pending.map((entry) => entry.$2).toList();
+      index = files.indexOf(selected).clamp(0, files.length - 1);
+      formatChosen = true;
+    });
+    positionPreview();
+  }
+
+  Future<void> cropPhoto(BuildContext c) async {
+    if (files.isEmpty) return;
+    final path = files[index];
+    final crop = <String, dynamic>{
+      'zoom': 1.0,
+      'x': .5,
+      'y': .5,
+      ...?photoCrops[path],
+    };
+    Future<Uint8List> render() => compute(processPhoto, {
+      'path': path,
+      'aspect': aspect,
+      'crop': Map.of(crop),
+      'limit': 420,
+      'preview': true,
+    });
+    var image = render();
+    final result = await sheet<bool>(
+      c,
+      StatefulBuilder(
+        builder: (menu, update) => Column(
+          children: [
+            ListTile(
+              title: const Text('Ritaglia foto'),
+              trailing: TextButton(
+                onPressed: () => Navigator.pop(menu, true),
+                child: const Text('Fine'),
+              ),
+            ),
+            SizedBox(
+              height: MediaQuery.sizeOf(menu).height * .32,
+              child: Center(
+                child: AspectRatio(
+                  aspectRatio: aspect,
+                  child: FutureBuilder<Uint8List>(
+                    future: image,
+                    builder: (context, snapshot) => snapshot.hasData
+                        ? Image.memory(
+                            snapshot.data!,
+                            gaplessPlayback: true,
+                            fit: BoxFit.cover,
+                          )
+                        : MediaView(path, fit: BoxFit.cover),
+                  ),
+                ),
+              ),
+            ),
+            for (final (key, label, min, max) in [
+              ('zoom', 'Zoom', 1.0, 3.0),
+              ('x', 'Posizione orizzontale', 0.0, 1.0),
+              ('y', 'Posizione verticale', 0.0, 1.0),
+            ])
+              ListTile(
+                dense: true,
+                title: Text(label),
+                subtitle: Slider(
+                  min: min,
+                  max: max,
+                  value: crop.number(key, min).clamp(min, max),
+                  onChanged: (value) => update(() => crop[key] = value),
+                  onChangeEnd: (_) => update(() => image = render()),
+                ),
+              ),
+            TextButton(
+              onPressed: () => update(() {
+                crop.addAll({'zoom': 1.0, 'x': .5, 'y': .5});
+                image = render();
+              }),
+              child: const Text('Ripristina ritaglio'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result == true && mounted) setState(() => photoCrops[path] = crop);
+  }
+
+  Future<void> ratios(BuildContext c) => sheet(
+    c,
+    Builder(
+      builder: (menu) => Column(
+        children: [
+          for (final entry in {
+            .75: 'Verticale · 3:4',
+            .8: 'Verticale · 4:5',
+            1.91: 'Orizzontale',
+            1.0: 'Quadrato · 1:1',
+          }.entries)
+            ListTile(
+              leading: const GIcon(CupertinoIcons.crop),
+              title: Text(entry.value),
+              trailing: aspect == entry.key
+                  ? const GIcon(CupertinoIcons.check_mark)
+                  : null,
+              onTap: () {
+                setState(() {
+                  aspect = entry.key;
+                  formatChosen = true;
+                });
+                Navigator.pop(menu);
+              },
+            ),
+        ],
+      ),
+    ),
+  );
+  Future<void> tagPeople(BuildContext c) async {
+    final result = await open<(Map<String, List<J>>, Set<String>, Set<String>)>(
+      c,
+      _PhotoTagEditor(
+        files: List.of(files),
+        initial: index,
+        aspect: aspect,
+        preview: (path) => processed(path),
+        tags: photoTags,
+        legacy: tagged,
+        collaborators: collaboratorInvites,
+        audience: audience,
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      photoTags
+        ..clear()
+        ..addAll(result.$1);
+      tagged
+        ..clear()
+        ..addAll(result.$2);
+      collaboratorInvites
+        ..clear()
+        ..addAll(result.$3);
+    });
+  }
+
+  Future<void> choosePlace(BuildContext c) async {
+    final result = await chooseGpixPlace(c, initial: location.text);
+    if (result != null && mounted) setState(() => location.text = result);
+  }
+
+  Future<void> editCaption(BuildContext context) async {
+    final value = await open<String>(
+      context,
+      _PostCaption(initial: caption.text),
+    );
+    if (value != null && mounted) caption.text = value;
+  }
+
+  Widget share(BuildContext c) {
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 16),
+      children: [
+        const SizedBox(height: 12),
+        Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: files.length == 1 ? 72 : 24,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: LayoutBuilder(
+              builder: (c, box) => SizedBox(
+                height: (box.maxWidth / aspect).clamp(
+                  72.0,
+                  math.max(72, MediaQuery.sizeOf(c).height * .26),
+                ),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ColoredBox(
+                      color: Theme.of(c).colorScheme.surfaceContainerLow,
+                      child: preview(finalStep: true),
+                    ),
+                    Positioned(
+                      top: 10,
+                      left: 10,
+                      child: MediaToolButton(
+                        icon: CupertinoIcons.pencil,
+                        label: 'Modifica foto',
+                        onPressed: busy ? null : () => goToStep(1),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (files.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(top: 7),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (var i = 0; i < files.length; i++)
+                  Container(
+                    width: 6,
+                    height: 6,
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: i == index ? accent(c) : Theme.of(c).dividerColor,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: caption,
+          builder: (_, value, _) => ListTile(
+            minTileHeight: 63,
+            title: Text(
+              value.text.isEmpty ? 'Aggiungi una didascalia…' : value.text,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 14,
+                color: value.text.isEmpty ? secondaryText(c) : foreground(c),
+              ),
+            ),
+            onTap: () => editCaption(c),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Wrap(
+            spacing: 10,
+            children: [
+              ActionChip(
+                avatar: const GIcon(CupertinoIcons.list_bullet, size: 18),
+                label: Text(poll == null ? 'Sondaggio' : 'Sondaggio aggiunto'),
+                onPressed: () async {
+                  final value = await sheet<J>(c, PollEditor(initial: poll));
+                  if (value != null && mounted)
+                    setState(() => poll = value.isEmpty ? null : value);
+                },
+              ),
+              ActionChip(
+                avatar: const GIcon(CupertinoIcons.chat_bubble, size: 18),
+                label: Text(topic.isEmpty ? 'Tema' : topic),
+                onPressed: () async {
+                  final value = await textDialog(c, 'Tema del post', topic);
+                  if (value != null && mounted)
+                    setState(() => topic = value.trim());
+                },
+              ),
+            ],
+          ),
+        ),
+        row(
+          c,
+          CupertinoIcons.music_note_2,
+          'Aggiungi audio',
+          audioName.isEmpty ? null : audioName,
+          chooseAudio,
+        ),
+        row(
+          c,
+          CupertinoIcons.person_crop_rectangle,
+          'Tagga persone',
+          collaboratorInvites.isNotEmpty
+              ? (collaboratorInvites.length == 1
+                    ? '1 collaboratore'
+                    : '${collaboratorInvites.length} collaboratori')
+              : switch (taggedUsers.length) {
+                  0 => null,
+                  1 => '1 persona',
+                  _ => '${taggedUsers.length} persone',
+                },
+          () => tagPeople(c),
+        ),
+        row(
+          c,
+          CupertinoIcons.placemark,
+          'Aggiungi luogo',
+          location.text.isEmpty ? null : location.text,
+          () => choosePlace(c),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          child: Wrap(
+            spacing: 7,
+            children: [
+              for (final place in suggestedPlaces)
+                ActionChip(
+                  label: Text(place),
+                  onPressed: () => setState(() => location.text = place),
+                ),
+            ],
+          ),
+        ),
+        SwitchListTile.adaptive(
+          secondary: const GIcon(CupertinoIcons.sparkles),
+          title: const Text(
+            'Aggiungi etichetta IA',
+            style: TextStyle(fontSize: 15),
+          ),
+          subtitle: const Text(
+            'Segnala contenuti realistici creati o modificati con l’IA.',
+            style: TextStyle(fontSize: 12),
+          ),
+          value: aiLabel,
+          onChanged: (value) => setState(() => aiLabel = value),
+        ),
+        row(
+          c,
+          CupertinoIcons.person_2,
+          'Pubblico',
+          audience == 'close' ? 'Amici più stretti' : 'Follower',
+          () async {
+            final value = await open<String>(
+              c,
+              Scaffold(
+                appBar: AppBar(centerTitle: true, title: pageTitle('Pubblico')),
+                body: ListView(
+                  children: [
+                    const ListTile(title: Text('Chi può vedere il tuo post')),
+                    for (final (key, title, icon) in [
+                      ('followers', 'Follower', CupertinoIcons.person_2),
+                      (
+                        'close',
+                        'Amici più stretti',
+                        CupertinoIcons.star_circle,
+                      ),
+                    ])
+                      Builder(
+                        builder: (page) => ListTile(
+                          leading: GIcon(icon),
+                          title: Text(title),
+                          trailing: GIcon(
+                            audience == key
+                                ? CupertinoIcons.largecircle_fill_circle
+                                : CupertinoIcons.circle,
+                          ),
+                          onTap: () => Navigator.pop(page, key),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+            if (value != null && mounted) setState(() => audience = value);
+          },
+        ),
+        row(
+          c,
+          CupertinoIcons.ellipsis,
+          'Altre opzioni',
+          null,
+          () => sheet(
+            c,
+            StatefulBuilder(
+              builder: (c, update) => Column(
+                children: [
+                  ListTile(
+                    leading: const GIcon(CupertinoIcons.doc_text),
+                    title: const Text('Salva bozza'),
+                    onTap: () {
+                      Navigator.pop(c);
+                      saveDraft(feedback: true);
+                    },
+                  ),
+                  SwitchListTile(
+                    title: const Text('Disattiva commenti'),
+                    value: commentsOff,
+                    onChanged: (v) {
+                      setState(() => commentsOff = v);
+                      update(() {});
+                    },
+                  ),
+                  SwitchListTile(
+                    title: const Text('Nascondi numero di Mi piace'),
+                    value: hideLikes,
+                    onChanged: (v) {
+                      setState(() => hideLikes = v);
+                      update(() {});
+                    },
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: PrimaryButton('Fine', onTap: () => Navigator.pop(c)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget row(
+    BuildContext c,
+    IconData icon,
+    String label,
+    String? detail,
+    VoidCallback action,
+  ) => Column(
+    children: [
+      ListTile(
+        dense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+        leading: GIcon(icon, size: 22),
+        title: Text(label, style: const TextStyle(fontSize: 15)),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (detail != null)
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.sizeOf(c).width * .28,
+                ),
+                child: Text(
+                  detail,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: secondaryText(c), fontSize: 12),
+                ),
+              ),
+            const SizedBox(width: 6),
+            GIcon(
+              CupertinoIcons.chevron_right,
+              size: 16,
+              color: secondaryText(c),
+            ),
+          ],
+        ),
+        onTap: action,
+      ),
+      const Divider(height: 1, indent: 14, endIndent: 14),
+    ],
+  );
+}
+
+class _PhotoTagEditor extends StatefulWidget {
+  const _PhotoTagEditor({
+    required this.files,
+    required this.initial,
+    required this.aspect,
+    required this.preview,
+    required this.tags,
+    required this.legacy,
+    required this.collaborators,
+    required this.audience,
+  });
+
+  final List<String> files;
+  final int initial;
+  final double aspect;
+  final Widget Function(String) preview;
+  final Map<String, List<J>> tags;
+  final Set<String> legacy, collaborators;
+  final String audience;
+
+  @override
+  State<_PhotoTagEditor> createState() => _PhotoTagEditorState();
+}
+
+class _PhotoTagEditorState extends State<_PhotoTagEditor> {
+  late int index = widget.initial.clamp(0, widget.files.length - 1);
+  late final pages = PageController(initialPage: index);
+  late final tags = {
+    for (final path in widget.files)
+      path: [
+        for (final tag in widget.tags[path] ?? const <J>[])
+          Map<String, dynamic>.of(tag),
+      ],
+  };
+  late final legacy = {...widget.legacy};
+  late final collaborators = {...widget.collaborators};
+  bool explained = false;
+
+  Future<void> invite(GpixStore store) async {
+    if (!explained) {
+      final proceed = await sheet<bool>(
+        context,
+        Builder(
+          builder: (menu) => Padding(
+            padding: const EdgeInsets.fromLTRB(20, 6, 20, 16),
+            child: Column(
+              children: [
+                const GIcon(CupertinoIcons.person_2, size: 34),
+                const SizedBox(height: 12),
+                pageTitle('Invitare i collaboratori'),
+                const SizedBox(height: 10),
+                const Text(
+                  'Se accettano, il post comparirà anche sui loro profili per chi può già vederlo. Mi piace e commenti saranno condivisi.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 18),
+                PrimaryButton(
+                  'Continua',
+                  onTap: () => Navigator.pop(menu, true),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(menu, false),
+                  child: const Text('Annulla'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      if (proceed != true || !mounted) return;
+      explained = true;
+    }
+    final excluded = {
+      ...collaborators,
+      for (final user in store.users)
+        if ((store.me.flag('private') &&
+                !store.me.ids('followersList').contains(user.str('id'))) ||
+            (widget.audience == 'close' &&
+                !store.state.ids('closeFriends').contains(user.str('id'))))
+          user.str('id'),
+    };
+    final selected = await open<String>(
+      context,
+      _PostTagSearch(excluded: excluded),
+    );
+    if (mounted && selected != null && collaborators.length < 3) {
+      setState(() => collaborators.add(selected));
+    }
+  }
+
+  @override
+  void dispose() {
+    pages.dispose();
+    super.dispose();
+  }
+
+  Future<void> addTag(String path, Offset point) async {
+    final selected = await open<String>(context, const _PostTagSearch());
+    if (!mounted || selected == null) return;
+    setState(() {
+      tags[path]!
+        ..removeWhere((tag) => tag.str('user') == selected)
+        ..add({'user': selected, 'x': point.dx, 'y': point.dy});
+      legacy.remove(selected);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final store = GpixScope.of(context);
+    final current = tags[widget.files[index]]!;
+    return Scaffold(
+      appBar: AppBar(
+        centerTitle: true,
+        title: pageTitle('Tagga persone'),
+        actions: [
+          _PostDone(
+            onPressed: () =>
+                Navigator.pop(context, (tags, legacy, collaborators)),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          SizedBox(
+            height: MediaQuery.sizeOf(context).height * .43,
+            child: PageView.builder(
+              controller: pages,
+              itemCount: widget.files.length,
+              onPageChanged: (page) => setState(() => index = page),
+              itemBuilder: (context, page) {
+                final path = widget.files[page];
+                return Center(
+                  child: AspectRatio(
+                    aspectRatio: widget.aspect,
+                    child: LayoutBuilder(
+                      builder: (context, box) => Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          GestureDetector(
+                            key: ValueKey('tag-photo-$page'),
+                            behavior: HitTestBehavior.opaque,
+                            onTapUp: (tap) => addTag(
+                              path,
+                              Offset(
+                                (tap.localPosition.dx / box.maxWidth).clamp(
+                                  0,
+                                  1,
+                                ),
+                                (tap.localPosition.dy / box.maxHeight).clamp(
+                                  0,
+                                  1,
+                                ),
+                              ),
+                            ),
+                            child: widget.preview(path),
+                          ),
+                          for (final tag in tags[path]!)
+                            Align(
+                              alignment: postTagAlignment(tag),
+                              child: GestureDetector(
+                                key: ValueKey((
+                                  'photo-tag',
+                                  page,
+                                  tag.str('user'),
+                                )),
+                                onPanUpdate: (event) => setState(() {
+                                  tag['x'] =
+                                      (tag.number('x', .5) +
+                                              event.delta.dx / box.maxWidth)
+                                          .clamp(0, 1);
+                                  tag['y'] =
+                                      (tag.number('y', .5) +
+                                              event.delta.dy / box.maxHeight)
+                                          .clamp(0, 1);
+                                }),
+                                child: PostTagLabel(
+                                  store.user(tag.str('user')).str('username'),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          if (widget.files.length > 1)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 9),
+              child: Text('${index + 1}/${widget.files.length}'),
+            ),
+          Expanded(
+            child: ListView(
+              children: [
+                if (store.supportsPostCollaborations)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 6,
+                    ),
+                    child: FilledButton.tonal(
+                      onPressed: collaborators.length >= 3
+                          ? null
+                          : () => invite(store),
+                      child: const Text('Invita collaboratori'),
+                    ),
+                  ),
+                if (collaborators.isNotEmpty) ...[
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: Text(
+                      'Collaboratori',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  for (final user in collaborators)
+                    ListTile(
+                      leading: Avatar(user, size: 36),
+                      title: Text(store.user(user).str('username')),
+                      subtitle: const Text(
+                        'Invito da inviare alla pubblicazione',
+                      ),
+                      trailing: IconButton(
+                        tooltip: 'Rimuovi collaboratore',
+                        onPressed: () =>
+                            setState(() => collaborators.remove(user)),
+                        icon: const GIcon(CupertinoIcons.xmark),
+                      ),
+                    ),
+                ],
+                if (current.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(18),
+                    child: Text(
+                      'Tocca la foto per taggare una persona.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                for (final tag in current)
+                  ListTile(
+                    leading: Avatar(tag.str('user'), size: 36),
+                    title: Text(store.user(tag.str('user')).str('username')),
+                    trailing: IconButton(
+                      tooltip: 'Rimuovi tag',
+                      onPressed: () => setState(() => current.remove(tag)),
+                      icon: const GIcon(CupertinoIcons.xmark),
+                    ),
+                  ),
+                for (final id in legacy)
+                  ListTile(
+                    leading: Avatar(id, size: 36),
+                    title: Text(store.user(id).str('username')),
+                    subtitle: const Text('Tag del post'),
+                    trailing: IconButton(
+                      tooltip: 'Rimuovi tag del post',
+                      onPressed: () => setState(() => legacy.remove(id)),
+                      icon: const GIcon(CupertinoIcons.xmark),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PostTagSearch extends StatefulWidget {
+  const _PostTagSearch({this.excluded = const {}});
+  final Set<String> excluded;
+
+  @override
+  State<_PostTagSearch> createState() => _PostTagSearchState();
+}
+
+class _PostTagSearchState extends State<_PostTagSearch> {
+  String query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final store = GpixScope.of(context);
+    final results = store.users.where((user) {
+      final id = user.str('id');
+      return id != store.myId &&
+          !widget.excluded.contains(id) &&
+          !store.blocked(id) &&
+          '${user.str('username')} ${user.str('name')}'.toLowerCase().contains(
+            query,
+          );
+    }).toList();
+    return Scaffold(
+      appBar: AppBar(
+        title: TextField(
+          autofocus: true,
+          textInputAction: TextInputAction.search,
+          onChanged: (value) =>
+              setState(() => query = value.trim().toLowerCase()),
+          decoration: const InputDecoration(
+            hintText: 'Cerca persone',
+            prefixIcon: GIcon(CupertinoIcons.search),
+            isDense: true,
+          ),
+        ),
+      ),
+      body: results.isEmpty
+          ? const Center(child: Text('Nessuna persona trovata'))
+          : ListView.builder(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              itemCount: results.length,
+              itemBuilder: (context, i) {
+                final id = results[i].str('id');
+                return PersonTile(id, onTap: () => Navigator.pop(context, id));
+              },
+            ),
+    );
+  }
+}
+
+class _PostCaption extends StatefulWidget {
+  const _PostCaption({required this.initial});
+  final String initial;
+  @override
+  State<_PostCaption> createState() => _PostCaptionState();
+}
+
+class _PostCaptionState extends State<_PostCaption> {
+  late final input = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    input.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      centerTitle: true,
+      title: pageTitle('Didascalia'),
+      actions: [_PostDone(onPressed: () => Navigator.pop(context, input.text))],
+    ),
+    body: Padding(
+      padding: const EdgeInsets.all(16),
+      child: TextField(
+        controller: input,
+        autofocus: true,
+        maxLength: 2200,
+        maxLines: null,
+        keyboardType: TextInputType.multiline,
+        decoration: const InputDecoration(
+          hintText: 'Aggiungi una didascalia…',
+          filled: false,
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+        ),
+      ),
+    ),
+  );
+}
+
+class _PostDone extends StatelessWidget {
+  const _PostDone({required this.onPressed});
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(right: 10),
+    child: IconButton.filled(
+      tooltip: 'Fine',
+      onPressed: onPressed,
+      style: IconButton.styleFrom(backgroundColor: const Color(0xff4656f6)),
+      icon: const GIcon(CupertinoIcons.check_mark, color: Colors.white),
+    ),
+  );
+}
+
+class PollEditor extends StatefulWidget {
+  final J? initial;
+  const PollEditor({super.key, this.initial});
+  @override
+  State<PollEditor> createState() => _PollEditorState();
+}
+
+class _PollEditorState extends State<PollEditor> {
+  String error = '';
+  late final question = TextEditingController(
+    text: widget.initial?.str('question') ?? '',
+  );
+  late final a = TextEditingController(
+    text: widget.initial?.ids('options').firstOrNull ?? '',
+  );
+  late final b = TextEditingController(
+    text: (widget.initial?.ids('options').length ?? 0) > 1
+        ? widget.initial!.ids('options')[1]
+        : '',
+  );
+  @override
+  void dispose() {
+    question.dispose();
+    a.dispose();
+    b.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext c) => Padding(
+    padding: const EdgeInsets.fromLTRB(22, 4, 22, 22),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: auraBlue.withValues(alpha: .1),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: GIcon(CupertinoIcons.chart_bar, color: accent(c)),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Sondaggio',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Chiudi sondaggio',
+              onPressed: () => Navigator.pop(c),
+              icon: const GIcon(CupertinoIcons.xmark, size: 19),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'Una domanda, due possibilità. Coinvolgi chi ti segue.',
+          style: TextStyle(color: secondaryText(c), height: 1.4),
+        ),
+        const SizedBox(height: 20),
+        TextField(
+          controller: question,
+          maxLength: 120,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Domanda',
+            hintText: 'Cosa vuoi chiedere?',
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: a,
+          maxLength: 60,
+          decoration: const InputDecoration(
+            labelText: 'Opzione 1',
+            prefixIcon: GIcon(CupertinoIcons.circle, size: 18),
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: b,
+          maxLength: 60,
+          decoration: const InputDecoration(
+            labelText: 'Opzione 2',
+            prefixIcon: GIcon(CupertinoIcons.circle, size: 18),
+          ),
+        ),
+        if (error.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(error, style: const TextStyle(color: danger)),
+          ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            if (widget.initial != null)
+              TextButton(
+                onPressed: () => Navigator.pop(c, <String, dynamic>{}),
+                child: const Text('Rimuovi'),
+              ),
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => Navigator.pop(c),
+                child: const Text('Annulla'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton(
+                onPressed: () {
+                  if (question.text.trim().isEmpty ||
+                      a.text.trim().isEmpty ||
+                      b.text.trim().isEmpty) {
+                    setState(
+                      () => error = 'Completa la domanda e le due opzioni.',
+                    );
+                    return;
+                  }
+                  Navigator.pop(c, {
+                    'question': question.text.trim(),
+                    'options': [a.text.trim(), b.text.trim()],
+                  });
+                },
+                child: const Text('Aggiungi'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
