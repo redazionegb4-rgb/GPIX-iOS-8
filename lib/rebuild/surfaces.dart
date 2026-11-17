@@ -2355,7 +2355,7 @@ class _ProfileHomeState extends State<ProfileHome>
               backgroundColor: surface(context),
               foregroundColor: _profileInk(context),
               centerTitle: true,
-              toolbarHeight: 52,
+              toolbarHeight: 60,
               title: own
                   ? _AccountTitle(
                       store: store,
@@ -2373,11 +2373,6 @@ class _ProfileHomeState extends State<ProfileHome>
                           child: Text(
                             person.str('username'),
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -.45,
-                            ),
                           ),
                         ),
                       ],
@@ -2407,7 +2402,7 @@ class _ProfileHomeState extends State<ProfileHome>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       SizedBox(
                         width: portraitSize,
@@ -2473,7 +2468,7 @@ class _ProfileHomeState extends State<ProfileHome>
                                       details: note?.obj('details') ?? const {},
                                       placeholder: note == null,
                                       textStyle: const TextStyle(
-                                        fontSize: 12.5,
+                                        fontSize: 12.2,
                                         letterSpacing: 0,
                                       ),
                                     ),
@@ -2518,7 +2513,7 @@ class _ProfileHomeState extends State<ProfileHome>
                       const SizedBox(width: 9),
                       Expanded(
                         child: Padding(
-                          padding: EdgeInsets.only(top: noteOffset + 7),
+                          padding: EdgeInsets.only(bottom: hasNote ? 32 : 24),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2528,8 +2523,8 @@ class _ProfileHomeState extends State<ProfileHome>
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
-                                  fontSize: 16,
-                                  height: 1.18,
+                                  fontSize: 14,
+                                  height: 1.2,
                                   fontWeight: FontWeight.w600,
                                   letterSpacing: 0,
                                 ),
@@ -2538,7 +2533,6 @@ class _ProfileHomeState extends State<ProfileHome>
                               Row(
                                 children: [
                                   _stat(
-                                    context,
                                     person.str(
                                       'postCount',
                                       '${personal.where((p) => p.str('kind') != 'story').length}',
@@ -2547,7 +2541,6 @@ class _ProfileHomeState extends State<ProfileHome>
                                     flex: 31,
                                   ),
                                   _stat(
-                                    context,
                                     person.str('followers', '0'),
                                     'follower',
                                     onTap: () => open(
@@ -2557,7 +2550,6 @@ class _ProfileHomeState extends State<ProfileHome>
                                     flex: 38,
                                   ),
                                   _stat(
-                                    context,
                                     person.str('following', '0'),
                                     'seguiti',
                                     onTap: () => open(
@@ -2584,7 +2576,7 @@ class _ProfileHomeState extends State<ProfileHome>
                     Text(
                       person.str('pronouns'),
                       style: TextStyle(
-                        fontSize: 14.5,
+                        fontSize: 13.5,
                         letterSpacing: 0,
                         color: secondaryText(context),
                       ),
@@ -2596,10 +2588,9 @@ class _ProfileHomeState extends State<ProfileHome>
                     Text(
                       person.str('bio').replaceAll(r'\n', '\n'),
                       style: const TextStyle(
-                        fontSize: 15.5,
-                        height: 1.25,
+                        fontSize: 14,
+                        height: 1.28,
                         letterSpacing: 0,
-                        fontWeight: FontWeight.w400,
                       ),
                     ),
                   ],
@@ -2615,12 +2606,12 @@ class _ProfileHomeState extends State<ProfileHome>
                         style: TextStyle(
                           color: accent(context),
                           fontWeight: FontWeight.w600,
-                          fontSize: 14.5,
+                          fontSize: 13,
                         ),
                       ),
                     ),
                   ],
-                  if (connections.isNotEmpty || own) ...[
+                  if (person.rows('links').isNotEmpty || own) ...[
                     const SizedBox(height: 13),
                     ProfileLinkChips(
                       links: connections,
@@ -2706,7 +2697,7 @@ class _ProfileHomeState extends State<ProfileHome>
                           ),
                           style: IconButton.styleFrom(
                             backgroundColor: _profileControl(context),
-                            minimumSize: const Size.square(32),
+                            minimumSize: const Size.square(31),
                             padding: EdgeInsets.zero,
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             shape: RoundedRectangleBorder(
@@ -2830,7 +2821,7 @@ class _ProfileHomeState extends State<ProfileHome>
 
   Color _profileControl(BuildContext context) =>
       Theme.of(context).brightness == Brightness.light
-      ? const Color(0xffeeeff2)
+      ? const Color(0xfff0f1f5)
       : subdued(context);
 
   ButtonStyle _profileButton(BuildContext context, {bool primary = false}) =>
@@ -2840,11 +2831,11 @@ class _ProfileHomeState extends State<ProfileHome>
             : _profileControl(context),
         foregroundColor: primary ? Colors.white : _profileInk(context),
         padding: const EdgeInsets.symmetric(horizontal: 7),
-        minimumSize: const Size(0, 32),
+        minimumSize: const Size(0, 31),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
-          fontSize: 15.5,
+          fontSize: 14,
           fontWeight: FontWeight.w600,
           height: 1.12,
           letterSpacing: 0,
@@ -2857,7 +2848,7 @@ class _ProfileHomeState extends State<ProfileHome>
     List<J> highlights, {
     required bool own,
   }) {
-    const fontSize = 13.5;
+    const fontSize = 13.0;
     final textSize = MediaQuery.textScalerOf(context).scale(fontSize);
     return Padding(
       padding: const EdgeInsets.only(top: 20, bottom: 12),
@@ -2982,46 +2973,36 @@ class _ProfileHomeState extends State<ProfileHome>
                   child: Text(
                     'Persone suggerite',
                     style: const TextStyle(
-                      fontSize: 15.5,
+                      fontSize: 14,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 0,
                     ),
                   ),
                 ),
-                Expanded(
-                  child: Align(
-                    alignment: AlignmentDirectional.centerEnd,
-                    child: TextButton(
-                      onPressed: () => open(
-                        context,
-                        PeopleDirectory(
-                          title: 'Persone suggerite',
-                          ids: suggested
-                              .map((person) => person.str('id'))
-                              .toList(),
-                          allowFollow: true,
-                        ),
-                      ),
-                      style: TextButton.styleFrom(
-                        foregroundColor:
-                            Theme.of(context).brightness == Brightness.light
-                            ? const Color(0xff455eff)
-                            : accent(context),
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(0, 34),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        textStyle: const TextStyle(
-                          fontSize: 15.5,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0,
-                        ),
-                      ),
-                      child: const Text(
-                        'Mostra tutti',
-                        textAlign: TextAlign.end,
-                      ),
+                TextButton(
+                  onPressed: () => open(
+                    context,
+                    PeopleDirectory(
+                      title: 'Persone suggerite',
+                      ids: suggested.map((person) => person.str('id')).toList(),
+                      allowFollow: true,
                     ),
                   ),
+                  style: TextButton.styleFrom(
+                    foregroundColor:
+                        Theme.of(context).brightness == Brightness.light
+                        ? const Color(0xff455eff)
+                        : accent(context),
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 34),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                  child: const Text('Mostra tutti'),
                 ),
               ],
             ),
@@ -3089,7 +3070,7 @@ class _ProfileHomeState extends State<ProfileHome>
                                 overflow: TextOverflow.ellipsis,
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
-                                  fontSize: 15.5,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.w600,
                                   letterSpacing: 0,
                                 ),
@@ -3102,7 +3083,7 @@ class _ProfileHomeState extends State<ProfileHome>
                                 overflow: TextOverflow.ellipsis,
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
-                                  fontSize: 13,
+                                  fontSize: 12,
                                   letterSpacing: 0,
                                   color: secondaryText(context),
                                 ),
@@ -3152,7 +3133,6 @@ class _ProfileHomeState extends State<ProfileHome>
   }
 
   Widget _stat(
-    BuildContext context,
     String count,
     String label, {
     required int flex,
@@ -3170,7 +3150,7 @@ class _ProfileHomeState extends State<ProfileHome>
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: 17.5,
+                fontSize: 15.6,
                 height: 1.12,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0,
@@ -3181,9 +3161,8 @@ class _ProfileHomeState extends State<ProfileHome>
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: 15,
+                fontSize: 13.6,
                 height: 1.16,
-                fontWeight: FontWeight.w400,
                 letterSpacing: 0,
               ),
             ),
@@ -3489,48 +3468,48 @@ class _ProfileTabGlyph extends CustomPainter {
         );
       case _ProfileSection.reposts:
         final arrows = Path()
-          ..moveTo(3.1, 14.4)
-          ..lineTo(3.1, 11)
-          ..quadraticBezierTo(3.1, 6.2, 8, 6.2)
-          ..lineTo(18.2, 6.2)
-          ..moveTo(14.2, 2.2)
-          ..lineTo(18.2, 6.2)
-          ..lineTo(14.2, 10.2)
-          ..moveTo(22.9, 11.6)
-          ..lineTo(22.9, 15)
-          ..quadraticBezierTo(22.9, 19.8, 18, 19.8)
-          ..lineTo(7.8, 19.8)
-          ..moveTo(11.8, 15.8)
-          ..lineTo(7.8, 19.8)
-          ..lineTo(11.8, 23.8);
-        canvas.drawPath(arrows, stroke..strokeWidth = 2.1);
+          ..moveTo(3.8, 13)
+          ..lineTo(3.8, 10)
+          ..cubicTo(3.8, 7.3, 5.6, 5.9, 8.1, 5.9)
+          ..lineTo(16.1, 5.9)
+          ..moveTo(12.4, 2.2)
+          ..lineTo(16.1, 5.9)
+          ..lineTo(12.4, 9.6)
+          ..moveTo(20.2, 13)
+          ..lineTo(20.2, 16)
+          ..cubicTo(20.2, 18.7, 18.4, 20.1, 15.9, 20.1)
+          ..lineTo(7.9, 20.1)
+          ..moveTo(11.6, 16.4)
+          ..lineTo(7.9, 20.1)
+          ..lineTo(11.6, 23.8);
+        canvas.drawPath(arrows, stroke..strokeWidth = 2.05);
       case _ProfileSection.tagged:
         final frame = Path()
-          ..moveTo(5.6, 23.4)
-          ..quadraticBezierTo(2.5, 23.4, 2.5, 20.3)
-          ..lineTo(2.5, 8.8)
-          ..quadraticBezierTo(2.5, 5.6, 5.7, 5.6)
-          ..lineTo(8.8, 5.6)
-          ..quadraticBezierTo(9.7, 5.6, 10.45, 4.75)
-          ..lineTo(11.85, 3.1)
-          ..quadraticBezierTo(13, 1.8, 14.15, 3.1)
-          ..lineTo(15.55, 4.75)
-          ..quadraticBezierTo(16.3, 5.6, 17.2, 5.6)
-          ..lineTo(20.3, 5.6)
-          ..quadraticBezierTo(23.5, 5.6, 23.5, 8.8)
-          ..lineTo(23.5, 20.3)
-          ..quadraticBezierTo(23.5, 23.4, 20.4, 23.4)
+          ..moveTo(5.6, 23)
+          ..quadraticBezierTo(2.55, 23, 2.55, 19.95)
+          ..lineTo(2.55, 9.1)
+          ..quadraticBezierTo(2.55, 5.8, 5.8, 5.8)
+          ..lineTo(8.7, 5.8)
+          ..quadraticBezierTo(9.9, 5.8, 10.6, 4.7)
+          ..lineTo(11.6, 3.25)
+          ..quadraticBezierTo(13, 1.45, 14.4, 3.25)
+          ..lineTo(15.4, 4.7)
+          ..quadraticBezierTo(16.1, 5.8, 17.3, 5.8)
+          ..lineTo(20.2, 5.8)
+          ..quadraticBezierTo(23.45, 5.8, 23.45, 9.1)
+          ..lineTo(23.45, 19.95)
+          ..quadraticBezierTo(23.45, 23, 20.4, 23)
           ..close();
         canvas.drawPath(frame, stroke..strokeWidth = 2.05);
         canvas.drawCircle(
-          const Offset(13, 11.55),
-          3.55,
+          const Offset(13, 11.75),
+          3.5,
           selected ? fill : stroke,
         );
         final body = Path()
-          ..moveTo(5.9, 23)
-          ..cubicTo(6.8, 19.65, 9.5, 17.9, 13, 17.9)
-          ..cubicTo(16.5, 17.9, 19.2, 19.65, 20.1, 23);
+          ..moveTo(5.8, 22.6)
+          ..cubicTo(7.3, 19.45, 9.7, 17.9, 13, 17.9)
+          ..cubicTo(16.3, 17.9, 18.7, 19.45, 20.2, 22.6);
         if (selected) body.close();
         canvas.drawPath(body, selected ? fill : stroke);
     }
@@ -3779,7 +3758,7 @@ class _AccountTitle extends StatelessWidget {
                 style: profile
                     ? TextStyle(
                         color: _profileInk(context),
-                        fontSize: 27,
+                        fontSize: 26,
                         fontWeight: FontWeight.w700,
                         letterSpacing: -.65,
                         height: 1.12,

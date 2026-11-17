@@ -1704,162 +1704,158 @@ class _ComposerState extends State<Composer> {
     );
   }
 
-  Widget reelComposer(BuildContext c) => Scaffold(
-    backgroundColor: Theme.of(c).canvasColor,
-    appBar: AppBar(
-      centerTitle: true,
-      leading: IconButton(
-        tooltip: 'Annulla',
-        onPressed: busy ? null : () => Navigator.pop(c),
-        icon: GIcon(CupertinoIcons.xmark, color: foreground(c)),
-      ),
-      title: const Text('Nuovo reel'),
-      actions: [
-        IconButton(
-          key: const ValueKey('save-reel-draft'),
-          tooltip: 'Salva bozza',
-          onPressed: busy ? null : () => saveDraft(feedback: true),
-          icon: GIcon(CupertinoIcons.doc_text, color: foreground(c)),
+  Widget reelComposer(BuildContext c) {
+    final hasVideo = files.isNotEmpty;
+    return Scaffold(
+      backgroundColor: hasVideo ? null : reelEditorBackground,
+      appBar: AppBar(
+        backgroundColor: hasVideo ? null : reelEditorBackground,
+        foregroundColor: hasVideo ? null : Colors.white,
+        centerTitle: true,
+        leading: IconButton(
+          tooltip: 'Chiudi',
+          onPressed: busy ? null : () => Navigator.pop(c),
+          icon: const Icon(CupertinoIcons.xmark),
         ),
-      ],
-    ),
-    bottomNavigationBar: SafeArea(
-      minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-      child: FilledButton(
-        onPressed: busy || files.isEmpty ? null : publish,
-        child: Text(busy ? 'Pubblicazione…' : 'Condividi reel'),
+        title: const Text('Nuovo reel'),
+        actions: [
+          IconButton(
+            key: const ValueKey('save-reel-draft'),
+            tooltip: 'Salva bozza',
+            onPressed: busy || !hasVideo
+                ? null
+                : () => saveDraft(feedback: true),
+            icon: const Icon(CupertinoIcons.doc_text),
+          ),
+        ],
       ),
-    ),
-    body: ListView(
-      padding: const EdgeInsets.only(bottom: 16),
-      children: [
-        if (busy)
-          ValueListenableBuilder<double>(
-            valueListenable: GpixScope.of(c).uploadProgress,
-            builder: (c, value, _) => LinearProgressIndicator(
-              value: value > 0 && value < 1 ? value : null,
+      bottomNavigationBar: !hasVideo
+          ? null
+          : SafeArea(
+              minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: FilledButton(
+                onPressed: busy ? null : publish,
+                child: Text(busy ? 'Attendi…' : 'Condividi'),
+              ),
             ),
-          ),
-        Container(
-          margin: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-          height: (MediaQuery.sizeOf(c).height * .48).clamp(220.0, 430.0),
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            color: Theme.of(c).colorScheme.surfaceContainerLow,
-          ),
-          child: files.isEmpty
-              ? CreationEmpty(
-                  icon: CupertinoIcons.play_rectangle,
-                  title: 'Crea il tuo reel',
-                  description: 'Scegli un video oppure registralo adesso.',
-                  action: 'Scegli video',
-                  onPressed: busy ? null : () => pick(video: true),
-                )
-              : Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    ColoredBox(
-                      color: Colors.black,
-                      child: ClipPlayer(
-                        reference: files.first,
-                        fit: BoxFit.contain,
-                        active:
-                            TickerMode.of(c) &&
-                            (ModalRoute.of(c)?.isCurrent ?? true),
-                      ),
+      body: !hasVideo
+          ? ReelSourcePicker(
+              onGallery: busy ? null : () => pick(video: true),
+              onRecord: busy ? null : () => pick(camera: true, video: true),
+            )
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                if (busy)
+                  ValueListenableBuilder<double>(
+                    valueListenable: GpixScope.of(c).uploadProgress,
+                    builder: (c, value, _) => LinearProgressIndicator(
+                      value: value > 0 && value < 1 ? value : null,
                     ),
-                    Positioned(
-                      right: 10,
-                      top: 10,
-                      child: MediaToolButton(
-                        icon: CupertinoIcons.photo,
-                        label: 'Cambia video',
-                        onPressed: busy ? null : () => pick(video: true),
-                      ),
+                  ),
+                Center(
+                  child: SizedBox(
+                    width: 145,
+                    height: 248,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        ClipPlayer(
+                          key: ValueKey(files.first),
+                          reference: files.first,
+                          fit: BoxFit.cover,
+                          active:
+                              TickerMode.of(c) &&
+                              (ModalRoute.of(c)?.isCurrent ?? true),
+                        ),
+                        Positioned(
+                          right: 6,
+                          top: 6,
+                          child: MediaToolButton(
+                            icon: CupertinoIcons.photo,
+                            label: 'Cambia video',
+                            onPressed: busy ? null : () => pick(video: true),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-        ),
-        if (files.isEmpty)
-          Center(
-            child: TextButton.icon(
-              onPressed: busy ? null : () => pick(camera: true, video: true),
-              icon: GIcon(CupertinoIcons.videocam, color: foreground(c)),
-              label: Text(
-                'Registra video',
-                style: TextStyle(color: foreground(c)),
-              ),
-            ),
-          ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: TextField(
-            controller: text,
-            minLines: 2,
-            maxLines: 5,
-            style: TextStyle(color: foreground(c)),
-            decoration: const InputDecoration(
-              hintText: 'Scrivi una didascalia…',
-              filled: false,
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-            ),
-          ),
-        ),
-        const Divider(height: 1, indent: 16, endIndent: 16),
-        ListTile(
-          leading: GIcon(CupertinoIcons.person_2, color: foreground(c)),
-          title: const Text('Pubblico'),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(reelAudience == 'close' ? 'Amici più stretti' : 'Follower'),
-              const SizedBox(width: 6),
-              const GIcon(CupertinoIcons.chevron_down, size: 14),
-            ],
-          ),
-          onTap: () => sheet(
-            c,
-            Builder(
-              builder: (menu) => Column(
-                children: [
-                  for (final item in const [
-                    ('followers', 'Follower'),
-                    ('close', 'Amici più stretti'),
-                  ])
-                    ListTile(
-                      title: Text(item.$2),
-                      trailing: reelAudience == item.$1
-                          ? const GIcon(
-                              CupertinoIcons.check_mark,
-                              color: auraBlue,
-                            )
-                          : null,
-                      onTap: () {
-                        setState(() => reelAudience = item.$1);
-                        Navigator.pop(menu);
-                      },
+                TextField(
+                  controller: text,
+                  enabled: !busy,
+                  maxLines: 3,
+                  maxLength: 2200,
+                  decoration: const InputDecoration(
+                    hintText: 'Scrivi una didascalia…',
+                  ),
+                ),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                ListTile(
+                  leading: GIcon(CupertinoIcons.person_2, color: foreground(c)),
+                  title: const Text('Pubblico'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        reelAudience == 'close'
+                            ? 'Amici più stretti'
+                            : 'Follower',
+                      ),
+                      const SizedBox(width: 6),
+                      const GIcon(CupertinoIcons.chevron_down, size: 14),
+                    ],
+                  ),
+                  onTap: () => sheet(
+                    c,
+                    Builder(
+                      builder: (menu) => Column(
+                        children: [
+                          for (final item in const [
+                            ('followers', 'Follower'),
+                            ('close', 'Amici più stretti'),
+                          ])
+                            ListTile(
+                              title: Text(item.$2),
+                              trailing: reelAudience == item.$1
+                                  ? const GIcon(
+                                      CupertinoIcons.check_mark,
+                                      color: auraBlue,
+                                    )
+                                  : null,
+                              onTap: () {
+                                setState(() => reelAudience = item.$1);
+                                Navigator.pop(menu);
+                              },
+                            ),
+                        ],
+                      ),
                     ),
-                ],
-              ),
+                  ),
+                ),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                ListTile(
+                  leading: const GIcon(CupertinoIcons.placemark),
+                  title: Text(
+                    location.text.isEmpty ? 'Aggiungi luogo' : location.text,
+                  ),
+                  trailing: const GIcon(
+                    CupertinoIcons.chevron_forward,
+                    size: 16,
+                  ),
+                  onTap: () async {
+                    final value = await chooseGpixPlace(
+                      c,
+                      initial: location.text,
+                    );
+                    if (value != null && mounted)
+                      setState(() => location.text = value);
+                  },
+                ),
+              ],
             ),
-          ),
-        ),
-        const Divider(height: 1, indent: 16, endIndent: 16),
-        ListTile(
-          leading: const GIcon(CupertinoIcons.placemark),
-          title: Text(location.text.isEmpty ? 'Aggiungi luogo' : location.text),
-          trailing: const GIcon(CupertinoIcons.chevron_forward, size: 16),
-          onTap: () async {
-            final value = await chooseGpixPlace(c, initial: location.text);
-            if (value != null && mounted) setState(() => location.text = value);
-          },
-        ),
-      ],
-    ),
-  );
+    );
+  }
 
   Future<void> editStoryText() async {
     final result = await textDialog(context, 'Testo della storia', text.text);

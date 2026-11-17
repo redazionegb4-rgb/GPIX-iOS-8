@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'core/store.dart';
 import 'ui/kit.dart';
@@ -57,6 +58,7 @@ class GpixApp extends StatelessWidget {
             : ThemeMode.system,
         theme: _lightTheme,
         darkTheme: _darkTheme,
+        scrollBehavior: const _GpixScrollBehavior(),
         builder: (c, child) => AuraBackdrop(
           child: Stack(
             fit: StackFit.expand,
@@ -90,4 +92,11 @@ class GpixApp extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _GpixScrollBehavior extends MaterialScrollBehavior {
+  const _GpixScrollBehavior();
+
+  @override
+  TargetPlatform getPlatform(BuildContext context) => defaultTargetPlatform;
 }

@@ -67,8 +67,8 @@ void main() {
       final video = _player('r1');
       final player = tester.state(video);
       expect(tester.getSize(video), const Size(402, 874));
-      expect(tester.getSize(_dock).width, closeTo(304, 1));
-      expect(tester.getSize(_dock).height, 50);
+      expect(tester.getSize(_dock).width, closeTo(359.79, .01));
+      expect(tester.getSize(_dock).height, 59);
       expect(find.text('10,1 mila'), findsOneWidget);
 
       await tester.tap(find.byTooltip('Commenti'));

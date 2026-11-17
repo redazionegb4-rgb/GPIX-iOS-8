@@ -25,9 +25,8 @@ const auraAction = LinearGradient(
 
 ThemeData gpixTheme(Brightness brightness) {
   final dark = brightness == Brightness.dark;
-  final fontFamily = defaultTargetPlatform == TargetPlatform.iOS
-      ? null
-      : 'Roboto';
+  final iphone = defaultTargetPlatform == TargetPlatform.iOS;
+  final fontFamily = iphone ? 'GpixRoboto' : 'Roboto';
   final canvas = dark ? Colors.black : Colors.white;
   final scheme = ColorScheme.fromSeed(
     seedColor: auraBlue,
@@ -68,7 +67,16 @@ ThemeData gpixTheme(Brightness brightness) {
   );
   return ThemeData(
     useMaterial3: true,
+    // Use the same Material component metrics on both mobile platforms.
+    platform: iphone ? TargetPlatform.android : defaultTargetPlatform,
     fontFamily: fontFamily,
+    pageTransitionsTheme: iphone
+        ? const PageTransitionsTheme(
+            builders: {
+              TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+            },
+          )
+        : null,
     colorScheme: scheme,
     canvasColor: canvas,
     scaffoldBackgroundColor: canvas,
@@ -1210,7 +1218,7 @@ Widget pageTitle(String title) => Text(
   ),
 );
 Future<T?> open<T>(BuildContext c, Widget page) => Navigator.of(c).push<T>(
-  Theme.of(c).platform == TargetPlatform.iOS
+  defaultTargetPlatform == TargetPlatform.iOS
       ? CupertinoPageRoute<T>(builder: (_) => AuraBackdrop(child: page))
       : PageRouteBuilder<T>(
           pageBuilder: (_, _, _) => AuraBackdrop(child: page),

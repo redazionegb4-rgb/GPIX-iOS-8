@@ -1,120 +1,162 @@
+import 'dart:convert';
+
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gpix/core/profile_links.dart';
 import 'package:gpix/core/store.dart';
-import 'package:gpix/rebuild/surfaces.dart';
+import 'package:gpix/main.dart';
 import 'package:gpix/screens/profile_links.dart';
+import 'package:gpix/screens/reel_editor.dart';
+import 'package:gpix/screens/social.dart';
+import 'package:gpix/screens/stories.dart';
 import 'package:gpix/ui/kit.dart';
 
 void main() {
-  testWidgets('The profile uses the same layout on iPhone and Android', (
-    tester,
-  ) async {
-    final store = GpixStore()..startTestDemo();
-    addTearDown(store.dispose);
-    store.me
-      ..['name'] = 'Andrea Russo'
-      ..['username'] = 'andrea.rossi'
-      ..['bio'] = 'Fotografia e viaggi\nReggio Calabria'
-      ..['private'] = true
-      ..['links'] = [
-        socialLink('threads', 'andrea.rossi', 'andrea.rossi'),
-        socialLink('facebook', 'andrea.rossi', 'Andrea Russo'),
-        socialLink('instagram', 'andrea.rossi', '@andrea.rossi'),
-        socialLink('telegram', 'andrea.rossi', 'Telegram'),
-      ];
-    tester.view.physicalSize = const Size(402, 874);
-    tester.view.devicePixelRatio = 1;
-    tester.view.padding = const FakeViewPadding(top: 62, bottom: 34);
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    addTearDown(tester.view.resetPadding);
-    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+  test('Android and iPhone use the same text sizes and weights', () {
+    final savedPlatform = debugDefaultTargetPlatformOverride;
+    try {
+      for (final brightness in Brightness.values) {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        final android = gpixTheme(brightness);
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        final iphone = gpixTheme(brightness);
 
-    Future<List<Rect>> layout(TargetPlatform platform) async {
-      debugDefaultTargetPlatformOverride = platform;
+        expect(iphone.platform, android.platform);
+        expect(iphone.colorScheme, android.colorScheme);
+        expect(iphone.visualDensity, android.visualDensity);
+        expect(iphone.textTheme.bodyMedium?.fontFamily, 'GpixRoboto');
+        expect(iphone.textTheme.apply(fontFamily: 'Roboto'), android.textTheme);
+        expect(
+          iphone.appBarTheme.titleTextStyle?.copyWith(fontFamily: 'Roboto'),
+          android.appBarTheme.titleTextStyle,
+        );
+      }
+    } finally {
+      debugDefaultTargetPlatformOverride = savedPlatform;
+    }
+  });
+
+  testWidgets(
+    'An iPhone uses the 138 profile and keeps native scrolling and back',
+    (tester) async {
+      tester.view.physicalSize = const Size(402, 874);
+      tester.view.devicePixelRatio = 1;
+      tester.view.viewPadding = const FakeViewPadding(top: 62, bottom: 34);
+      tester.view.padding = const FakeViewPadding(top: 62, bottom: 34);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetViewPadding);
+      addTearDown(tester.view.resetPadding);
+
+      final manifest = await rootBundle.loadString('FontManifest.json');
+      final fonts = (jsonDecode(manifest) as List).whereType<Map>();
+      final roboto = fonts.singleWhere(
+        (entry) => entry['family'] == 'GpixRoboto',
+      );
+      final faces = (roboto['fonts'] as List).whereType<Map>();
+      expect(faces.map((entry) => entry['weight']), [
+        100,
+        300,
+        400,
+        500,
+        700,
+        900,
+      ]);
+
+      final store = GpixStore()..startTestDemo();
+      addTearDown(store.dispose);
+      store.me
+        ..['name'] = 'Andrea Russo'
+        ..['username'] = 'andrea.rossi'
+        ..['bio'] = 'Fotografia e viaggi'
+        ..['followers'] = 822
+        ..['links'] = [socialLink('facebook', 'andrea.rossi', 'Andrea Russo')];
+      await tester.pumpWidget(GpixApp(store: store));
+      await tester.pumpAndSettle();
+
+      final dock = find.byKey(const ValueKey('floating-dock'));
+      expect(tester.getRect(dock).bottom, 874 - 34 - 8);
+      final home = find.text('Per te').last;
+      expect(
+        Theme.of(tester.element(home)).textTheme.bodyMedium?.fontFamily,
+        'GpixRoboto',
+      );
+      await tester.tap(find.byTooltip('Messaggi').last);
+      await tester.pumpAndSettle();
+      final messages = find.text('Messaggi').first;
+      expect(
+        Theme.of(tester.element(messages)).textTheme.bodyMedium?.fontFamily,
+        'GpixRoboto',
+      );
+      await tester.tap(find.byTooltip('Profilo').last);
+      await tester.pumpAndSettle();
+
+      final name = tester.widget<Text>(find.text('Andrea Russo').first);
+      final count = tester.widget<Text>(find.text('822'));
+      final handle = tester.widget<Text>(find.text('andrea.rossi').first);
+      expect(name.style?.fontSize, 14);
+      expect(name.style?.fontWeight, FontWeight.w600);
+      expect(count.style?.fontSize, 15.6);
+      expect(count.style?.fontWeight, FontWeight.w600);
+      expect(handle.style?.fontSize, 26);
+      expect(handle.style?.fontWeight, FontWeight.w700);
+      expect(
+        find.descendant(
+          of: find.byType(ProfileLinkChips),
+          matching: find.byType(Wrap),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Apri Pulse'), findsNothing);
+
+      final tabs = tester.element(find.byType(TabBar));
+      expect(
+        ScrollConfiguration.of(tabs).getPlatform(tabs),
+        TargetPlatform.iOS,
+      );
+      await tester.tap(find.byTooltip('Impostazioni e attività'));
+      await tester.pumpAndSettle();
+      final settings = tester.element(find.byType(Settings));
+      expect(ModalRoute.of(settings), isA<CupertinoPageRoute<dynamic>>());
+      expect(Theme.of(settings).textTheme.bodyMedium?.fontFamily, 'GpixRoboto');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+    variant: TargetPlatformVariant({TargetPlatform.iOS}),
+  );
+
+  testWidgets(
+    'The iPhone reel starts with the same source picker',
+    (tester) async {
+      final store = GpixStore()..startTestDemo();
+      addTearDown(store.dispose);
       await tester.pumpWidget(
         GpixScope(
           store: store,
           child: MaterialApp(
             theme: gpixTheme(Brightness.light),
-            home: ProfileHome(key: ValueKey(platform), user: store.myId),
+            home: const Composer(kind: 'reel'),
           ),
         ),
       );
       await tester.pumpAndSettle();
+      final picker = find.byType(ReelSourcePicker);
+      expect(picker, findsOneWidget);
+      expect(
+        find.descendant(of: picker, matching: find.text('Galleria')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: picker, matching: find.text('Registra')),
+        findsOneWidget,
+      );
+      expect(find.text('Nuovo reel'), findsOneWidget);
       expect(tester.takeException(), isNull);
-      final links = find.byType(ProfileLinkChips);
-      final editor = find.text('Aggiungi');
-      expect(tester.getSize(links).height, 24);
-      expect(editor.hitTestable(), findsOneWidget);
-      expect(find.byTooltip('Apri Pulse'), findsNothing);
-      return [
-        tester.getRect(find.byKey(const ValueKey('profile-avatar'))),
-        tester.getRect(find.text('follower')),
-        tester.getRect(links),
-        tester.getRect(find.text('Modifica')),
-        tester.getRect(find.text('Nuova')),
-        tester.getRect(find.byType(TabBar)),
-      ];
-    }
-
-    final iphone = await layout(TargetPlatform.iOS);
-    final android = await layout(TargetPlatform.android);
-    expect(iphone, android);
-
-    final linkScroller = find.descendant(
-      of: find.byType(ProfileLinkChips),
-      matching: find.byType(Scrollable),
-    );
-    final position = tester.state<ScrollableState>(linkScroller).position;
-    expect(position.maxScrollExtent, greaterThan(0));
-    await tester.drag(linkScroller, const Offset(-240, 0));
-    await tester.pumpAndSettle();
-    expect(position.pixels, greaterThan(0));
-    expect(find.text('Aggiungi').hitTestable(), findsOneWidget);
-    await tester.tap(find.text('Aggiungi'));
-    await tester.pumpAndSettle();
-    expect(find.byType(ProfileLinks), findsOneWidget);
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox());
-    debugDefaultTargetPlatformOverride = null;
-  });
-
-  testWidgets('Profile links stay usable at a larger text size', (
-    tester,
-  ) async {
-    final store = GpixStore()..startTestDemo();
-    addTearDown(store.dispose);
-    store.me['links'] = [
-      socialLink('facebook', 'andrea.rossi', 'Andrea Russo Fotografia'),
-      socialLink('instagram', 'andrea.rossi', 'andrea.rossi'),
-      socialLink('telegram', 'andrea.rossi', 'Telegram'),
-    ];
-    tester.view.physicalSize = const Size(320, 790);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(
-      GpixScope(
-        store: store,
-        child: MaterialApp(
-          theme: gpixTheme(
-            Brightness.dark,
-          ).copyWith(platform: TargetPlatform.iOS),
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: const TextScaler.linear(1.65)),
-            child: child!,
-          ),
-          home: ProfileHome(user: store.myId),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Aggiungi').hitTestable(), findsOneWidget);
-    await tester.pumpWidget(const SizedBox());
-  });
+      await tester.pumpWidget(const SizedBox());
+    },
+    variant: TargetPlatformVariant({TargetPlatform.iOS}),
+  );
 }

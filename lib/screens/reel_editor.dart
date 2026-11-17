@@ -350,9 +350,9 @@ class _ReelEditorState extends State<ReelEditor> {
     return PopScope(
       canPop: !busy || publishing,
       child: Scaffold(
-        backgroundColor: preview ? null : const Color(0xff101012),
+        backgroundColor: preview ? null : reelEditorBackground,
         appBar: AppBar(
-          backgroundColor: preview ? null : const Color(0xff101012),
+          backgroundColor: preview ? null : reelEditorBackground,
           foregroundColor: preview ? null : Colors.white,
           centerTitle: true,
           leading: IconButton(
@@ -395,40 +395,9 @@ class _ReelEditorState extends State<ReelEditor> {
                   if (busy) const LinearProgressIndicator(),
                   Expanded(
                     child: clip == null
-                        ? Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  CupertinoIcons.play_rectangle,
-                                  color: Colors.white,
-                                  size: 46,
-                                ),
-                                const SizedBox(height: 18),
-                                FilledButton.icon(
-                                  onPressed: busy
-                                      ? null
-                                      : () => add(camera: false),
-                                  icon: const Icon(
-                                    CupertinoIcons.photo_on_rectangle,
-                                  ),
-                                  label: const Text('Galleria'),
-                                ),
-                                TextButton.icon(
-                                  onPressed: busy
-                                      ? null
-                                      : () => add(camera: true),
-                                  icon: const Icon(
-                                    CupertinoIcons.videocam,
-                                    color: Colors.white,
-                                  ),
-                                  label: const Text(
-                                    'Registra',
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                                ),
-                              ],
-                            ),
+                        ? ReelSourcePicker(
+                            onGallery: busy ? null : () => add(camera: false),
+                            onRecord: busy ? null : () => add(camera: true),
                           )
                         : Center(
                             child: AspectRatio(
@@ -686,6 +655,39 @@ class _ReelEditorState extends State<ReelEditor> {
         onChanged: busy ? null : (value) => setState(() => inFeed = value),
       ),
     ],
+  );
+}
+
+const reelEditorBackground = Color(0xff101012);
+
+class ReelSourcePicker extends StatelessWidget {
+  const ReelSourcePicker({super.key, this.onGallery, this.onRecord});
+
+  final VoidCallback? onGallery, onRecord;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(
+          CupertinoIcons.play_rectangle,
+          color: Colors.white,
+          size: 46,
+        ),
+        const SizedBox(height: 18),
+        FilledButton.icon(
+          onPressed: onGallery,
+          icon: const Icon(CupertinoIcons.photo_on_rectangle),
+          label: const Text('Galleria'),
+        ),
+        TextButton.icon(
+          onPressed: onRecord,
+          icon: const Icon(CupertinoIcons.videocam, color: Colors.white),
+          label: const Text('Registra', style: TextStyle(color: Colors.white)),
+        ),
+      ],
+    ),
   );
 }
 

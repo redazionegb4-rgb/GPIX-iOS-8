@@ -76,7 +76,7 @@ class ProfileLinkChips extends StatelessWidget {
             customBorder: const StadiumBorder(),
             onTap: tap,
             child: Container(
-              constraints: const BoxConstraints(minHeight: 24),
+              constraints: const BoxConstraints(minHeight: 23.5),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -89,7 +89,7 @@ class ProfileLinkChips extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 12.5,
+                        fontSize: 12,
                         color: ink,
                         fontWeight: FontWeight.w600,
                         height: 1.16,
@@ -107,23 +107,29 @@ class ProfileLinkChips extends StatelessWidget {
         label: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox.square(dimension: 18, child: Center(child: icon)),
-            const SizedBox(width: 6),
+            SizedBox.square(
+              dimension: compact ? 14 : 18,
+              child: Center(child: icon),
+            ),
+            SizedBox(width: compact ? 4 : 6),
             Flexible(
               child: Text(
                 text,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: foreground(c),
+                  color: compact && add ? secondaryText(c) : foreground(c),
                   fontWeight: FontWeight.w600,
-                  fontSize: 13,
+                  fontSize: compact ? 11 : 13,
                 ),
               ),
             ),
           ],
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 7 : 10,
+          vertical: compact ? 0 : 6,
+        ),
         labelPadding: EdgeInsets.zero,
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         visualDensity: VisualDensity.compact,
@@ -134,27 +140,27 @@ class ProfileLinkChips extends StatelessWidget {
       );
     }
 
-    final linkChips = [
-      for (final link in visibleLinks)
-        ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: compact
-                ? MediaQuery.sizeOf(c).width * .6
-                : MediaQuery.sizeOf(c).width - 50,
-          ),
-          child: chip(
-            FaIcon(
-              socialIcon(link.str('type')),
-              size: compact ? 13 : 16,
-              color: foreground(c),
+    return Wrap(
+      spacing: 8,
+      runSpacing: 7,
+      children: [
+        for (final link in visibleLinks)
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.sizeOf(c).width - 50,
             ),
-            link.str('title', link.str('value', link.str('url'))),
-            () => openProfileLink(c, link),
+            child: chip(
+              FaIcon(
+                socialIcon(link.str('type')),
+                size: compact ? 13 : 16,
+                color: foreground(c),
+              ),
+              link.str('title', link.str('value', link.str('url'))),
+              () => openProfileLink(c, link),
+            ),
           ),
-        ),
-    ];
-    final addChip = own && links.length < 5
-        ? chip(
+        if (own && links.length < 5)
+          chip(
             GIcon(
               CupertinoIcons.plus,
               size: compact ? 15 : 18,
@@ -163,25 +169,9 @@ class ProfileLinkChips extends StatelessWidget {
             'Aggiungi',
             () => open(c, const ProfileLinks()),
             add: true,
-          )
-        : null;
-    if (compact) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        spacing: 8,
-        children: [
-          if (linkChips.isNotEmpty)
-            Flexible(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(spacing: 8, children: linkChips),
-              ),
-            ),
-          if (addChip != null) addChip,
-        ],
-      );
-    }
-    return Wrap(spacing: 8, runSpacing: 7, children: [...linkChips, ?addChip]);
+          ),
+      ],
+    );
   }
 }
 
