@@ -77,6 +77,13 @@ class _StoryTrayState extends State<StoryTray> {
     final slot = (width * .247).clamp(74.0, 105.0);
     final avatar = slot - 16;
     final ringDiameter = avatar + 10.2;
+    const padding = EdgeInsets.fromLTRB(5, 2, 5, 7);
+    const labelGap = 7.0;
+    const labelSize = 10.5;
+    const labelLineHeight = 1.32;
+    final labelHeight =
+        (MediaQuery.textScalerOf(c).scale(labelSize) * labelLineHeight)
+            .ceilToDouble();
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -119,14 +126,11 @@ class _StoryTrayState extends State<StoryTray> {
             ),
           ),
         SizedBox(
-          height:
-              ringDiameter +
-              30 +
-              (MediaQuery.textScalerOf(c).scale(10) - 10).clamp(0.0, 32.0),
+          height: ringDiameter + padding.vertical + labelGap + labelHeight,
           child: ListView.separated(
             key: const ValueKey('stories-strip'),
             controller: scroll,
-            padding: const EdgeInsets.fromLTRB(5, 2, 5, 7),
+            padding: padding,
             scrollDirection: Axis.horizontal,
             itemCount: users.length + 1,
             separatorBuilder: (_, i) => const SizedBox(width: 5),
@@ -186,13 +190,14 @@ class _StoryTrayState extends State<StoryTray> {
                             ),
                         ],
                       ),
-                      const SizedBox(height: 7),
+                      const SizedBox(height: labelGap),
                       Text(
                         i == 0 ? 'La tua storia' : s.user(uid).str('username'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 10.5,
+                          fontSize: labelSize,
+                          height: labelLineHeight,
                           color: i == 0 ? secondaryText(c) : foreground(c),
                         ),
                       ),

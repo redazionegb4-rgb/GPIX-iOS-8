@@ -1,6 +1,7 @@
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
@@ -128,7 +129,9 @@ class _SocialShellState extends State<SocialShell> {
         : const Duration(milliseconds: 210);
     final inset = MediaQuery.viewPaddingOf(context).bottom;
     final covered = reel && _reelCoverAccount == store.myId;
-    final dockBottom = inset + 8;
+    final dockBottom = defaultTargetPlatform == TargetPlatform.iOS
+        ? (inset > 28 ? inset - 12 : (inset + 3).clamp(12.0, 28.0))
+        : inset + 8;
     final dockHeight = _compact ? 50.0 : 59.0;
     final dockWidth =
         (MediaQuery.sizeOf(context).width * (_compact ? .75 : .895)).clamp(

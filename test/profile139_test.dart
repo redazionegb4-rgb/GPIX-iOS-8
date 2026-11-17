@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gpix/core/profile_links.dart';
@@ -40,16 +41,18 @@ void main() {
   });
 
   testWidgets(
-    'An iPhone uses the 138 profile and keeps native scrolling and back',
+    'An iPhone with small system text matches the Home and Profile proportions',
     (tester) async {
       tester.view.physicalSize = const Size(402, 874);
       tester.view.devicePixelRatio = 1;
       tester.view.viewPadding = const FakeViewPadding(top: 62, bottom: 34);
       tester.view.padding = const FakeViewPadding(top: 62, bottom: 34);
+      tester.platformDispatcher.textScaleFactorTestValue = 14 / 17;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       addTearDown(tester.view.resetViewPadding);
       addTearDown(tester.view.resetPadding);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
       final manifest = await rootBundle.loadString('FontManifest.json');
       final fonts = (jsonDecode(manifest) as List).whereType<Map>();
@@ -65,21 +68,40 @@ void main() {
         700,
         900,
       ]);
+      await tester.runAsync(() async {
+        final loader = FontLoader('GpixRoboto');
+        for (final face in faces) {
+          loader.addFont(rootBundle.load(face['asset'] as String));
+        }
+        await loader.load();
+      });
 
       final store = GpixStore()..startTestDemo();
       addTearDown(store.dispose);
+      const bio =
+          'Un pensiero di oggi\n'
+          'Las intenciones y las atenciones no se dicen, se demuestran';
       store.me
         ..['name'] = 'Andrea Russo'
         ..['username'] = 'andrea.rossi'
-        ..['bio'] = 'Fotografia e viaggi'
+        ..['bio'] = bio
         ..['followers'] = 822
-        ..['links'] = [socialLink('facebook', 'andrea.rossi', 'Andrea Russo')];
+        ..['links'] = [
+          socialLink('threads', 'andrea.rossi', 'andrea.rossi'),
+          socialLink('facebook', 'andrea.rossi', 'Andrea Russo'),
+          socialLink('instagram', 'andrea.rossi', 'andrea.rossi'),
+        ];
       await tester.pumpWidget(GpixApp(store: store));
       await tester.pumpAndSettle();
 
       final dock = find.byKey(const ValueKey('floating-dock'));
-      expect(tester.getRect(dock).bottom, 874 - 34 - 8);
+      expect(tester.getRect(dock).bottom, 874 - (34 - 12));
       final home = find.text('Per te').last;
+      expect(
+        MediaQuery.textScalerOf(tester.element(home)).scale(22),
+        closeTo(26, .1),
+      );
+      expect(tester.getSize(home).width, inInclusiveRange(61, 70));
       expect(
         Theme.of(tester.element(home)).textTheme.bodyMedium?.fontFamily,
         'GpixRoboto',
@@ -96,13 +118,36 @@ void main() {
 
       final name = tester.widget<Text>(find.text('Andrea Russo').first);
       final count = tester.widget<Text>(find.text('822'));
-      final handle = tester.widget<Text>(find.text('andrea.rossi').first);
+      final handle = tester.widget<Text>(
+        find.descendant(
+          of: find.byTooltip('Cambia account'),
+          matching: find.text('andrea.rossi'),
+        ),
+      );
       expect(name.style?.fontSize, 14);
       expect(name.style?.fontWeight, FontWeight.w600);
       expect(count.style?.fontSize, 15.6);
       expect(count.style?.fontWeight, FontWeight.w600);
       expect(handle.style?.fontSize, 26);
       expect(handle.style?.fontWeight, FontWeight.w700);
+      final paragraph = tester.renderObject<RenderParagraph>(find.text(bio));
+      final lines = paragraph
+          .getBoxesForSelection(
+            TextSelection(baseOffset: 0, extentOffset: bio.length),
+          )
+          .map((box) => box.top)
+          .toSet();
+      expect(lines, hasLength(3));
+      final links = find.byType(ProfileLinkChips);
+      final add = find.descendant(of: links, matching: find.text('Aggiungi'));
+      final facebook = find.descendant(
+        of: links,
+        matching: find.text('Andrea Russo'),
+      );
+      expect(
+        tester.getCenter(add).dy,
+        greaterThan(tester.getCenter(facebook).dy),
+      );
       expect(
         find.descendant(
           of: find.byType(ProfileLinkChips),
@@ -117,6 +162,9 @@ void main() {
         ScrollConfiguration.of(tabs).getPlatform(tabs),
         TargetPlatform.iOS,
       );
+      tester.platformDispatcher.textScaleFactorTestValue = 1.4;
+      await tester.pumpAndSettle();
+      expect(MediaQuery.textScalerOf(tabs).scale(14), closeTo(19.6, .01));
       await tester.tap(find.byTooltip('Impostazioni e attività'));
       await tester.pumpAndSettle();
       final settings = tester.element(find.byType(Settings));

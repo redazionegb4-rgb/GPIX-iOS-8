@@ -59,12 +59,29 @@ class GpixApp extends StatelessWidget {
         theme: _lightTheme,
         darkTheme: _darkTheme,
         scrollBehavior: const _GpixScrollBehavior(),
-        builder: (c, child) => AuraBackdrop(
-          child: Stack(
-            fit: StackFit.expand,
-            children: [child!, const IncomingCall()],
-          ),
-        ),
+        builder: (c, child) {
+          final app = AuraBackdrop(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [child!, const IncomingCall()],
+            ),
+          );
+          if (defaultTargetPlatform != TargetPlatform.iOS) return app;
+          final media = MediaQuery.of(c);
+          // Use the Android reference's text proportions at phone widths.
+          final referenceScale = (media.size.shortestSide / 340).clamp(
+            1.0,
+            1.2,
+          );
+          return MediaQuery(
+            data: media.copyWith(
+              textScaler: media.textScaler.clamp(
+                minScaleFactor: referenceScale,
+              ),
+            ),
+            child: app,
+          );
+        },
         home: AnimatedBuilder(
           animation: store,
           builder: (c, _) => AnimatedSwitcher(
