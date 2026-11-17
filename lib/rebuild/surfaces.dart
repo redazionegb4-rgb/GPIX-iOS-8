@@ -2284,7 +2284,6 @@ class _ProfileHomeState extends State<ProfileHome>
   Widget build(BuildContext context) {
     final store = GpixScope.of(context);
     final person = store.user(widget.user);
-    final iphone = Theme.of(context).platform == TargetPlatform.iOS;
     final own = widget.user == store.myId;
     final following = store.follows(widget.user);
     final pending = store.state.ids('pending').contains(widget.user);
@@ -2356,7 +2355,7 @@ class _ProfileHomeState extends State<ProfileHome>
               backgroundColor: surface(context),
               foregroundColor: _profileInk(context),
               centerTitle: true,
-              toolbarHeight: 60,
+              toolbarHeight: 52,
               title: own
                   ? _AccountTitle(
                       store: store,
@@ -2374,13 +2373,11 @@ class _ProfileHomeState extends State<ProfileHome>
                           child: Text(
                             person.str('username'),
                             overflow: TextOverflow.ellipsis,
-                            style: iphone
-                                ? const TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: -.45,
-                                  )
-                                : null,
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -.45,
+                            ),
                           ),
                         ),
                       ],
@@ -2410,9 +2407,7 @@ class _ProfileHomeState extends State<ProfileHome>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    crossAxisAlignment: iphone
-                        ? CrossAxisAlignment.start
-                        : CrossAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       SizedBox(
                         width: portraitSize,
@@ -2477,8 +2472,8 @@ class _ProfileHomeState extends State<ProfileHome>
                                           'Lascia una nota…',
                                       details: note?.obj('details') ?? const {},
                                       placeholder: note == null,
-                                      textStyle: TextStyle(
-                                        fontSize: iphone ? 13 : 12.2,
+                                      textStyle: const TextStyle(
+                                        fontSize: 12.5,
                                         letterSpacing: 0,
                                       ),
                                     ),
@@ -2523,9 +2518,7 @@ class _ProfileHomeState extends State<ProfileHome>
                       const SizedBox(width: 9),
                       Expanded(
                         child: Padding(
-                          padding: iphone
-                              ? EdgeInsets.only(top: noteOffset + 12)
-                              : EdgeInsets.only(bottom: hasNote ? 32 : 24),
+                          padding: EdgeInsets.only(top: noteOffset + 7),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2534,14 +2527,14 @@ class _ProfileHomeState extends State<ProfileHome>
                                 person.str('name', person.str('username')),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: iphone ? 16 : 14,
-                                  height: 1.2,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  height: 1.18,
                                   fontWeight: FontWeight.w600,
                                   letterSpacing: 0,
                                 ),
                               ),
-                              SizedBox(height: iphone ? 10 : 9),
+                              const SizedBox(height: 9),
                               Row(
                                 children: [
                                   _stat(
@@ -2591,7 +2584,7 @@ class _ProfileHomeState extends State<ProfileHome>
                     Text(
                       person.str('pronouns'),
                       style: TextStyle(
-                        fontSize: iphone ? 15 : 13.5,
+                        fontSize: 14.5,
                         letterSpacing: 0,
                         color: secondaryText(context),
                       ),
@@ -2602,10 +2595,11 @@ class _ProfileHomeState extends State<ProfileHome>
                       const SizedBox(height: 4),
                     Text(
                       person.str('bio').replaceAll(r'\n', '\n'),
-                      style: TextStyle(
-                        fontSize: iphone ? 16 : 14,
-                        height: iphone ? 1.23 : 1.28,
+                      style: const TextStyle(
+                        fontSize: 15.5,
+                        height: 1.25,
                         letterSpacing: 0,
+                        fontWeight: FontWeight.w400,
                       ),
                     ),
                   ],
@@ -2621,12 +2615,12 @@ class _ProfileHomeState extends State<ProfileHome>
                         style: TextStyle(
                           color: accent(context),
                           fontWeight: FontWeight.w600,
-                          fontSize: iphone ? 15 : 13,
+                          fontSize: 14.5,
                         ),
                       ),
                     ),
                   ],
-                  if (person.rows('links').isNotEmpty || own) ...[
+                  if (connections.isNotEmpty || own) ...[
                     const SizedBox(height: 13),
                     ProfileLinkChips(
                       links: connections,
@@ -2712,7 +2706,7 @@ class _ProfileHomeState extends State<ProfileHome>
                           ),
                           style: IconButton.styleFrom(
                             backgroundColor: _profileControl(context),
-                            minimumSize: Size.square(iphone ? 32 : 31),
+                            minimumSize: const Size.square(32),
                             padding: EdgeInsets.zero,
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             shape: RoundedRectangleBorder(
@@ -2836,7 +2830,7 @@ class _ProfileHomeState extends State<ProfileHome>
 
   Color _profileControl(BuildContext context) =>
       Theme.of(context).brightness == Brightness.light
-      ? const Color(0xfff0f1f5)
+      ? const Color(0xffeeeff2)
       : subdued(context);
 
   ButtonStyle _profileButton(BuildContext context, {bool primary = false}) =>
@@ -2846,16 +2840,11 @@ class _ProfileHomeState extends State<ProfileHome>
             : _profileControl(context),
         foregroundColor: primary ? Colors.white : _profileInk(context),
         padding: const EdgeInsets.symmetric(horizontal: 7),
-        minimumSize: Size(
-          0,
-          Theme.of(context).platform == TargetPlatform.iOS ? 32 : 31,
-        ),
+        minimumSize: const Size(0, 32),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
-          fontSize: Theme.of(context).platform == TargetPlatform.iOS
-              ? 15.7
-              : 14,
+          fontSize: 15.5,
           fontWeight: FontWeight.w600,
           height: 1.12,
           letterSpacing: 0,
@@ -2868,9 +2857,7 @@ class _ProfileHomeState extends State<ProfileHome>
     List<J> highlights, {
     required bool own,
   }) {
-    final fontSize = Theme.of(context).platform == TargetPlatform.iOS
-        ? 14.5
-        : 13.0;
+    const fontSize = 13.5;
     final textSize = MediaQuery.textScalerOf(context).scale(fontSize);
     return Padding(
       padding: const EdgeInsets.only(top: 20, bottom: 12),
@@ -2973,7 +2960,6 @@ class _ProfileHomeState extends State<ProfileHome>
   }
 
   Widget _suggestions(BuildContext context, GpixStore store) {
-    final iphone = Theme.of(context).platform == TargetPlatform.iOS;
     final followingIds = store.state.ids('following').toSet();
     final suggested = store.users.where((person) {
       final id = person.str('id');
@@ -2995,37 +2981,47 @@ class _ProfileHomeState extends State<ProfileHome>
                 Expanded(
                   child: Text(
                     'Persone suggerite',
-                    style: TextStyle(
-                      fontSize: iphone ? 15.7 : 14,
+                    style: const TextStyle(
+                      fontSize: 15.5,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 0,
                     ),
                   ),
                 ),
-                TextButton(
-                  onPressed: () => open(
-                    context,
-                    PeopleDirectory(
-                      title: 'Persone suggerite',
-                      ids: suggested.map((person) => person.str('id')).toList(),
-                      allowFollow: true,
+                Expanded(
+                  child: Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: TextButton(
+                      onPressed: () => open(
+                        context,
+                        PeopleDirectory(
+                          title: 'Persone suggerite',
+                          ids: suggested
+                              .map((person) => person.str('id'))
+                              .toList(),
+                          allowFollow: true,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor:
+                            Theme.of(context).brightness == Brightness.light
+                            ? const Color(0xff455eff)
+                            : accent(context),
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 34),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        textStyle: const TextStyle(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                      child: const Text(
+                        'Mostra tutti',
+                        textAlign: TextAlign.end,
+                      ),
                     ),
                   ),
-                  style: TextButton.styleFrom(
-                    foregroundColor:
-                        Theme.of(context).brightness == Brightness.light
-                        ? const Color(0xff455eff)
-                        : accent(context),
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(0, 34),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontSize: iphone ? 15.7 : 14,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0,
-                    ),
-                  ),
-                  child: const Text('Mostra tutti'),
                 ),
               ],
             ),
@@ -3033,7 +3029,7 @@ class _ProfileHomeState extends State<ProfileHome>
           const SizedBox(height: 1),
           SizedBox(
             height:
-                (iphone ? 193 : 190) +
+                190 +
                 (MediaQuery.textScalerOf(context).scale(13) - 13).clamp(
                       0.0,
                       45.0,
@@ -3092,8 +3088,8 @@ class _ProfileHomeState extends State<ProfileHome>
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: iphone ? 15.5 : 14,
+                                style: const TextStyle(
+                                  fontSize: 15.5,
                                   fontWeight: FontWeight.w600,
                                   letterSpacing: 0,
                                 ),
@@ -3106,7 +3102,7 @@ class _ProfileHomeState extends State<ProfileHome>
                                 overflow: TextOverflow.ellipsis,
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
-                                  fontSize: iphone ? 13 : 12,
+                                  fontSize: 13,
                                   letterSpacing: 0,
                                   color: secondaryText(context),
                                 ),
@@ -3162,7 +3158,6 @@ class _ProfileHomeState extends State<ProfileHome>
     required int flex,
     VoidCallback? onTap,
   }) {
-    final iphone = Theme.of(context).platform == TargetPlatform.iOS;
     return Expanded(
       flex: flex,
       child: InkWell(
@@ -3174,8 +3169,8 @@ class _ProfileHomeState extends State<ProfileHome>
               count,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: iphone ? 18.2 : 15.6,
+              style: const TextStyle(
+                fontSize: 17.5,
                 height: 1.12,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0,
@@ -3185,9 +3180,10 @@ class _ProfileHomeState extends State<ProfileHome>
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: iphone ? 15.5 : 13.6,
+              style: const TextStyle(
+                fontSize: 15,
                 height: 1.16,
+                fontWeight: FontWeight.w400,
                 letterSpacing: 0,
               ),
             ),
@@ -3493,48 +3489,48 @@ class _ProfileTabGlyph extends CustomPainter {
         );
       case _ProfileSection.reposts:
         final arrows = Path()
-          ..moveTo(3.8, 13)
-          ..lineTo(3.8, 10)
-          ..cubicTo(3.8, 7.3, 5.6, 5.9, 8.1, 5.9)
-          ..lineTo(16.1, 5.9)
-          ..moveTo(12.4, 2.2)
-          ..lineTo(16.1, 5.9)
-          ..lineTo(12.4, 9.6)
-          ..moveTo(20.2, 13)
-          ..lineTo(20.2, 16)
-          ..cubicTo(20.2, 18.7, 18.4, 20.1, 15.9, 20.1)
-          ..lineTo(7.9, 20.1)
-          ..moveTo(11.6, 16.4)
-          ..lineTo(7.9, 20.1)
-          ..lineTo(11.6, 23.8);
-        canvas.drawPath(arrows, stroke..strokeWidth = 2.05);
+          ..moveTo(3.1, 14.4)
+          ..lineTo(3.1, 11)
+          ..quadraticBezierTo(3.1, 6.2, 8, 6.2)
+          ..lineTo(18.2, 6.2)
+          ..moveTo(14.2, 2.2)
+          ..lineTo(18.2, 6.2)
+          ..lineTo(14.2, 10.2)
+          ..moveTo(22.9, 11.6)
+          ..lineTo(22.9, 15)
+          ..quadraticBezierTo(22.9, 19.8, 18, 19.8)
+          ..lineTo(7.8, 19.8)
+          ..moveTo(11.8, 15.8)
+          ..lineTo(7.8, 19.8)
+          ..lineTo(11.8, 23.8);
+        canvas.drawPath(arrows, stroke..strokeWidth = 2.1);
       case _ProfileSection.tagged:
         final frame = Path()
-          ..moveTo(5.6, 23)
-          ..quadraticBezierTo(2.55, 23, 2.55, 19.95)
-          ..lineTo(2.55, 9.1)
-          ..quadraticBezierTo(2.55, 5.8, 5.8, 5.8)
-          ..lineTo(8.7, 5.8)
-          ..quadraticBezierTo(9.9, 5.8, 10.6, 4.7)
-          ..lineTo(11.6, 3.25)
-          ..quadraticBezierTo(13, 1.45, 14.4, 3.25)
-          ..lineTo(15.4, 4.7)
-          ..quadraticBezierTo(16.1, 5.8, 17.3, 5.8)
-          ..lineTo(20.2, 5.8)
-          ..quadraticBezierTo(23.45, 5.8, 23.45, 9.1)
-          ..lineTo(23.45, 19.95)
-          ..quadraticBezierTo(23.45, 23, 20.4, 23)
+          ..moveTo(5.6, 23.4)
+          ..quadraticBezierTo(2.5, 23.4, 2.5, 20.3)
+          ..lineTo(2.5, 8.8)
+          ..quadraticBezierTo(2.5, 5.6, 5.7, 5.6)
+          ..lineTo(8.8, 5.6)
+          ..quadraticBezierTo(9.7, 5.6, 10.45, 4.75)
+          ..lineTo(11.85, 3.1)
+          ..quadraticBezierTo(13, 1.8, 14.15, 3.1)
+          ..lineTo(15.55, 4.75)
+          ..quadraticBezierTo(16.3, 5.6, 17.2, 5.6)
+          ..lineTo(20.3, 5.6)
+          ..quadraticBezierTo(23.5, 5.6, 23.5, 8.8)
+          ..lineTo(23.5, 20.3)
+          ..quadraticBezierTo(23.5, 23.4, 20.4, 23.4)
           ..close();
         canvas.drawPath(frame, stroke..strokeWidth = 2.05);
         canvas.drawCircle(
-          const Offset(13, 11.75),
-          3.5,
+          const Offset(13, 11.55),
+          3.55,
           selected ? fill : stroke,
         );
         final body = Path()
-          ..moveTo(5.8, 22.6)
-          ..cubicTo(7.3, 19.45, 9.7, 17.9, 13, 17.9)
-          ..cubicTo(16.3, 17.9, 18.7, 19.45, 20.2, 22.6);
+          ..moveTo(5.9, 23)
+          ..cubicTo(6.8, 19.65, 9.5, 17.9, 13, 17.9)
+          ..cubicTo(16.5, 17.9, 19.2, 19.65, 20.1, 23);
         if (selected) body.close();
         canvas.drawPath(body, selected ? fill : stroke);
     }
@@ -3783,10 +3779,7 @@ class _AccountTitle extends StatelessWidget {
                 style: profile
                     ? TextStyle(
                         color: _profileInk(context),
-                        fontSize:
-                            Theme.of(context).platform == TargetPlatform.iOS
-                            ? 28.5
-                            : 26,
+                        fontSize: 27,
                         fontWeight: FontWeight.w700,
                         letterSpacing: -.65,
                         height: 1.12,

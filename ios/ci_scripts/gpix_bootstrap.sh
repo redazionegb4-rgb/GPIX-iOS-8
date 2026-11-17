@@ -34,9 +34,11 @@ if ! command -v pod >/dev/null 2>&1 || ! pod --version >/dev/null 2>&1; then
   brew install cocoapods
 fi
 pod --version
-GPIX_PROJECT_BUILD="$(sed -nE 's/^version:[[:space:]]*[^+]+\+([0-9]+).*$/\1/p' pubspec.yaml)"
+GPIX_PROJECT_VERSION="$(sed -nE 's/^version:[[:space:]]*([^[:space:]]+).*$/\1/p' pubspec.yaml)"
+GPIX_PROJECT_BUILD="${GPIX_PROJECT_VERSION##*+}"
 GPIX_BUILD_NUMBER="${CI_BUILD_NUMBER:-$GPIX_PROJECT_BUILD}"
 [[ "$GPIX_BUILD_NUMBER" =~ ^[0-9]+$ ]] || { echo 'GPIX: numero build Cloud non valido.' >&2; exit 1; }
+echo "GPIX: sorgente $GPIX_PROJECT_VERSION, build iOS $GPIX_BUILD_NUMBER."
 (cd "$GPIX_ROOT" && flutter build ios --config-only --release --no-codesign --build-number "$GPIX_BUILD_NUMBER" --dart-define=GPIX_NATIVE_PUSH=true)
 (cd "$GPIX_ROOT/ios" && pod install)
 [[ -s ios/Flutter/Generated.xcconfig && -d ios/Pods/Pods.xcodeproj ]] || { echo 'GPIX: preparazione incompleta.' >&2; exit 1; }
