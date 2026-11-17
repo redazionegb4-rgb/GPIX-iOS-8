@@ -12,7 +12,8 @@ enum ChatColors {
   violet('Classico', Color(0xffa437ca), Color(0xff5940ed)),
   blue('Blu', Color(0xff315bd8), Color(0xff1972d9)),
   rose('Rosa', Color(0xffca366e), Color(0xffa42879)),
-  mint('Verde', Color(0xff218363), Color(0xff166b81));
+  mint('Verde', Color(0xff218363), Color(0xff166b81)),
+  pulse('Pulse', Color(0xff252525), Color(0xff161616));
 
   const ChatColors(this.label, this.top, this.bottom);
 

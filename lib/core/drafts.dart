@@ -96,6 +96,10 @@ class Drafts {
     if (!RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(id))
       throw Exception('Bozza non valida');
     final dir = Directory('${(await root(account)).path}/$id');
-    if (await dir.exists()) await dir.delete(recursive: true);
+    try {
+      await dir.delete(recursive: true);
+    } on PathNotFoundException {
+      // The draft was already removed.
+    }
   }
 }

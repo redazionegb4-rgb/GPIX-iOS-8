@@ -92,9 +92,13 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
   final ValueNotifier<double> uploadProgress = ValueNotifier<double>(0);
   final http.Client client;
   final FlutterSecureStorage vault;
-  GpixStore({http.Client? client, FlutterSecureStorage? vault})
-    : client = client ?? http.Client(),
-      vault = vault ?? const FlutterSecureStorage();
+  final bool pulseClient;
+  GpixStore({
+    http.Client? client,
+    FlutterSecureStorage? vault,
+    this.pulseClient = false,
+  }) : client = client ?? http.Client(),
+       vault = vault ?? const FlutterSecureStorage();
   static const _savedAccountsKey = 'gpix.savedAccounts.v1';
   List<J> _savedAccounts = [];
   bool _changingAccount = false;
@@ -370,19 +374,107 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
 
   bool get supportsTextPosts => demo || state.containsKey('textPosts');
   bool get supportsPulseMedia => demo || state.flag('pulseMedia');
+  bool get supportsPulseFeatures => demo || state.flag('pulseFeatures');
+
+  bool get supportsPulseProfile => demo || state.number('pulseRevision') >= 3;
+
+  List<J> get pulseActivity {
+    final events = state.containsKey('pulseNotifications')
+        ? state.rows('pulseNotifications')
+        : state
+              .rows('notifications')
+              .where(
+                (entry) =>
+                    const [
+                      'follow',
+                      'followRequest',
+                      'followAccepted',
+                    ].contains(entry.str('type')) ||
+                    post(entry.str('ref')).str('kind') == 'text',
+              )
+              .toList();
+    final filter = preferences['pulseActivityTypes'];
+    return filter is List
+        ? events.where((entry) => filter.contains(entry.str('type'))).toList()
+        : events;
+  }
+
+  Future<void> readPulseActivity() async {
+    if (!supportsPulseProfile ||
+        !pulseActivity.any((event) => !event.flag('seen')))
+      return;
+    try {
+      await act('pulseActivityRead');
+    } catch (_) {
+      // Keep unread events until the next successful attempt.
+    }
+  }
+
+  J pulseProfile(String id) => user(id).obj('pulseProfile');
+
+  String pulseName(String id) =>
+      pulseProfile(id).str('name', user(id).str('name'));
+  bool pulsePrivate(String id) =>
+      user(id).flag('private') || pulseProfile(id).flag('private');
+
+  final _pendingPulseViews = <String>{};
+  Timer? _pulseViewTimer;
+  (String, String, int)? _pulseViewSession;
+
+  void recordPulseView(J post) {
+    if (!pulseClient ||
+        demo ||
+        !supportsPulseProfile ||
+        token.isEmpty ||
+        post.str('author') == myId ||
+        post.number('expires') > 0 ||
+        post.flag('archived'))
+      return;
+    final session = (server, token, now ~/ 86400);
+    if (_pulseViewSession != session) {
+      _pulseViewTimer?.cancel();
+      _pendingPulseViews.clear();
+      _pulseViewSession = session;
+    }
+    _pendingPulseViews.add(post.str('id'));
+    if (_pulseViewTimer?.isActive == true) return;
+    _pulseViewTimer = Timer(const Duration(seconds: 2), () async {
+      if (session != (server, token, now ~/ 86400)) return;
+      final ids = _pendingPulseViews.take(40).toList();
+      if (ids.isEmpty) return;
+      _pendingPulseViews.removeAll(ids);
+      try {
+        await api('/pulse/views', payload: {'ids': ids});
+      } catch (_) {
+        // A later exposure can be recorded after reconnection.
+      }
+    });
+  }
+
+  String get _threadCollection => pulseClient ? 'pulseThreads' : 'threads';
 
   bool canRepostPulse(J post) {
     final author = user(post.str('author'));
     return supportsPulseMedia &&
         post.str('kind') == 'text' &&
+        !post.obj('style').flag('ghost') &&
         post.str('audience', 'all') == 'all' &&
         author.str('id').isNotEmpty &&
-        !author.flag('private');
+        !pulsePrivate(post.str('author'));
   }
 
   List<J> get textPosts => state
       .rows('textPosts')
-      .where((p) => !p.flag('archived') && !blocked(p.str('author')))
+      .where(
+        (p) =>
+            !p.flag('archived') &&
+            !p.flag('pulseArchived') &&
+            !blocked(p.str('author')),
+      )
+      .toList();
+  List<J> get pulseArchive => state
+      .rows('textPosts')
+      .where((post) => post.flag('pulseArchived') && post.str('author') == myId)
       .toList();
 
   bool taggedInPost(J post, String user) {
@@ -434,7 +526,7 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
       .toList();
   List<J> get threads =>
       state
-          .rows('threads')
+          .rows(_threadCollection)
           .where((t) => !t.ids('members').any(blocked))
           .toList()
         ..sort((a, b) {
@@ -524,8 +616,11 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
         );
   J post(String id) => allPosts.firstWhere(
     (p) => p.str('id') == id,
-    orElse: () =>
-        textPosts.firstWhere((p) => p.str('id') == id, orElse: () => {}),
+    orElse: () => textPosts.firstWhere(
+      (p) => p.str('id') == id,
+      orElse: () =>
+          pulseArchive.firstWhere((p) => p.str('id') == id, orElse: () => {}),
+    ),
   );
   J thread(String id) =>
       threads.firstWhere((t) => t.str('id') == id, orElse: () => {});
@@ -961,6 +1056,16 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> act(String action, [J payload = const {}]) async {
+    if (pulseClient && (action == 'thread' || action == 'group')) {
+      if (!supportsPulseFeatures) {
+        throw Exception(
+          'Aggiorna il backend GPIX per aprire i messaggi di Pulse.',
+        );
+      }
+      payload = {...payload, 'scope': 'pulse'};
+    }
+    if (pulseClient && action == 'follow')
+      payload = {...payload, 'scope': 'pulse'};
     if ((action == 'post' || action == 'postForFollowers') &&
         payload.flag('shareToPulse') &&
         !supportsPulseMedia) {
@@ -971,7 +1076,11 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
       final hasAttachment =
           payload.str('media').isNotEmpty ||
           payload.ids('mediaItems').isNotEmpty ||
-          payload.str('quotePostId').isNotEmpty;
+          payload.str('quotePostId').isNotEmpty ||
+          payload.str('gif').isNotEmpty ||
+          payload.str('longText').isNotEmpty ||
+          payload.obj('poll').isNotEmpty ||
+          payload.obj('music').isNotEmpty;
       if ((text.isEmpty && !hasAttachment) ||
           text.characters.length > textPostLimit) {
         throw Exception('Scrivi un testo da 1 a $textPostLimit caratteri.');
@@ -1002,7 +1111,7 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
       }
     }
     final key =
-        '$token:$action:${payload['id'] ?? payload['user'] ?? payload['idempotencyKey'] ?? ''}';
+        '$token:$action:${payload['id'] ?? payload['user'] ?? payload['idempotencyKey'] ?? payload['key'] ?? ''}';
     if (_pending.containsKey(key)) return _pending[key]!;
     final future = _perform(action, payload);
     _pending[key] = future;
@@ -1654,6 +1763,7 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _pulseViewTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _poll?.cancel();
     client.close();
@@ -1665,7 +1775,7 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
     final item = post(id);
     final t = thread(id);
     final items = allPosts;
-    final groups = state.rows('threads');
+    final groups = state.rows(_threadCollection);
     switch (action) {
       case 'preferences':
         state['preferences'] = {
@@ -1863,6 +1973,20 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
           'location': p.str('location'),
           'style': {
             ...p.obj('style'),
+            if (pulse)
+              for (final key in [
+                'topic',
+                'longText',
+                'music',
+                'community',
+                'gif',
+                'poll',
+                'spoiler',
+                'ghost',
+                'replyPolicy',
+                'replyApproval',
+              ])
+                if (p.containsKey(key)) key: p[key],
             if (pulse && p.str('quotePostId').isNotEmpty)
               'quotePostId': p.str('quotePostId'),
             if (pulse && p.obj('videoCovers').isNotEmpty)
@@ -1872,14 +1996,44 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
             'pendingCollaborators': p.ids('collaboratorInvites'),
           'audience': p.str('audience', 'all'),
           'created': now,
-          'expires': p.str('kind') == 'story' ? now + 86400 : 0,
+          'expires': p.str('kind') == 'story' || (pulse && p.flag('ghost'))
+              ? now + 86400
+              : 0,
           'likes': <String>[],
           'comments': <J>[],
           'saved': false,
           'viewers': <String>[],
           'publishKey': key,
         };
-        state[collection] = [published, ...state.rows(collection)];
+        state[collection] = [
+          published,
+          if (pulse)
+            for (final (index, entry) in p.rows('continuations').indexed)
+              {
+                ...published,
+                'id': newId(),
+                'pulseRoot': published['id'],
+                'pulsePosition': index + 1,
+                'text': entry.str('text'),
+                'media': entry.str('media'),
+                'mediaItems': entry['mediaItems'] ?? [],
+                'style': {
+                  if (p.flag('ghost')) 'ghost': true,
+                  if (p.str('community').isNotEmpty)
+                    'community': p['community'],
+                  for (final key in [
+                    'topic',
+                    'longText',
+                    'gif',
+                    'poll',
+                    'spoiler',
+                    'videoCovers',
+                  ])
+                    if (entry.containsKey(key)) key: entry[key],
+                },
+              },
+          ...state.rows(collection),
+        ];
         if (p.str('kind') == 'post' && p.flag('shareToPulse')) {
           state['textPosts'] = [
             {
@@ -1941,7 +2095,7 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
         final collection = item.str('kind') == 'text' ? 'textPosts' : 'posts';
         state[collection] = state
             .rows(collection)
-            .where((e) => e.str('id') != id)
+            .where((e) => e.str('id') != id && e.str('pulseRoot') != id)
             .toList();
         break;
       case 'editPost':
@@ -1954,6 +2108,34 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
       case 'postOptions':
         item['commentsOff'] = p['commentsOff'] ?? false;
         item['hideLikes'] = p['hideLikes'] ?? false;
+        break;
+      case 'pulseReplySettings':
+        item['style'] = {
+          ...item.obj('style'),
+          'replyPolicy': p.str('replyPolicy', 'all'),
+          'replyApproval': p.flag('replyApproval'),
+        };
+        break;
+      case 'pulsePin':
+        me['pulsePinned'] = p['enabled'] == false ? '' : id;
+        break;
+      case 'pulseFeed':
+        state['preferences'] = {
+          ...preferences,
+          'pulseFeeds': [
+            for (final feed in preferences.rows('pulseFeeds'))
+              if (feed.str('id') != id) feed,
+            if (!p.flag('delete')) {...p, 'id': id.isEmpty ? newId() : id},
+          ],
+        };
+        break;
+      case 'pulseApproveReply':
+        for (final post in textPosts) {
+          for (final reply in post.rows('comments')) {
+            if (reply.str('id') == id && post.str('author') == myId)
+              reply['pulsePending'] = false;
+          }
+        }
         break;
       case 'like':
         final likes = item.ids('likes')..remove(myId);
@@ -2087,7 +2269,7 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
             'title': '',
             'owner': '',
           });
-        state['threads'] = groups;
+        state[_threadCollection] = groups;
         break;
       case 'group':
         groups.add({
@@ -2097,7 +2279,7 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
           'members': [myId, ...p.ids('users')],
           'messages': <J>[],
         });
-        state['threads'] = groups;
+        state[_threadCollection] = groups;
         break;
       case 'renameGroup':
         t['title'] = p.str('title');
@@ -2109,7 +2291,9 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
         t['members'] = t.ids('members')..remove(uid);
         break;
       case 'leaveGroup':
-        state['threads'] = groups.where((e) => e.str('id') != id).toList();
+        state[_threadCollection] = groups
+            .where((e) => e.str('id') != id)
+            .toList();
         break;
       case 'message':
         t['requestDecision'] = 'accepted';
@@ -2261,7 +2445,7 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
           if (action == 'forward') {
             _local('thread', {'user': uid});
             final target = state
-                .rows('threads')
+                .rows(_threadCollection)
                 .firstWhere(
                   (t) =>
                       t.ids('members').contains(uid) && t.str('owner').isEmpty,
@@ -2289,6 +2473,33 @@ class GpixStore extends ChangeNotifier with WidgetsBindingObserver {
           viewers.add(myId);
         item['viewers'] = viewers;
         item['seenByMe'] = true;
+        break;
+      case 'pulseActivityRead':
+        for (final event in pulseActivity) {
+          event['seen'] = true;
+        }
+        break;
+      case 'pulseProfile':
+        me['pulseProfile'] = {...me.obj('pulseProfile'), ...p};
+        break;
+      case 'pulsePreference':
+        state['preferences'] = {...preferences, p.str('key'): p['value']};
+        break;
+      case 'pulseCommunityCreate':
+        state['pulseCommunities'] = [
+          {...p, 'id': newId(), 'owner': myId, 'joined': true, 'members': 1},
+          ...state.rows('pulseCommunities'),
+        ];
+        break;
+      case 'pulseCommunityJoin':
+        final group = state
+            .rows('pulseCommunities')
+            .firstWhere((community) => community.str('id') == id);
+        final join = p['enabled'] != false;
+        if (group.flag('joined') != join) {
+          group['joined'] = join;
+          group['members'] = group.number('members').toInt() + (join ? 1 : -1);
+        }
         break;
       case 'notificationsRead':
         for (final n in state.rows('notifications')) {

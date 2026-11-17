@@ -7,7 +7,6 @@ import 'package:share_plus/share_plus.dart';
 import '../core/data.dart';
 import '../core/store.dart';
 import '../screens/community.dart';
-import '../screens/conversations.dart';
 import '../screens/creation_studio.dart';
 import '../screens/notes.dart';
 import '../screens/instants.dart';
@@ -2285,6 +2284,7 @@ class _ProfileHomeState extends State<ProfileHome>
   Widget build(BuildContext context) {
     final store = GpixScope.of(context);
     final person = store.user(widget.user);
+    final iphone = Theme.of(context).platform == TargetPlatform.iOS;
     final own = widget.user == store.myId;
     final following = store.follows(widget.user);
     final pending = store.state.ids('pending').contains(widget.user);
@@ -2374,6 +2374,13 @@ class _ProfileHomeState extends State<ProfileHome>
                           child: Text(
                             person.str('username'),
                             overflow: TextOverflow.ellipsis,
+                            style: iphone
+                                ? const TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: -.45,
+                                  )
+                                : null,
                           ),
                         ),
                       ],
@@ -2403,7 +2410,9 @@ class _ProfileHomeState extends State<ProfileHome>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                    crossAxisAlignment: iphone
+                        ? CrossAxisAlignment.start
+                        : CrossAxisAlignment.end,
                     children: [
                       SizedBox(
                         width: portraitSize,
@@ -2468,8 +2477,8 @@ class _ProfileHomeState extends State<ProfileHome>
                                           'Lascia una nota…',
                                       details: note?.obj('details') ?? const {},
                                       placeholder: note == null,
-                                      textStyle: const TextStyle(
-                                        fontSize: 12.2,
+                                      textStyle: TextStyle(
+                                        fontSize: iphone ? 13 : 12.2,
                                         letterSpacing: 0,
                                       ),
                                     ),
@@ -2514,7 +2523,9 @@ class _ProfileHomeState extends State<ProfileHome>
                       const SizedBox(width: 9),
                       Expanded(
                         child: Padding(
-                          padding: EdgeInsets.only(bottom: hasNote ? 32 : 24),
+                          padding: iphone
+                              ? EdgeInsets.only(top: noteOffset + 12)
+                              : EdgeInsets.only(bottom: hasNote ? 32 : 24),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2523,17 +2534,18 @@ class _ProfileHomeState extends State<ProfileHome>
                                 person.str('name', person.str('username')),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 14,
+                                style: TextStyle(
+                                  fontSize: iphone ? 16 : 14,
                                   height: 1.2,
                                   fontWeight: FontWeight.w600,
                                   letterSpacing: 0,
                                 ),
                               ),
-                              const SizedBox(height: 9),
+                              SizedBox(height: iphone ? 10 : 9),
                               Row(
                                 children: [
                                   _stat(
+                                    context,
                                     person.str(
                                       'postCount',
                                       '${personal.where((p) => p.str('kind') != 'story').length}',
@@ -2542,6 +2554,7 @@ class _ProfileHomeState extends State<ProfileHome>
                                     flex: 31,
                                   ),
                                   _stat(
+                                    context,
                                     person.str('followers', '0'),
                                     'follower',
                                     onTap: () => open(
@@ -2551,6 +2564,7 @@ class _ProfileHomeState extends State<ProfileHome>
                                     flex: 38,
                                   ),
                                   _stat(
+                                    context,
                                     person.str('following', '0'),
                                     'seguiti',
                                     onTap: () => open(
@@ -2577,7 +2591,7 @@ class _ProfileHomeState extends State<ProfileHome>
                     Text(
                       person.str('pronouns'),
                       style: TextStyle(
-                        fontSize: 13.5,
+                        fontSize: iphone ? 15 : 13.5,
                         letterSpacing: 0,
                         color: secondaryText(context),
                       ),
@@ -2588,9 +2602,9 @@ class _ProfileHomeState extends State<ProfileHome>
                       const SizedBox(height: 4),
                     Text(
                       person.str('bio').replaceAll(r'\n', '\n'),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        height: 1.28,
+                      style: TextStyle(
+                        fontSize: iphone ? 16 : 14,
+                        height: iphone ? 1.23 : 1.28,
                         letterSpacing: 0,
                       ),
                     ),
@@ -2607,7 +2621,7 @@ class _ProfileHomeState extends State<ProfileHome>
                         style: TextStyle(
                           color: accent(context),
                           fontWeight: FontWeight.w600,
-                          fontSize: 13,
+                          fontSize: iphone ? 15 : 13,
                         ),
                       ),
                     ),
@@ -2698,7 +2712,7 @@ class _ProfileHomeState extends State<ProfileHome>
                           ),
                           style: IconButton.styleFrom(
                             backgroundColor: _profileControl(context),
-                            minimumSize: const Size.square(31),
+                            minimumSize: Size.square(iphone ? 32 : 31),
                             padding: EdgeInsets.zero,
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             shape: RoundedRectangleBorder(
@@ -2832,11 +2846,16 @@ class _ProfileHomeState extends State<ProfileHome>
             : _profileControl(context),
         foregroundColor: primary ? Colors.white : _profileInk(context),
         padding: const EdgeInsets.symmetric(horizontal: 7),
-        minimumSize: const Size(0, 31),
+        minimumSize: Size(
+          0,
+          Theme.of(context).platform == TargetPlatform.iOS ? 32 : 31,
+        ),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
-          fontSize: 14,
+          fontSize: Theme.of(context).platform == TargetPlatform.iOS
+              ? 15.7
+              : 14,
           fontWeight: FontWeight.w600,
           height: 1.12,
           letterSpacing: 0,
@@ -2849,7 +2868,10 @@ class _ProfileHomeState extends State<ProfileHome>
     List<J> highlights, {
     required bool own,
   }) {
-    final textSize = MediaQuery.textScalerOf(context).scale(13);
+    final fontSize = Theme.of(context).platform == TargetPlatform.iOS
+        ? 14.5
+        : 13.0;
+    final textSize = MediaQuery.textScalerOf(context).scale(fontSize);
     return Padding(
       padding: const EdgeInsets.only(top: 20, bottom: 12),
       child: SizedBox(
@@ -2934,8 +2956,8 @@ class _ProfileHomeState extends State<ProfileHome>
                       add ? 'Nuova' : highlight.str('title'),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 13,
+                      style: TextStyle(
+                        fontSize: fontSize,
                         height: 1.17,
                         letterSpacing: 0,
                       ),
@@ -2951,6 +2973,7 @@ class _ProfileHomeState extends State<ProfileHome>
   }
 
   Widget _suggestions(BuildContext context, GpixStore store) {
+    final iphone = Theme.of(context).platform == TargetPlatform.iOS;
     final followingIds = store.state.ids('following').toSet();
     final suggested = store.users.where((person) {
       final id = person.str('id');
@@ -2969,11 +2992,11 @@ class _ProfileHomeState extends State<ProfileHome>
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Persone suggerite',
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: iphone ? 15.7 : 14,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 0,
                     ),
@@ -2997,7 +3020,7 @@ class _ProfileHomeState extends State<ProfileHome>
                     minimumSize: const Size(0, 34),
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontSize: 14,
+                      fontSize: iphone ? 15.7 : 14,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 0,
                     ),
@@ -3010,7 +3033,7 @@ class _ProfileHomeState extends State<ProfileHome>
           const SizedBox(height: 1),
           SizedBox(
             height:
-                190 +
+                (iphone ? 193 : 190) +
                 (MediaQuery.textScalerOf(context).scale(13) - 13).clamp(
                       0.0,
                       45.0,
@@ -3069,8 +3092,8 @@ class _ProfileHomeState extends State<ProfileHome>
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  fontSize: 14,
+                                style: TextStyle(
+                                  fontSize: iphone ? 15.5 : 14,
                                   fontWeight: FontWeight.w600,
                                   letterSpacing: 0,
                                 ),
@@ -3083,7 +3106,7 @@ class _ProfileHomeState extends State<ProfileHome>
                                 overflow: TextOverflow.ellipsis,
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
-                                  fontSize: 12,
+                                  fontSize: iphone ? 13 : 12,
                                   letterSpacing: 0,
                                   color: secondaryText(context),
                                 ),
@@ -3133,42 +3156,46 @@ class _ProfileHomeState extends State<ProfileHome>
   }
 
   Widget _stat(
+    BuildContext context,
     String count,
     String label, {
     required int flex,
     VoidCallback? onTap,
-  }) => Expanded(
-    flex: flex,
-    child: InkWell(
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            count,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 15.6,
-              height: 1.12,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0,
+  }) {
+    final iphone = Theme.of(context).platform == TargetPlatform.iOS;
+    return Expanded(
+      flex: flex,
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              count,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: iphone ? 18.2 : 15.6,
+                height: 1.12,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0,
+              ),
             ),
-          ),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 13.6,
-              height: 1.16,
-              letterSpacing: 0,
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: iphone ? 15.5 : 13.6,
+                height: 1.16,
+                letterSpacing: 0,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _OwnProfileToolbar extends StatelessWidget
@@ -3193,7 +3220,7 @@ class _OwnProfileToolbar extends StatelessWidget
             alignment: Alignment.center,
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 110),
+                padding: const EdgeInsets.symmetric(horizontal: 67),
                 child: _AccountTitle(
                   store: store,
                   locked: person.flag('private'),
@@ -3209,18 +3236,6 @@ class _OwnProfileToolbar extends StatelessWidget
                   onPressed: () => open(
                     context,
                     const CreationStudio(initial: CreationMode.post),
-                  ),
-                ),
-              ),
-              PositionedDirectional(
-                end: 67,
-                child: IconButton(
-                  tooltip: 'Pulse',
-                  onPressed: () => open(context, const PulsePage()),
-                  icon: GIcon(
-                    CupertinoIcons.waveform_path,
-                    size: 22,
-                    color: _profileInk(context),
                   ),
                 ),
               ),
@@ -3768,7 +3783,10 @@ class _AccountTitle extends StatelessWidget {
                 style: profile
                     ? TextStyle(
                         color: _profileInk(context),
-                        fontSize: 26,
+                        fontSize:
+                            Theme.of(context).platform == TargetPlatform.iOS
+                            ? 28.5
+                            : 26,
                         fontWeight: FontWeight.w700,
                         letterSpacing: -.65,
                         height: 1.12,

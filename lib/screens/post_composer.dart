@@ -194,7 +194,6 @@ class _PostComposerState extends State<PostComposer> {
     'audioName': audioName,
     'commentsOff': commentsOff,
     'hideLikes': hideLikes,
-    'shareToPulse': shareToPulse,
   };
   Future<void> saveDraft({bool feedback = false}) async {
     if (files.isEmpty) {
@@ -340,7 +339,6 @@ class _PostComposerState extends State<PostComposer> {
   }
 
   bool busy = false, commentsOff = false, hideLikes = false;
-  bool shareToPulse = false;
   final overlayInput = TextEditingController();
   final caption = TextEditingController(), location = TextEditingController();
   @override
@@ -378,7 +376,6 @@ class _PostComposerState extends State<PostComposer> {
               .toInt()
               .clamp(0, TextAlign.values.length - 1)];
       audience = d.str('audience') == 'close' ? 'close' : 'followers';
-      shareToPulse = d.flag('shareToPulse');
       tagged.addAll(d.ids('tagged'));
       collaboratorInvites.addAll(d.ids('collaboratorInvites'));
       photoTags.addAll(
@@ -526,11 +523,6 @@ class _PostComposerState extends State<PostComposer> {
           'Aggiorna il server GPIX per inviare gli inviti di collaborazione.',
         );
       }
-      if (shareToPulse && !s.supportsPulseMedia) {
-        throw Exception(
-          'Aggiorna il server GPIX per pubblicare anche su Pulse.',
-        );
-      }
       final media = <String>[];
       final label = await captionImage();
       for (final f in files) {
@@ -565,11 +557,6 @@ class _PostComposerState extends State<PostComposer> {
           'location': location.text.trim(),
           'media': media.first,
           'mediaItems': media,
-          if (shareToPulse) ...{
-            'shareToPulse': true,
-            'commentsOff': commentsOff,
-            'hideLikes': hideLikes,
-          },
           if (collaboratorInvites.isNotEmpty)
             'collaboratorInvites': collaboratorInvites.toList(),
           'audience': audience,
@@ -1988,21 +1975,6 @@ class _PostComposerState extends State<PostComposer> {
             onTap: () => editCaption(c),
           ),
         ),
-        if (GpixScope.of(c).supportsPulseMedia || shareToPulse)
-          SwitchListTile.adaptive(
-            key: const ValueKey('share-to-pulse'),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 18),
-            secondary: const GIcon(CupertinoIcons.waveform_path),
-            title: const Text('Pubblica anche su Pulse'),
-            subtitle: const Text('Stessa didascalia, foto e pubblico'),
-            value: shareToPulse,
-            onChanged: busy
-                ? null
-                : (enabled) {
-                    setState(() => shareToPulse = enabled);
-                    unawaited(saveDraft());
-                  },
-          ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Wrap(

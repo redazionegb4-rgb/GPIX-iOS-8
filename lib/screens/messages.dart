@@ -26,6 +26,7 @@ import 'giphy.dart';
 import 'inbox_widgets.dart';
 import 'photo_send.dart';
 import 'auth.dart';
+import 'video.dart' show ClipPlayer;
 
 Future<void> inboxAccounts(BuildContext context, GpixStore store) async {
   final navigator = Navigator.of(context);
@@ -1187,6 +1188,34 @@ class _ChatState extends State<Chat>
     });
   }
 
+  Future<void> pulseVideo() async {
+    final s = store!;
+    final draftReply = replyId;
+    final identity = (s.server, s.myId, s.token);
+    await perform(context, () async {
+      final file = await ImagePicker().pickVideo(source: ImageSource.gallery);
+      if (file == null || !mounted || identity != (s.server, s.myId, s.token))
+        return;
+      final path = file.path.toLowerCase();
+      final format = path.endsWith('.mov')
+          ? 'video/quicktime'
+          : path.endsWith('.webm')
+          ? 'video/webm'
+          : 'video/mp4';
+      final media = await s.upload(file.path, format);
+      if (!mounted || identity != (s.server, s.myId, s.token)) return;
+      await s.send(
+        widget.id,
+        '',
+        kind: 'video',
+        media: media,
+        reply: draftReply,
+        expiresIn: expiresIn,
+      );
+      if (mounted && replyId == draftReply) setState(() => replyId = '');
+    });
+  }
+
   void attachments() {
     focus.unfocus();
     sheet(
@@ -1202,6 +1231,11 @@ class _ChatState extends State<Chat>
             Navigator.pop(context);
             photo();
           }),
+          if (store!.pulseClient && store!.supportsPulseFeatures)
+            ActionRow(CupertinoIcons.video_camera, 'Video', () {
+              Navigator.pop(context);
+              pulseVideo();
+            }),
           ActionRow(CupertinoIcons.play_rectangle, 'GIF', () {
             Navigator.pop(context);
             gifs();
@@ -1326,7 +1360,9 @@ class _ChatState extends State<Chat>
     final byId = {for (final m in messages) m.str('id'): m};
     final group = t.str('owner').isNotEmpty;
     final style = t.obj('chatStyle');
-    final colors = ChatColors.fromName(style.str('theme'));
+    final colors = s.pulseClient && style.str('theme', 'violet') == 'violet'
+        ? ChatColors.pulse
+        : ChatColors.fromName(style.str('theme'));
     final messageFont = ChatFont.fromName(style.str('font'));
     final quote = byId[editId.isNotEmpty ? editId : replyId];
     final candidate =
@@ -2290,6 +2326,34 @@ class _ChatState extends State<Chat>
           key: ValueKey(m.str('id')),
           reference: m.str('media'),
           own: own,
+        ),
+      ),
+      'video' => ChatBubble(
+        own: own,
+        colors: colors,
+        child: InkWell(
+          onTap: () => open(
+            c,
+            Scaffold(
+              backgroundColor: Colors.black,
+              appBar: AppBar(
+                backgroundColor: Colors.black,
+                foregroundColor: Colors.white,
+              ),
+              body: SafeArea(child: ClipPlayer(reference: m.str('media'))),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(CupertinoIcons.play_circle, color: textColor, size: 24),
+              const SizedBox(width: 8),
+              Text(
+                'Video',
+                style: TextStyle(color: textColor, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
         ),
       ),
       'post' => const SizedBox.shrink(),
@@ -3608,7 +3672,9 @@ class _ChatAppearanceState extends State<_ChatAppearance> {
             spacing: 8,
             runSpacing: 6,
             children: [
-              for (final choice in ChatColors.values)
+              for (final choice in ChatColors.values.where(
+                (entry) => entry != ChatColors.pulse,
+              ))
                 ChoiceChip(
                   avatar: DecoratedBox(
                     decoration: BoxDecoration(

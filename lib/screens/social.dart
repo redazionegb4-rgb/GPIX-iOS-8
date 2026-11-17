@@ -21,7 +21,6 @@ import 'inbox_widgets.dart' show DirectSearchField, directSearchTerm;
 import 'video.dart';
 import 'live.dart';
 import 'community.dart';
-import 'conversations.dart' show PulsePostPage;
 import 'notes.dart';
 import 'giphy.dart';
 import '../rebuild/surfaces.dart' show DiscoverHome, ProfileHome, TimelinePost;
@@ -1717,6 +1716,10 @@ class _CommentsState extends State<Comments> {
         'media': attachment,
       });
       if (!mounted) return;
+      if (s.post(widget.id).obj('style').flag('ghost')) {
+        focus.unfocus();
+        notice(context, 'Risposta inviata nei messaggi');
+      }
       setState(() {
         if (input.text.trim() == text ||
             input.text.trim() == replyPrefix.trim())
@@ -1735,8 +1738,10 @@ class _CommentsState extends State<Comments> {
 
   Widget _commentPanel(BuildContext c, GpixStore s, J post, List<J> comments) {
     final textPost = post.str('kind') == 'text';
+    final privateReplies = textPost && post.obj('style').flag('ghost');
     final canSend =
         post.isNotEmpty &&
+        post['canReply'] != false &&
         (!post.flag('commentsOff') || post.str('author') == s.myId);
     final roots = comments.where((m) => m.str('parent').isEmpty).toList()
       ..sort((a, b) {
@@ -1755,7 +1760,7 @@ class _CommentsState extends State<Comments> {
     final header = widget.inlineHeader;
     return Column(
       children: [
-        if (header == null)
+        if (header == null && !privateReplies)
           Align(
             alignment: Alignment.centerLeft,
             child: Padding(
@@ -1807,7 +1812,9 @@ class _CommentsState extends State<Comments> {
                         child: Padding(
                           padding: const EdgeInsets.all(12),
                           child: Text(
-                            textPost
+                            privateReplies
+                                ? 'La risposta arriverà in un messaggio privato'
+                                : textPost
                                 ? 'Ancora nessuna risposta'
                                 : 'Ancora nessun commento',
                             style: TextStyle(
@@ -1882,6 +1889,8 @@ class _CommentsState extends State<Comments> {
             child: Text(
               post.isEmpty
                   ? 'Contenuto non disponibile'
+                  : privateReplies && post.str('author') == s.myId
+                  ? 'Le risposte arrivano nei messaggi'
                   : textPost
                   ? 'Risposte disattivate'
                   : 'Commenti disattivati',
@@ -2193,6 +2202,27 @@ class _CommentsState extends State<Comments> {
                         ),
                       ),
                     ),
+                  if (m.flag('pulsePending'))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: s.post(widget.id).str('author') == s.myId
+                          ? TextButton(
+                              onPressed: () => perform(
+                                c,
+                                () => s.act('pulseApproveReply', {
+                                  'id': m.str('id'),
+                                }),
+                              ),
+                              child: const Text('Approva risposta'),
+                            )
+                          : Text(
+                              'In attesa di approvazione',
+                              style: TextStyle(
+                                color: secondaryText(c),
+                                fontSize: 12,
+                              ),
+                            ),
+                    ),
                   if (m.flag('hidden') &&
                       s.post(widget.id).str('author') == s.myId)
                     const Padding(
@@ -2217,7 +2247,7 @@ class _CommentsState extends State<Comments> {
                   const SizedBox(height: 7),
                   Row(
                     children: [
-                      if (canReply)
+                      if (canReply && !m.flag('pulsePending'))
                         InkWell(
                           onTap: () => _replyTo(m, s.user(uid).str('username')),
                           child: const Text(
@@ -2479,7 +2509,6 @@ class PostPage extends StatelessWidget {
     final kind = post.str('kind');
     if (kind == 'story') return StoryViewer(user: author, ids: [id]);
     if (kind == 'reel') return Reels(initial: id);
-    if (kind == 'text') return PulsePostPage(id: id);
     final selection = postIds.indexOf(id);
     final posts = {for (final item in store.allPosts) item.str('id'): item};
     bool visible(String id) {

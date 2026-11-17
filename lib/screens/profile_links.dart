@@ -60,6 +60,7 @@ class ProfileLinkChips extends StatelessWidget {
   @override
   Widget build(BuildContext c) {
     final visibleLinks = links.map(resolveSocialLink).toList();
+    final iphone = Theme.of(c).platform == TargetPlatform.iOS;
     Widget chip(
       Widget icon,
       String text,
@@ -76,7 +77,7 @@ class ProfileLinkChips extends StatelessWidget {
             customBorder: const StadiumBorder(),
             onTap: tap,
             child: Container(
-              constraints: const BoxConstraints(minHeight: 23.5),
+              constraints: BoxConstraints(minHeight: iphone ? 24 : 23.5),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -89,7 +90,7 @@ class ProfileLinkChips extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: iphone ? 13.2 : 12,
                         color: ink,
                         fontWeight: FontWeight.w600,
                         height: 1.16,
